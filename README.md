@@ -45,9 +45,14 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 - Prometheus
 - Grafana
+- Loki
 - Uptime Kuma
+- Checkmk
 
 ### AI
+
+- Ollama
+- OpenWebUI
 
 ### Automation
 
@@ -60,12 +65,13 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 - Git
 - GitHub
-- GitHub Actions
+- Flux
 
 ### App and Service Management
 
 - Portainer
-- Dockege
+- Dockge
+- Homarr
 
 ### Database Management
 

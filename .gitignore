@@ -5,4 +5,4 @@
 # Docker Secrets, Environment Files
 **/secret.*
 **/.env
-**/.tfvars
+**/*.tfvars

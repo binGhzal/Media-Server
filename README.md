@@ -7,19 +7,7 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 ## Features
 
-- Media streaming applications (e.g., Jellyfin, Plex)
-- Network management tools (e.g., Bind9)
-- Monitoring and reporting tools (e.g., Prometheus, Grafana)
-- IoT integration (e.g., Home Assistant)
-- Automation tools (e.g., Ansible, OpenTofu)
-- Security and identity management (e.g., Wazuh, ClamAV)
-- Code management and CI/CD (e.g., Git, GitHub Actions)
-- App and service management (e.g., Portainer, Dockege)
-- Database management (e.g., PostgreSQL, MariaDB, InfluxDB)
-- Container management and orchestration (e.g., Docker, Kubernetes)
-- Reverse proxy and load balancing (e.g., Traefik)
-- SSL certificate management (e.g., Cert-manager)
-- Remote access and VPN (e.g., TwinGate)
+just a repository to store my homelab configuration files and scripts and to share them with the community. And to use them as CI/CD pipeline to deploy my homelab in my home lab.
 
 ----
 

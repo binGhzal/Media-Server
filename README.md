@@ -88,3 +88,9 @@ The goal is to create a self-hosted environment that can be easily managed and s
 - Cloudflare
 
 ----
+
+## Resources
+
+- [Dotfiles](https://github.com/christianlempa/dotfiles) - My personal configuration files on macOS
+- [Cheat-Sheets](https://github.com/christianlempa/cheat-sheets) - Command Reference for various tools and technologies
+- [boilerplates](https://github.com/christianlempa/boilerplates) - Collection of boilerplate templates for various projects

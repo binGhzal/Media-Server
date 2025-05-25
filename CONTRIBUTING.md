@@ -1,14 +1,6 @@
-# Welcome to contributing at The Digital Life.🤝
-
-- Products continuously change over time, specially those that are in high demand.
-
-- Although I do my best to keep up with the latest changes and releases, but if you find something that needs to update, please contribute.
-
-- If you’d like to contribute to this project, reach out to me on social media or [Discord](https://christianlempa.de/discord), or create a pull request for the necessary changes.
-
 ## Project overview
 
-To get an overview of the project, read the [README](https://github.com/ChristianLempa/boilerplates#readme).
+To get an overview of the project, read the [README](https://github.com/binGhzal/Media-Server).
 
 ## Issues
 

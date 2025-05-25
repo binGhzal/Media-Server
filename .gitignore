@@ -5,5 +5,11 @@
 # Docker Secrets, Environment Files
 **/secret.*
 **/.env
+
+# Packer state files
+**/credentials.pkr.hcl
+
+# Terraform workspace files
+**/.terraform
+**/.terraform.lock.hcl
 **/*.tfvars
-packer/proxmox/credentials.pkr.hcl

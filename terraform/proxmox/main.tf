@@ -24,7 +24,7 @@ resource "proxmox_vm_qemu" "kube-node" {
 
   target_node = var.node_name
   vmid        = 2000 + count.index
-  tags        = "kube-node,ubuntu,server"
+  tags        = "kubernetes"
 
   # Template Settings
   clone_id   = var.template_id

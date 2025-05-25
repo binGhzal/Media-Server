@@ -6,7 +6,7 @@ resource "proxmox_vm_qemu" "kube-node-01" {
   agent = 1
   target_node = "pve"
   vmid = "1001"
-  tags = ["ubuntu", "kube", "server"]
+  tags = "kube-node,ubuntu,server"
 
   # Template Settings
   clone = "ubuntu-server-25-04"
@@ -66,5 +66,6 @@ resource "proxmox_vm_qemu" "kube-node-01" {
   nameserver = ""
   ciuser = "binghzal"
   cipassword = var.CLOUD_INIT_PASSWORD
+  ciupgrade = true
   sshkeys = var.PUBLIC_SSH_KEY
 }

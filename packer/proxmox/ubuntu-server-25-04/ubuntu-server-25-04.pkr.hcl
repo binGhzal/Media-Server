@@ -1,6 +1,5 @@
-# Ubuntu Server 25-04" { (24.04.x)
-# ---
-# Packer Template to create an Ubuntu Server (25-04" { 24.04.x) on Proxmox
+# Ubuntu Server 25-04"
+# Packer Template to create an Ubuntu Server (25-04) on Proxmox
 
 # Variable Definitions
 variable "proxmox_api_url" {
@@ -59,7 +58,7 @@ source "proxmox-iso" "ubuntu-server-25-04" {
     }
 
     # VM CPU Settings
-    cores = "1"
+    cores = "2"
 
     # VM Memory Settings
     memory = "2048"

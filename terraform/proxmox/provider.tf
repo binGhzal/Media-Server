@@ -5,7 +5,7 @@ terraform {
     proxmox = {
       # LINK https://github.com/Telmate/terraform-provider-proxmox
       source = "telmate/proxmox"
-      version = ">= 0.0.1"
+      version = "3.0.1-rc9"
     }
   }
 }
@@ -34,7 +34,7 @@ provider "proxmox" {
   pm_api_url = var.PROXMOX_URL
   pm_api_token_id = var.PROXMOX_USER
   pm_api_token_secret = var.PROXMOX_TOKEN
-  
+
   # NOTE Optional, but recommended to set to true if you are using self-signed certificates.
   pm_tls_insecure = true
 }

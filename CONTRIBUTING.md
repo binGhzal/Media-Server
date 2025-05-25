@@ -1,4 +1,4 @@
-## Project overview
+# Project overview
 
 To get an overview of the project, read the [README](https://github.com/binGhzal/Media-Server).
 

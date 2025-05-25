@@ -6,3 +6,4 @@
 **/secret.*
 **/.env
 **/*.tfvars
+packer/proxmox/credentials.pkr.hcl

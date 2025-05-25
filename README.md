@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This repository contains the configuration files and scripts for setting up a media server using Docker and Kubernetes. The server is designed to host various applications and services, including media streaming, network management, monitoring, and more.
+This repository contains the configuration files and scripts for setting up a homelab using Docker and Kubernetes. The server is designed to host various applications and services, including media streaming, network management, monitoring, and more.
 The goal is to create a self-hosted environment that can be easily managed and scaled.
 
 ## Features
@@ -27,7 +27,6 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 ### Container Management and Orchestration
 
-- Docker
 - Kubernetes
 - Longhorn
 - Traefik
@@ -35,57 +34,43 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 ### IoT
 
-- Home Assistant
+
 
 ### Network Management
 
-- Bind9
+
 
 ### Monitoring & Reporting
 
-- Prometheus
-- Grafana
-- Loki
-- Uptime Kuma
-- Checkmk
+
 
 ### AI
 
-- Ollama
-- OpenWebUI
+
 
 ### Automation
 
+
+- OpenTofu/Terraform
+- Packer
 - Ansible
-- OpenTofu
-- Kestra
-- SemaphoreUI
 
 ### Code Management
 
 - Git
 - GitHub
-- Flux
 
 ### App and Service Management
 
-- Portainer
-- Dockge
-- Homarr
+
 
 ### Database Management
 
-- PostgreSQL
-- MariaDB
-- InfluxDB
+
 
 ### Security and Identity Management
 
-- Wazuh
-- ClamAV
-- TwinGate
-- Authentik
-- Cloudflare
+
 
 ----
 

@@ -64,6 +64,4 @@ just a repository to store my homelab configuration files and scripts and to sha
 
 ## Resources
 
-- [Dotfiles](https://github.com/christianlempa/dotfiles) - My personal configuration files on macOS
-- [Cheat-Sheets](https://github.com/christianlempa/cheat-sheets) - Command Reference for various tools and technologies
 - [boilerplates](https://github.com/christianlempa/boilerplates) - Collection of boilerplate templates for various projects

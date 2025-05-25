@@ -1,7 +1,8 @@
 terraform {
   required_providers {
     proxmox = {
-      source = "telmate/proxmox"
+      source  = "telmate/proxmox"
+      version = "3.0.1-rc9"
     }
   }
 }
@@ -24,7 +25,7 @@ resource "proxmox_vm_qemu" "kube-node" {
 
   target_node = var.node_name
   vmid        = 2000 + count.index
-  tags        = "kubernetes"
+  tags        = "kube"
 
   # Template Settings
   clone_id   = var.template_id

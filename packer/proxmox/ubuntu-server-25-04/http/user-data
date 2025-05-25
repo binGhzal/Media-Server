@@ -7,9 +7,10 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: true
-    disable_root: true
+    disable_root: false
     ssh_quiet_keygen: true
     allow_public_ssh_keys: true
+    allow_password_authentication: true
   packages:
     - qemu-guest-agent
     - sudo
@@ -27,7 +28,4 @@ autoinstall:
         lock-passwd: false
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
-        # passwd: your-password
-        # - or -
-        ssh_authorized_keys:
-          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOhs+pheukLtJI3WBAfCxciDCwrDiYdXIepnXx5YB/K5
+        passwd: HASHED_PASSWORD

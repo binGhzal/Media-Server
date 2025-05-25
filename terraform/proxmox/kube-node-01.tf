@@ -1,35 +1,35 @@
 resource "proxmox_vm_qemu" "kube-node-01" {
 
   # General Settings
-  name = "kube-node-01"
-  desc = "Ubuntu Server 25.04 Kube Node"
-  agent = 1
+  name        = "kube-node-01"
+  desc        = "Ubuntu Server 25.04 Kube Node"
+  agent       = 1
   target_node = "pve"
-  vmid = "1001"
-  tags = "kube-node,ubuntu,server"
+  vmid        = "1001"
+  tags        = "kube-node,ubuntu,server"
 
   # Template Settings
-  clone = "ubuntu-server-25-04"
+  clone      = "ubuntu-server-25-04"
   full_clone = true
 
   # Boot Processing Settings
-  onboot = true
-  startup = ""
+  onboot           = true
+  startup          = ""
   automatic_reboot = true
 
   # Hardware Settings
   qemu_os = "other"
-  bios = "seabios"
+  bios    = "seabios"
 
   # cpu Settings
   cpu {
-    type = "host"
-    cores = 2
+    type    = "host"
+    cores   = 4
     sockets = 1
   }
 
   # Memory Settings
-  memory = 2048
+  memory  = 8192
   balloon = 2048
 
   # Network Settings
@@ -52,9 +52,9 @@ resource "proxmox_vm_qemu" "kube-node-01" {
     virtio {
       virtio0 {
         disk {
-          storage = "bigdisk"
-          size = "20G"
-          iothread = true
+          storage   = "bigdisk"
+          size      = "20G"
+          iothread  = true
           replicate = false
         }
       }
@@ -62,10 +62,10 @@ resource "proxmox_vm_qemu" "kube-node-01" {
   }
 
   # Cloud Init Settings
-  ipconfig0 = "ip=dhcp,ip6=dhcp"
+  ipconfig0  = "ip=dhcp,ip6=dhcp"
   nameserver = ""
-  ciuser = "binghzal"
+  ciuser     = "binghzal"
   cipassword = var.CLOUD_INIT_PASSWORD
-  ciupgrade = true
-  sshkeys = var.PUBLIC_SSH_KEY
+  ciupgrade  = true
+  sshkeys    = var.PUBLIC_SSH_KEY
 }

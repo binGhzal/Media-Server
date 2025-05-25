@@ -58,10 +58,10 @@ source "proxmox-iso" "ubuntu-server-25-04" {
     }
 
     # VM CPU Settings
-    cores = "2"
+    cores = "4"
 
     # VM Memory Settings
-    memory = "2048"
+    memory = "8192"
 
     # VM Network Settings
     network_adapters {

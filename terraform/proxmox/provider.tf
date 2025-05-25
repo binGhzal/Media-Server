@@ -30,6 +30,12 @@ variable "PUBLIC_SSH_KEY" {
   sensitive = true
 }
 
+variable "CLOUD_INIT_PASSWORD" {
+  # NOTE This is the password for the cloud-init user.
+  type      = string
+  sensitive = true
+}
+
 provider "proxmox" {
   pm_api_url = var.PROXMOX_URL
   pm_api_token_id = var.PROXMOX_USER

@@ -1,6 +1,6 @@
 # Project overview
 
-To get an overview of the project, read the [README](https://github.com/binGhzal/Media-Server).
+To get an overview of the project, read the [README](https://github.com/binGhzal/homelab).
 
 ## Issues
 

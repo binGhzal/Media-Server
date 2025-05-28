@@ -19,3 +19,6 @@
 # Ignore backup files
 **/*.backup
 **/*.bak
+
+ansible/inventory
+ansible/ansible.cfg

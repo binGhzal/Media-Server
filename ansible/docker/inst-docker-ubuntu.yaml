@@ -1,35 +1,121 @@
 ---
 - name: Install docker
-  hosts: "{{ my_hosts | d([]) }}"
+  hosts: all
   become: true
 
   tasks:
-    - name: Install docker dependencies
+    - name: Update apt cache
       ansible.builtin.apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - gnupg-agent
-          - software-properties-common
         update_cache: true
 
-    - name: Add docker gpg key
-      ansible.builtin.apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - dbus-user-session
+          - software-properties-common
+          - uidmap
+          - systemd-container
         state: present
-        keyring: /etc/apt/keyrings/docker.gpg
 
-    - name: Add docker repository
-      ansible.builtin.apt_repository:
-        filename: docker
-        repo: deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename | lower }} stable
-        state: present
+    - name: Ensure /etc/apt/keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
-    - name: Install docker engine
+    - name: Download Docker's official GPG key
+      ansible.builtin.get_url:
+        url: "https://download.docker.com/linux/ubuntu/gpg"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: true
+
+    - name: Ensure Docker GPG key is readable
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.asc
+        mode: "a+r"
+
+    - name: Add Docker repository
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+        sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Ensure Docker repository file is readable
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/docker.list
+        mode: "a+r"
+
+    - name: Update apt cache after adding Docker repository
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Docker Engine
       ansible.builtin.apt:
         name:
           - docker-ce
+          - docker-ce-cli
+          - containerd.io
           - docker-buildx-plugin
           - docker-compose-plugin
+          - docker-ce-rootless-extras
+        state: present
         update_cache: true
+
+    - name: Ensure Docker service is enabled and started
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        group: docker
+        append: true
+
+    - name: Ensure Docker group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: Ensure .docker directory exists
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.docker"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        recurse: true
+
+    - name: Set proper permissions for .docker directory
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.docker"
+        state: directory
+        mode: "g+rwx"
+        recurse: true
+
+    - name: Install docker rootless
+      ansible.builtin.shell: |
+        # Command content
+      args:
+        executable: /bin/bash
+      environment:
+        HOME: "/home/{{ ansible_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default(1000) }}"
+        PATH: "/home/{{ ansible_user }}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      become: false
+
+    - name: Ensure .bashrc path is set for rootless Docker
+      ansible.builtin.blockinfile:
+        path: "/home/{{ ansible_user }}/.bashrc"
+        block: |
+          export PATH=/usr/bin:$PATH
+          export DOCKER_HOST=unix:///run/user/1000/docker.sock
+        state: present

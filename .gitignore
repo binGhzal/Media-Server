@@ -20,5 +20,9 @@
 **/*.backup
 **/*.bak
 
+# Ansible files
+**/ansible.cfg
+**/ansible.cfg.bak
+**/.ansible
 ansible/inventory
 ansible/ansible.cfg

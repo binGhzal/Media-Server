@@ -1,11 +1,11 @@
 ---
 - name: "Docker Certs"
-  hosts: "{{ my_hosts | d([]) }}"
+  hosts: all
   become: true
   vars:
     certs_path: "/root/docker-certs"
     cert_validity_days: 3650
-    cn_domain: "your-domain.tld"
+    cn_domain: "binghzal.com"
 
   tasks:
     - name: Check if docker certs are existing
@@ -17,7 +17,7 @@
       ansible.builtin.file:
         path: "{{ certs_path }}"
         state: directory
-        mode: '0700'
+        mode: "0700"
       when: not certs_dir.stat.exists
 
     - name: Check if docker certs directory is empty
@@ -153,6 +153,6 @@
     - name: Set permissions for docker certs
       ansible.builtin.file:
         path: "{{ certs_path }}"
-        mode: '0700'
+        mode: "0700"
         recurse: true
         follow: true

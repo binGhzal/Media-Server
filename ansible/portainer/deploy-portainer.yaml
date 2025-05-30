@@ -1,6 +1,6 @@
 ---
 - name: Deploy portainer-ce latest
-  hosts: "{{ my_hosts | d([]) }}"
+  hosts: docker
   become: true
   become_user: "{{ lookup('env','USER') }}"
 

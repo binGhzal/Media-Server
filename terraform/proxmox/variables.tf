@@ -1,3 +1,15 @@
+terraform {
+  required_version = ">= 0.13.0"
+
+  required_providers {
+    proxmox = {
+      # LINK https://github.com/Telmate/terraform-provider-proxmox
+      source  = "telmate/proxmox"
+      version = "3.0.1-rc9"
+    }
+  }
+}
+
 variable "pm_api_url" {
   type = string
 }
@@ -28,7 +40,7 @@ variable "template_id" {
 
 variable "cpu_cores" {
   type    = number
-  default = 4
+  default = 1
 }
 
 variable "cpu_sockets" {
@@ -38,7 +50,7 @@ variable "cpu_sockets" {
 
 variable "memory_size" {
   type    = number
-  default = 8192
+  default = 2048
 }
 
 variable "balloon_size" {
@@ -67,4 +79,11 @@ variable "storage_pool" {
 variable "disk_size" {
   type    = string
   default = "20G"
+}
+
+provider "proxmox" {
+  pm_api_url          = var.pm_api_url
+  pm_api_token_id     = var.pm_api_token_id
+  pm_api_token_secret = var.pm_api_token_secret
+  pm_tls_insecure     = true
 }

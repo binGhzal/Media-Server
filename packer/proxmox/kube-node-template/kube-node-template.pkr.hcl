@@ -4,23 +4,39 @@
 # Variable Definitions
 variable "proxmox_api_url" {
     type = string
+    default = env("proxmox_api_url")
 }
 
 variable "proxmox_api_token_id" {
     type = string
+    default = env("proxmox_api_token_id")
 }
 
 variable "proxmox_api_token_secret" {
     type = string
     sensitive = true
+    default = env("proxmox_api_token_secret")
 }
 
 variable "runner_ip_address" {
     type = string
+    default = env("runner_ip_address")
 }
 
+variable "ssh_username" {
+    type = string
+    default = env("ssh_username")
+}
+
+variable "plaintextpassword" {
+    type = string
+    sensitive = true
+    default = env("plaintextpassword")
+}
+
+
 # Resource Definiation for the VM Template
-source "proxmox-iso" "ubuntu-server-25-04" {
+source "proxmox-iso" "kube-node-template" {
 
     # Proxmox Connection Settings
     proxmox_url = "${var.proxmox_api_url}"
@@ -32,8 +48,8 @@ source "proxmox-iso" "ubuntu-server-25-04" {
     # VM General Settings
     node = "pve"
     vm_id = "9000"
-    vm_name = "ubuntu-server-25-04"
-    template_description = "Ubuntu Server 25.04 Template for Proxmox"
+    vm_name = "kube-node-template"
+    template_description = "Ubuntu Server 25.04 kubernetes node Template for Proxmox"
 
     # VM OS Settings
     boot_iso {
@@ -58,10 +74,10 @@ source "proxmox-iso" "ubuntu-server-25-04" {
     }
 
     # VM CPU Settings
-    cores = "4"
+    cores = "1"
 
     # VM Memory Settings
-    memory = "8192"
+    memory = "2048"  # 2GB RAM
 
     # VM Network Settings
     network_adapters {
@@ -90,8 +106,9 @@ source "proxmox-iso" "ubuntu-server-25-04" {
 
     # PACKER Autoinstall Settings
     http_directory          = "http"
-    ssh_username            = "binghzal"
-    ssh_password            = "PLAINTEXT_PASSWORD"
+    ssh_username            = "${var.ssh_username}"
+    ssh_password            = "${var.plaintextpassword}"
+
 
     # Raise the timeout, when installation takes longer
     ssh_timeout             = "30m"
@@ -101,8 +118,8 @@ source "proxmox-iso" "ubuntu-server-25-04" {
 # Build Definition to create the VM Template
 build {
 
-    name = "ubuntu-server-25-04"
-    sources = ["source.proxmox-iso.ubuntu-server-25-04"]
+    name = "kube-node-template"
+    sources = ["source.proxmox-iso.kube-node-template"]
 
     # Provisioning the VM Template for Cloud-Init Integration in Proxmox #1
     provisioner "shell" {

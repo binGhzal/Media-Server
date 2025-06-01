@@ -9,6 +9,7 @@
 
 # Packer state files
 **/credentials.pkr.hcl
+**/pkrvars.pkr.hcl
 
 # Terraform workspace files
 **/.terraform

@@ -11,7 +11,10 @@
 **/credentials.pkr.hcl
 
 # Terraform workspace files
-**/.terraform
+**/*.terraform
+**/*.terraform.lock.hcl
+**/*.tfstate
+**/*tfvars
 
 
 # Ignore backup files
@@ -19,6 +22,4 @@
 **/*.bak
 
 # Ansible files
-**/ansible.cfg
-**/ansible.cfg.bak
 **/.ansible

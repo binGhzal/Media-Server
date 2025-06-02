@@ -9,13 +9,10 @@
 
 # Packer state files
 **/credentials.pkr.hcl
-**/pkrvars.pkr.hcl
 
 # Terraform workspace files
 **/.terraform
-**/.terraform.lock.hcl
-**/*.tfvars
-**/*.tfstate
+
 
 # Ignore backup files
 **/*.backup
@@ -25,5 +22,3 @@
 **/ansible.cfg
 **/ansible.cfg.bak
 **/.ansible
-ansible/inventory
-ansible/ansible.cfg

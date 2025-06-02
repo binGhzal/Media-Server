@@ -9,35 +9,23 @@ The goal is to create a self-hosted environment that can be easily managed and s
 
 just a repository to store my homelab configuration files and scripts and to share them with the community. And to use them as CI/CD pipeline to deploy my homelab in my home lab.
 
-----
+---
 
 ## Used Technologies
 
 ### Container Management and Orchestration
 
-- Kubernetes
-- Longhorn
-- Traefik
-- Cert-manager
+- Docker
 
 ### IoT
 
-
-
 ### Network Management
-
-
 
 ### Monitoring & Reporting
 
-
-
 ### AI
 
-
-
 ### Automation
-
 
 - OpenTofu/Terraform
 - Packer
@@ -50,17 +38,11 @@ just a repository to store my homelab configuration files and scripts and to sha
 
 ### App and Service Management
 
-
-
 ### Database Management
-
-
 
 ### Security and Identity Management
 
-
-
-----
+---
 
 ## Resources
 

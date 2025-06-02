@@ -1,0 +1,26 @@
+[all]
+
+[docker]
+10.0.0.176
+
+[all:children]
+docker
+
+[all:vars]
+ansible_user = "{{ lookup('env', 'USER') }}"
+ansible_become_user = "{{ lookup('env', 'USER') }}"
+become_pass = "{{ lookup('env', 'PASSWORD_KEY') }}"
+password = "{{ lookup('env', 'PASSWORD_KEY') }}"
+private_key_file = "{{ lookup('env', 'SSH_PRIVATE_KEY_FILE') }}"
+public_key_file = "{{ lookup('env', 'SSH_PUBLIC_KEY_FILE') }}"
+pipelining = True
+ansible_python_interpreter = /usr/bin/python3
+
+
+
+
+
+
+
+
+

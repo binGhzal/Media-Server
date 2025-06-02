@@ -28,4 +28,4 @@ autoinstall:
         lock-passwd: false
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
-        passwd: password
+        ssh-authorized-keys: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOhs+pheukLtJI3WBAfCxciDCwrDiYdXIepnXx5YB/K5 # replace with your own public key

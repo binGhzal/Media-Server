@@ -28,10 +28,10 @@ variable "ssh_username" {
     default = env("ssh_username")
 }
 
-variable "plaintextpassword" {
+variable "ssh_private_key_file" {
     type = string
     sensitive = true
-    default = env("plaintextpassword")
+    default = env("ssh_private_key_file")
 }
 
 
@@ -107,7 +107,7 @@ source "proxmox-iso" "kube-node-template" {
     # PACKER Autoinstall Settings
     http_directory          = "http"
     ssh_username            = "${var.ssh_username}"
-    ssh_password            = "${var.plaintextpassword}"
+    ssh_private_key_file    = "${var.ssh_private_key_file}"
 
 
     # Raise the timeout, when installation takes longer

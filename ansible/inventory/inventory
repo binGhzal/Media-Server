@@ -1,0 +1,8 @@
+[docker]
+10.0.0.176
+
+[docker:vars]
+ansible_user: "{{ lookup('env', 'USER') }}"
+ansible_private_key_file: "{{ lookup('env', 'SSH_PRIVATE_KEY_FILE') }}"
+ansible_become_pass: "{{ lookup('env', 'PASSWORD_KEY') }}"
+ansible_python_interpreter: /usr/bin/python3

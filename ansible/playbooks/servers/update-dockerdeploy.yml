@@ -1,7 +1,6 @@
 - hosts: "{{ hosts }}"
 
   tasks:
-
     - name: copy docker-compose file
       copy:
         src: "{{ local_project_dir }}/{{ item }}"

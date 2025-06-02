@@ -2,7 +2,6 @@
 
   become: yes
   tasks:
-
     - name: install prerequisites
       apt:
         name:
@@ -14,7 +13,7 @@
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-      
+
     - name: get ubuntu version
       command: "lsb_release -cs"
       register: ubuntu_version
@@ -41,4 +40,3 @@
     # add the current user to the docker group
     - name: add user permissions
       shell: "usermod -aG docker {{ ansible_env.SUDO_USER }}"
- 

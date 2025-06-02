@@ -1,7 +1,6 @@
 - hosts: "{{ hosts }}"
 
   tasks:
-
     - name: Prune non-dangling, and dangling images
       community.docker.docker_prune:
         containers: false

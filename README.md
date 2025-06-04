@@ -62,8 +62,6 @@ The template creation script includes support for:
 1. **Download the Repository:**
 
    ```bash
-   apt update
-   apt install unzip whiptail curl wget -y
    wget https://github.com/binghzal/homelab/archive/main.zip
    unzip main.zip
    cd homelab-main/proxmox
@@ -72,7 +70,7 @@ The template creation script includes support for:
 2. **Run the Script (as root):**
 
    ```bash
-   chmod+x create-template.sh
+   chmod +x create-template.sh
    ./create-template.sh
    ```
 

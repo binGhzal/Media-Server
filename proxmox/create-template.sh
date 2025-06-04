@@ -39,7 +39,7 @@
 #   ./create-template.sh --batch   # Batch mode with config file
 #   ./create-template.sh --help    # Show help information
 #
-# NOTE: This script must be run as ROOT, not with sudo!
+# NOTE: This script must be run as ROOT!
 # Direct root execution required for Proxmox operations and system configuration.
 # 
 # Run as: ./create-template.sh (when logged in as root)
@@ -1334,7 +1334,7 @@ list_ansible_playbooks() {
 # List available Terraform modules/scripts (from terraform dir)
 list_terraform_modules() {
     local tf_dir="$REPO_ROOT/terraform"
-    if [[ -d "$tf_dir" ]]; then
+    if [[ -d "$tf_dir" ]]; then {
         find "$tf_dir" -maxdepth 1 -type f -name '*.tf' -exec basename {} \; 2>/dev/null | sort
     else
         log_warn "Terraform directory not found: $tf_dir"

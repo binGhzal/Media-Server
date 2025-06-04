@@ -12,7 +12,9 @@ terraform apply
 ```
 
 ## Variables
+
 - See `variables.tf` for all configurable options.
 
 ## Reference
+
 - [Proxmox Template Creator Documentation](../proxmox/README-create-template.md)

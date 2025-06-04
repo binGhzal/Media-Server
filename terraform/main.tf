@@ -29,6 +29,6 @@ resource "proxmox_vm_qemu" "template_clone" {
     bridge = var.network_bridge
     model  = "virtio"
   }
-  ciuser     = var.cloud_user
-  sshkeys    = file(var.ssh_key_path)
+  ciuser  = var.cloud_user
+  sshkeys = file(var.ssh_key_path)
 }

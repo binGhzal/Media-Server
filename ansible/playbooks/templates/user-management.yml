@@ -1,0 +1,21 @@
+---
+- name: User Management
+  hosts: "{{ target_hosts | default('template_vms') }}"
+  become: true
+  vars:
+    users:
+      - name: "devuser"
+        groups: ["sudo"]
+        ssh_key: "ssh-rsa AAAA..."
+  tasks:
+    - name: Ensure users exist
+      user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups | join(',') }}"
+        state: present
+      loop: "{{ users }}"
+    - name: Set authorized keys
+      authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ item.ssh_key }}"
+      loop: "{{ users }}"

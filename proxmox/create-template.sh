@@ -936,7 +936,19 @@ create_single_template() {
         return 1
     fi
     
-    # Step 6: Create the template
+    # Step 6: Select Ansible playbooks (if enabled)
+    if [[ "$ANSIBLE_ENABLED" == true ]]; then
+        select_ansible_playbooks_ui || return 1
+        collect_ansible_vars_ui
+    fi
+    
+    # Step 7: Select Terraform modules (if enabled)
+    if [[ "$TERRAFORM_ENABLED" == true ]]; then
+        select_terraform_modules_ui || return 1
+        collect_terraform_vars_ui
+    fi
+    
+    # Step 8: Create the template
     log_info "Starting template creation process..."
     create_template_main
 }
@@ -1257,11 +1269,85 @@ list_supported_distributions() {
     echo
 }
 
-# ============================================================================
-# CLI INTERFACE FUNCTIONS
-# ============================================================================
+# === DYNAMIC DISCOVERY OF ANSIBLE PLAYBOOKS AND TERRAFORM MODULES ===
 
-# Parse command line arguments (robust, supports all features)
+# List available Ansible playbooks (from templates dir)
+list_ansible_playbooks() {
+    local playbook_dir="$REPO_ROOT/ansible/playbooks/templates"
+    find "$playbook_dir" -maxdepth 1 -type f -name '*.yml' -o -name '*.yaml' | xargs -n1 basename
+}
+
+# List available Terraform modules/scripts (from terraform dir)
+list_terraform_modules() {
+    local tf_dir="$REPO_ROOT/terraform"
+    find "$tf_dir" -maxdepth 1 -type f -name '*.tf' | xargs -n1 basename
+}
+
+# UI: Select Ansible playbooks
+select_ansible_playbooks_ui() {
+    local playbooks=( $(list_ansible_playbooks) )
+    local options=()
+    for pb in "${playbooks[@]}"; do
+        options+=("$pb" "" OFF)
+    done
+    local selected
+    selected=$(whiptail --title "Select Ansible Playbooks" --checklist "Choose Ansible playbooks to run after template creation:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    # Remove quotes and store
+    SELECTED_ANSIBLE_PLAYBOOKS=()
+    for pb in $selected; do
+        pb="${pb//\"/}"
+        SELECTED_ANSIBLE_PLAYBOOKS+=("$pb")
+    done
+    return 0
+}
+
+# UI: Select Terraform modules/scripts
+select_terraform_modules_ui() {
+    local modules=( $(list_terraform_modules) )
+    local options=()
+    for mod in "${modules[@]}"; do
+        options+=("$mod" "" OFF)
+    done
+    local selected
+    selected=$(whiptail --title "Select Terraform Modules" --checklist "Choose Terraform modules/scripts to apply after template creation:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    # Remove quotes and store
+    SELECTED_TERRAFORM_MODULES=()
+    for mod in $selected; do
+        mod="${mod//\"/}"
+        SELECTED_TERRAFORM_MODULES+=("$mod")
+    done
+    return 0
+}
+
+# UI: Collect Ansible/Terraform variables
+collect_ansible_vars_ui() {
+    ANSIBLE_EXTRA_VARS=()
+    while true; do
+        local var
+        var=$(whiptail --title "Ansible Variable" --inputbox "Enter Ansible variable (key=value), or leave blank to finish:" 10 60 "" 3>&1 1>&2 2>&3)
+        [[ -z "$var" ]] && break
+        ANSIBLE_EXTRA_VARS+=("$var")
+    done
+}
+
+collect_terraform_vars_ui() {
+    TERRAFORM_EXTRA_VARS=()
+    while true; do
+        local var
+        var=$(whiptail --title "Terraform Variable" --inputbox "Enter Terraform variable (key=value), or leave blank to finish:" 10 60 "" 3>&1 1>&2 2>&3)
+        [[ -z "$var" ]] && break
+        TERRAFORM_EXTRA_VARS+=("$var")
+    done
+}
+
+# CLI: Parse Ansible/Terraform playbook/module and variable flags
+# Add to parse_cli_arguments:
+#   --ansible-playbook PB1[,PB2,...]
+#   --terraform-module MOD1[,MOD2,...]
+#   --ansible-var key=value (repeatable)
+#   --terraform-var key=value (repeatable)
 parse_cli_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -1355,6 +1441,22 @@ parse_cli_arguments() {
                 ;;
             --packages)
                 CLI_PACKAGES="$2"
+                shift 2
+                ;;
+            --ansible-playbook)
+                IFS=',' read -ra SELECTED_ANSIBLE_PLAYBOOKS <<< "$2"
+                shift 2
+                ;;
+            --terraform-module)
+                IFS=',' read -ra SELECTED_TERRAFORM_MODULES <<< "$2"
+                shift 2
+                ;;
+            --ansible-var)
+                ANSIBLE_EXTRA_VARS+=("$2")
+                shift 2
+                ;;
+            --terraform-var)
+                TERRAFORM_EXTRA_VARS+=("$2")
                 shift 2
                 ;;
             --no-interaction)
@@ -1466,10 +1568,10 @@ show_welcome() {
         echo "
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    Proxmox Template Creator                      ║
-║                        Version $SCRIPT_VERSION                          ║
+║                        Version $SCRIPT_VERSION                   ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║                                                                  ║
-║  Automated VM template creation for Proxmox Virtual Environment ║
+║  Automated VM template creation for Proxmox Virtual Environment  ║
 ║                                                                  ║
 ║  Features:                                                       ║
 ║  • Multiple Linux distributions                                  ║
@@ -1478,7 +1580,7 @@ show_welcome() {
 ║  • Batch processing                                              ║
 ║  • Ansible automation                                            ║
 ║                                                                  ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════════╝
 "
         sleep 2
     fi
@@ -1516,6 +1618,10 @@ Options:
   --ssh-key PATH            Set SSH public key file
   --user USER               Set cloud-init username
   --packages PKGS           Comma-separated package list
+  --ansible-playbook PB1[,PB2,...]   Select Ansible playbooks to run
+  --terraform-module MOD1[,MOD2,...] Select Terraform modules/scripts to apply
+  --ansible-var key=value            Pass variable to Ansible (repeatable)
+  --terraform-var key=value          Pass variable to Terraform (repeatable)
   --no-interaction          Non-interactive mode
   --dry-run                 Show actions without executing
   --verbose                 Enable verbose output

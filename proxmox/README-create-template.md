@@ -159,6 +159,43 @@ ansible-playbook -i /opt/ansible/inventory/proxmox.yml /opt/ansible/playbooks/sy
 ansible-playbook -i /opt/ansible/inventory/proxmox.yml /opt/ansible/playbooks/install-docker.yml --limit template-group
 ```
 
+## Dynamic Ansible & Terraform Integration
+
+### Dynamic Discovery & Selection
+
+- The script automatically lists available Ansible playbooks (from `ansible/playbooks/templates/`) and Terraform modules/scripts (from `terraform/`).
+- In UI mode, you can select one or more playbooks/modules to run after template creation.
+- In CLI mode, use `--ansible-playbook` and `--terraform-module` flags (comma-separated for multiple).
+
+### Passing Variables
+
+- You can pass variables to Ansible and Terraform:
+  - UI: You will be prompted to enter key=value pairs for each tool.
+  - CLI: Use `--ansible-var key=value` and `--terraform-var key=value` (repeatable for multiple variables).
+
+### Example CLI Usage
+
+```bash
+./create-template.sh -d ubuntu-22.04 -n dev-template -i 9000 \
+  --ansible --ansible-playbook install-docker.yml,system-hardening.yml \
+  --ansible-var user=devops --ansible-var timezone=UTC \
+  --terraform --terraform-module main.tf,network.tf \
+  --terraform-var vm_count=2 --terraform-var env=dev
+```
+
+### UI Workflow
+
+- After reviewing your template configuration, if Ansible or Terraform is enabled, you will be prompted to select playbooks/modules and enter variables.
+
+### Automation Execution
+
+- After template creation, the selected Ansible playbooks and Terraform modules/scripts will be executed with the provided variables.
+
+## Example Playbooks & Modules
+
+- See `ansible/playbooks/templates/` for example Ansible playbooks (development, docker, kubernetes, monitoring, security, user management, backups, system hardening).
+- See `terraform/` for example Terraform modules/scripts (main.tf, firewall.tf, network.tf, storage.tf, user.tf, variables.tf, outputs.tf, providers.tf).
+
 ## 🔄 Template Queue (Batch Processing)
 
 Create multiple templates in sequence:
@@ -312,7 +349,7 @@ Check Proxmox logs for additional information:
 
 ## 📁 File Structure
 
-```
+```directory
 ~/.proxmox-templates/          # Configuration directory
 ├── ubuntu-22.04-20241201.conf # Exported configurations
 ├── template-queue-*.conf      # Batch configurations

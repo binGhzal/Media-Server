@@ -1,0 +1,22 @@
+---
+- name: Configure Backups
+  hosts: "{{ target_hosts | default('template_vms') }}"
+  become: true
+  vars:
+    backup_user: "backup"
+    backup_dir: "/var/backups"
+  tasks:
+    - name: Ensure backup user exists
+      user:
+        name: "{{ backup_user }}"
+        state: present
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: "{{ backup_user }}"
+        mode: "0750"
+    - name: Install rsync
+      apt:
+        name: rsync
+        state: present

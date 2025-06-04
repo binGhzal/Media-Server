@@ -5,3 +5,8 @@
 # Ignore backup files
 **/*.backup
 **/*.bak
+
+# Ignore ansible files
+**/*.vault
+**/.ansible
+

@@ -59,26 +59,36 @@ The template creation script includes support for:
 
 ### Proxmox Template Creation
 
-1. **Run the Script:**
+1. **Download the Repository:**
 
    ```bash
-   cd proxmox
-   sudo ./create-template.sh
+   apt update
+   apt install unzip whiptail curl wget -y
+   wget https://github.com/binghzal/homelab/archive/main.zip
+   unzip main.zip
+   cd homelab-main/proxmox
    ```
 
-2. **Choose Operating Mode:**
+2. **Run the Script (as root):**
+
+   ```bash
+   chmod+x create-template.sh
+   ./create-template.sh
+   ```
+
+3. **Choose Operating Mode:**
 
    - **Interactive Mode**: Use the Whiptail UI for guided setup
    - **CLI Mode**: Use command-line arguments for automation
 
-3. **Configure Template:**
+4. **Configure Template:**
 
    - Select base OS distribution
    - Choose packages to install
    - Configure VM specifications (CPU, memory, disk)
    - Set up SSH keys and cloud-init
 
-4. **Template Creation:**
+5. **Template Creation:**
    - Script automatically downloads ISO if needed
    - Creates VM with specified configuration
    - Installs selected packages via virt-customize
@@ -87,15 +97,15 @@ The template creation script includes support for:
 ### Command Line Usage
 
 ```bash
-# Interactive mode (default)
-sudo ./create-template.sh
+# Interactive mode (default) - run as root
+./create-template.sh
 
-# CLI mode with specific configuration
-sudo ./create-template.sh --cli \
-  --template-name "ubuntu-dev-template" \
-  --os-type "ubuntu" \
+# CLI mode with specific configuration - run as root
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --name "ubuntu-dev-template" \
   --packages "zsh,fzf,vscode-server,docker.io" \
-  --cpu 2 --memory 4096 --disk-size 32
+  --cores 2 --memory 4096 --disk-size 32
 
 # Show help
 ./create-template.sh --help
@@ -297,15 +307,15 @@ See [`proxmox/README-create-template.md`](proxmox/README-create-template.md) for
 
 **Script location:**
 
-- Main script: `proxmox/create-template.sh`
+- Main script: `proxmox/create-template.sh` (run as root)
 - Example configs: `proxmox/examples/`
-- Ansible playbooks: `proxmox/ansible/playbooks/`
-- Terraform automation: `terraform/`
+- Ansible playbooks: `ansible/playbooks/templates/`
+- Terraform modules: `terraform/`
 
 **Integration:**
 
-- Use `--ansible` to trigger Ansible post-provisioning (see playbooks in `proxmox/ansible/playbooks/`)
-- Use `--terraform` to trigger Terraform automation (see modules in `terraform/`)
+- Use `--ansible` to trigger Ansible post-provisioning (see playbooks in `ansible/playbooks/templates/`)
+- Use `--terraform` to trigger Terraform automation for VM deployment from templates (see modules in `terraform/`)
 
 **Testing:**
 

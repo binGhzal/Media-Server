@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #===============================================================================
-# Proxmox Template Creator - Ultra Enhanced Version
+# Proxmox Template Creator
 #===============================================================================
 # 
 # Advanced script for creating Proxmox VM templates with comprehensive features:
@@ -40,14 +40,18 @@
 #   ./create-template.sh --help    # Show help information
 #
 # NOTE: This script must be run as ROOT, not with sudo!
+# Direct root execution required for Proxmox operations and system configuration.
+# 
+# Run as: ./create-template.sh (when logged in as root)
+# Do NOT use: sudo ./create-template.sh
 #
 #===============================================================================
 
 # Script version and metadata
 SCRIPT_VERSION="5.0"
 SCRIPT_NAME="Proxmox Template Creator Ultra Enhanced"
-SCRIPT_AUTHOR="Homelab Infrastructure Team"
-SCRIPT_DATE="2025-06-04"
+SCRIPT_AUTHOR="binghzal"
+SCRIPT_DATE="2025"
 
 # Essential dependency check
 # Enhanced dependency check with auto-installation
@@ -142,6 +146,51 @@ initialize_script() {
     log_info "Proxmox Template Creator v$SCRIPT_VERSION initialized"
     log_info "Working directory: $SCRIPT_DIR"
     log_info "Repository root: $REPO_ROOT"
+}
+
+#===============================================================================
+# LOGGING FUNCTIONS
+#===============================================================================
+
+# Logging functions
+log_info() {
+    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${LOG_FILE:-/tmp/template-creator.log}"
+}
+
+log_error() {
+    echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${LOG_FILE:-/tmp/template-creator.log}" >&2
+}
+
+log_warn() {
+    echo "[WARN] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${LOG_FILE:-/tmp/template-creator.log}"
+}
+
+log_success() {
+    echo "[SUCCESS] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${LOG_FILE:-/tmp/template-creator.log}"
+}
+
+log_debug() {
+    if [[ "$DEBUG_MODE" == "true" ]]; then
+        echo "[DEBUG] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${LOG_FILE:-/tmp/template-creator.log}"
+    fi
+}
+
+# Cleanup functions
+cleanup_on_exit() {
+    log_info "Performing cleanup on exit"
+    if [[ -n "$TEMP_LXC_ID" ]]; then
+        pct stop "$TEMP_LXC_ID" 2>/dev/null || true
+        pct destroy "$TEMP_LXC_ID" 2>/dev/null || true
+    fi
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+    fi
+}
+
+cleanup_on_interrupt() {
+    log_warn "Script interrupted, performing cleanup"
+    cleanup_on_exit
+    exit 130
 }
 
 #===============================================================================
@@ -1271,16 +1320,26 @@ list_supported_distributions() {
 
 # === DYNAMIC DISCOVERY OF ANSIBLE PLAYBOOKS AND TERRAFORM MODULES ===
 
-# List available Ansible playbooks (from templates dir)
+# List available Ansible playbooks (from ansible/playbooks/templates/ dir)
 list_ansible_playbooks() {
     local playbook_dir="$REPO_ROOT/ansible/playbooks/templates"
-    find "$playbook_dir" -maxdepth 1 -type f -name '*.yml' -o -name '*.yaml' | xargs -n1 basename
+    if [[ -d "$playbook_dir" ]]; then
+        find "$playbook_dir" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -exec basename {} \; 2>/dev/null | sort
+    else
+        log_warn "Ansible playbooks directory not found: $playbook_dir"
+        return 1
+    fi
 }
 
 # List available Terraform modules/scripts (from terraform dir)
 list_terraform_modules() {
     local tf_dir="$REPO_ROOT/terraform"
-    find "$tf_dir" -maxdepth 1 -type f -name '*.tf' | xargs -n1 basename
+    if [[ -d "$tf_dir" ]]; then
+        find "$tf_dir" -maxdepth 1 -type f -name '*.tf' -exec basename {} \; 2>/dev/null | sort
+    else
+        log_warn "Terraform directory not found: $tf_dir"
+        return 1
+    fi
 }
 
 # UI: Select Ansible playbooks
@@ -1635,23 +1694,544 @@ Examples:
 EOF
 }
 
-# Main function
+# === ANSIBLE AND TERRAFORM EXECUTION FUNCTIONS ===
+
+# Execute selected Ansible playbooks on VMs (not templates)
+execute_ansible_playbooks() {
+    local vm_id="$1"
+    local vm_ip="$2"
+    
+    if [[ ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} -eq 0 ]]; then
+        log_info "No Ansible playbooks selected, skipping Ansible execution"
+        return 0
+    fi
+    
+    log_info "Executing Ansible playbooks on VM $vm_id ($vm_ip)"
+    
+    # Create temporary inventory file for this VM
+    local temp_inventory="/tmp/proxmox-vm-$vm_id.yml"
+    cat > "$temp_inventory" <<EOF
+all:
+  hosts:
+    vm-$vm_id:
+      ansible_host: $vm_ip
+      ansible_user: ${CLOUD_USER_DEFAULT:-ubuntu}
+      ansible_ssh_private_key_file: ~/.ssh/id_rsa
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+EOF
+    
+    # Execute each selected playbook
+    for playbook in "${SELECTED_ANSIBLE_PLAYBOOKS[@]}"; do
+        local playbook_path="$REPO_ROOT/ansible/playbooks/templates/$playbook"
+        if [[ -f "$playbook_path" ]]; then
+            log_info "Running Ansible playbook: $playbook"
+            
+            # Build ansible-playbook command with variables
+            local ansible_cmd="ansible-playbook -i $temp_inventory $playbook_path"
+            
+            # Add extra variables if provided
+            for var in "${ANSIBLE_EXTRA_VARS[@]}"; do
+                ansible_cmd="$ansible_cmd -e $var"
+            done
+            
+            # Execute playbook
+            if eval "$ansible_cmd"; then
+                log_success "Ansible playbook $playbook completed successfully"
+            else
+                log_error "Ansible playbook $playbook failed"
+            fi
+        else
+            log_warn "Ansible playbook not found: $playbook_path"
+        fi
+    done
+    
+    # Cleanup temporary inventory
+    rm -f "$temp_inventory"
+}
+
+# Execute Terraform modules for template deployment
+execute_terraform_modules() {
+    local template_id="$1"
+    local template_name="$2"
+    
+    if [[ ${#SELECTED_TERRAFORM_MODULES[@]} -eq 0 ]]; then
+        log_info "No Terraform modules selected, skipping Terraform execution"
+        return 0
+    fi
+    
+    log_info "Executing Terraform modules for template $template_id ($template_name)"
+    
+    # Create temporary Terraform directory
+    local temp_tf_dir="/tmp/proxmox-terraform-$$"
+    mkdir -p "$temp_tf_dir"
+    
+    # Copy selected modules to temporary directory
+    for module in "${SELECTED_TERRAFORM_MODULES[@]}"; do
+        local module_path="$REPO_ROOT/terraform/$module"
+        if [[ -f "$module_path" ]]; then
+            cp "$module_path" "$temp_tf_dir/"
+            log_info "Copied Terraform module: $module"
+        else
+            log_warn "Terraform module not found: $module_path"
+        fi
+    done
+    
+    # Create terraform.tfvars file with provided variables
+    local tfvars_file="$temp_tf_dir/terraform.tfvars"
+    cat > "$tfvars_file" <<EOF
+# Auto-generated terraform.tfvars for template deployment
+template_id = "$template_id"
+vm_name_prefix = "${template_name}-vm-"
+EOF
+    
+    # Add extra variables if provided
+    for var in "${TERRAFORM_EXTRA_VARS[@]}"; do
+        echo "$var" >> "$tfvars_file"
+    done
+    
+    # Execute Terraform commands
+    cd "$temp_tf_dir"
+    
+    log_info "Initializing Terraform..."
+    if terraform init; then
+        log_success "Terraform initialized successfully"
+        
+        log_info "Planning Terraform deployment..."
+        if terraform plan; then
+            log_success "Terraform plan completed successfully"
+            
+            # Ask for confirmation before applying
+            if whiptail --title "Terraform Apply" \
+                --yesno "Terraform plan completed. Apply changes to deploy VMs from template?" 8 60; then
+                
+                log_info "Applying Terraform configuration..."
+                if terraform apply -auto-approve; then
+                    log_success "Terraform apply completed successfully"
+                    
+                    # Show outputs if available
+                    log_info "Terraform outputs:"
+                    terraform output
+                else
+                    log_error "Terraform apply failed"
+                fi
+            else
+                log_info "Terraform apply cancelled by user"
+            fi
+        else
+            log_error "Terraform plan failed"
+        fi
+    else
+        log_error "Terraform initialization failed"
+    fi
+    
+    # Return to original directory
+    cd - > /dev/null
+    
+    # Cleanup (optional - user might want to inspect)
+    if [[ "$TERRAFORM_CLEANUP_TEMP" == "true" ]]; then
+        rm -rf "$temp_tf_dir"
+    else
+        log_info "Terraform files preserved in: $temp_tf_dir"
+    fi
+}
+
+# Create VM from template and run Ansible if configured
+deploy_vm_from_template() {
+    local template_id="$1"
+    local vm_name="$2"
+    local vm_id="$3"
+    
+    log_info "Deploying VM $vm_name (ID: $vm_id) from template $template_id"
+    
+    # Clone template to create VM
+    if qm clone "$template_id" "$vm_id" --name "$vm_name"; then
+        log_success "VM $vm_name created from template"
+        
+        # Start the VM
+        if qm start "$vm_id"; then
+            log_success "VM $vm_name started"
+            
+            # Wait for VM to get IP address
+            log_info "Waiting for VM to obtain IP address..."
+            local vm_ip=""
+            local retry_count=0
+            local max_retries=30
+            
+            while [[ -z "$vm_ip" && $retry_count -lt $max_retries ]]; do
+                sleep 10
+                vm_ip=$(qm guest cmd "$vm_id" network-get-interfaces 2>/dev/null | jq -r '.[] | select(.name=="eth0") | .["ip-addresses"][] | select(.["ip-address-type"]=="ipv4") | .["ip-address"]' 2>/dev/null | head -1)
+                ((retry_count++))
+            done
+            
+            if [[ -n "$vm_ip" ]]; then
+                log_success "VM IP address: $vm_ip"
+                
+                # Execute Ansible playbooks if configured
+                if [[ "$ANSIBLE_ENABLED" == "true" && ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} -gt 0 ]]; then
+                    log_info "Waiting for SSH to be available..."
+                    sleep 30  # Additional wait for SSH service
+                    execute_ansible_playbooks "$vm_id" "$vm_ip"
+                fi
+            else
+                log_warn "Could not determine VM IP address"
+            fi
+        else
+            log_error "Failed to start VM $vm_name"
+        fi
+    else
+        log_error "Failed to create VM from template"
+        return 1
+    fi
+}
+#===============================================================================
+# MISSING CORE FUNCTIONS IMPLEMENTATION
+#===============================================================================
+
+# Main entry point function
 main() {
+    # Initialize script
     initialize_script
     
-    # Parse command line arguments if provided
+    # Parse command line arguments
     if [[ $# -gt 0 ]]; then
         parse_cli_arguments "$@"
-        # Run in CLI mode if arguments provided
-        if [[ "$BATCH_MODE" == true ]]; then
-            process_batch_file "$CONFIG_FILE"
-            return $?
-        fi
-        # Add more CLI logic here as needed
+        run_cli_mode
+    else
+        # Show welcome and run interactive mode
+        show_welcome
+        show_main_menu
     fi
-    # Show welcome message and run UI mode by default
-    show_welcome
-    show_main_menu
+}
+
+# Select distribution interactively
+select_distribution() {
+    local dist_options=()
+    local categories=()
+    
+    # Build distribution list by categories
+    for category in ubuntu debian rhel fedora suse arch security container bsd minimal network specialized custom; do
+        local category_dists=()
+        for key in "${!DISTRO_LIST[@]}"; do
+            case "$key" in
+                ubuntu-*) [[ "$category" == "ubuntu" ]] && category_dists+=("$key") ;;
+                debian-*) [[ "$category" == "debian" ]] && category_dists+=("$key") ;;
+                centos-*|rhel-*|rocky-*|almalinux-*|oracle-*) [[ "$category" == "rhel" ]] && category_dists+=("$key") ;;
+                fedora-*) [[ "$category" == "fedora" ]] && category_dists+=("$key") ;;
+                opensuse-*) [[ "$category" == "suse" ]] && category_dists+=("$key") ;;
+                arch*) [[ "$category" == "arch" ]] && category_dists+=("$key") ;;
+                kali-*|parrot-*) [[ "$category" == "security" ]] && category_dists+=("$key") ;;
+                talos-*|flatcar|bottlerocket) [[ "$category" == "container" ]] && category_dists+=("$key") ;;
+                freebsd-*|openbsd-*|netbsd-*) [[ "$category" == "bsd" ]] && category_dists+=("$key") ;;
+                alpine-*|tinycorelinux|slitaz|puppy-*) [[ "$category" == "minimal" ]] && category_dists+=("$key") ;;
+                opnsense-*|pfsense-*|vyos-*|routeros-*) [[ "$category" == "network" ]] && category_dists+=("$key") ;;
+                clearlinux|rescuezilla|gparted-*) [[ "$category" == "specialized" ]] && category_dists+=("$key") ;;
+                custom-*) [[ "$category" == "custom" ]] && category_dists+=("$key") ;;
+            esac
+        done
+        
+        if [[ ${#category_dists[@]} -gt 0 ]]; then
+            categories+=("$category")
+        fi
+    done
+    
+    # Select category first
+    local cat_options=()
+    for cat in "${categories[@]}"; do
+        case "$cat" in
+            ubuntu) cat_options+=("$cat" "Ubuntu Family (LTS and Latest)") ;;
+            debian) cat_options+=("$cat" "Debian Family (Stable and Testing)") ;;
+            rhel) cat_options+=("$cat" "Red Hat Enterprise Family") ;;
+            fedora) cat_options+=("$cat" "Fedora") ;;
+            suse) cat_options+=("$cat" "SUSE Family") ;;
+            arch) cat_options+=("$cat" "Arch Linux Family") ;;
+            security) cat_options+=("$cat" "Security-Focused Distributions") ;;
+            container) cat_options+=("$cat" "Container-Optimized") ;;
+            bsd) cat_options+=("$cat" "BSD Systems") ;;
+            minimal) cat_options+=("$cat" "Minimal/Lightweight") ;;
+            network) cat_options+=("$cat" "Network/Firewall") ;;
+            specialized) cat_options+=("$cat" "Specialized/Rescue") ;;
+            custom) cat_options+=("$cat" "Custom ISO/Image") ;;
+        esac
+    done
+    
+    local selected_category
+    selected_category=$(whiptail --title "Select Distribution Category" \
+        --menu "Choose a distribution category:" 20 80 10 \
+        "${cat_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    # Now show distributions in selected category
+    local dist_options=()
+    for key in "${!DISTRO_LIST[@]}"; do
+        local match=false
+        case "$key" in
+            ubuntu-*) [[ "$selected_category" == "ubuntu" ]] && match=true ;;
+            debian-*) [[ "$selected_category" == "debian" ]] && match=true ;;
+            centos-*|rhel-*|rocky-*|almalinux-*|oracle-*) [[ "$selected_category" == "rhel" ]] && match=true ;;
+            fedora-*) [[ "$selected_category" == "fedora" ]] && match=true ;;
+            opensuse-*) [[ "$selected_category" == "suse" ]] && match=true ;;
+            arch*) [[ "$selected_category" == "arch" ]] && match=true ;;
+            kali-*|parrot-*) [[ "$selected_category" == "security" ]] && match=true ;;
+            talos-*|flatcar|bottlerocket) [[ "$selected_category" == "container" ]] && match=true ;;
+            freebsd-*|openbsd-*|netbsd-*) [[ "$selected_category" == "bsd" ]] && match=true ;;
+            alpine-*|tinycorelinux|slitaz|puppy-*) [[ "$selected_category" == "minimal" ]] && match=true ;;
+            opnsense-*|pfsense-*|vyos-*|routeros-*) [[ "$selected_category" == "network" ]] && match=true ;;
+            clearlinux|rescuezilla|gparted-*) [[ "$selected_category" == "specialized" ]] && match=true ;;
+            custom-*) [[ "$selected_category" == "custom" ]] && match=true ;;
+        esac
+        
+        if [[ "$match" == true ]]; then
+            IFS='|' read -r name url fmt pkgmgr ostype user size notes <<< "${DISTRO_LIST[$key]}"
+            dist_options+=("$key" "$name - $notes")
+        fi
+    done
+    
+    local selected_dist
+    selected_dist=$(whiptail --title "Select Distribution" \
+        --menu "Choose a distribution:" 20 80 10 \
+        "${dist_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_dist]}"
+    SELECTED_DISTRIBUTION_KEY="$selected_dist"
+    
+    log_info "Selected distribution: $selected_dist"
+    return 0
+}
+
+# Core template creation function
+create_template_main() {
+    log_info "Starting template creation process"
+    
+    # Parse distribution details
+    IFS='|' read -r dist_name dist_url dist_format dist_pkgmgr dist_ostype dist_user dist_size dist_notes <<< "$SELECTED_DISTRIBUTION"
+    
+    # Set defaults from distribution if not already set
+    VM_NAME="${VM_NAME:-${SELECTED_DISTRIBUTION_KEY}-template}"
+    VMID_DEFAULT="${VMID_DEFAULT:-$(get_next_available_vmid)}"
+    VM_MEMORY="${VM_MEMORY:-2048}"
+    VM_CORES="${VM_CORES:-2}"
+    VM_DISK_SIZE="${VM_DISK_SIZE:-$dist_size}"
+    VM_STORAGE="${VM_STORAGE:-local-lvm}"
+    CLOUD_USER_DEFAULT="${CLOUD_USER_DEFAULT:-$dist_user}"
+    
+    log_info "Creating template: $VM_NAME (ID: $VMID_DEFAULT)"
+    log_info "Distribution: $dist_name"
+    log_info "Format: $dist_format, Package Manager: $dist_pkgmgr"
+    
+    # Download image if needed
+    local image_path
+    image_path=$(download_distribution_image "$dist_url" "$dist_format")
+    [[ $? -ne 0 ]] && return 1
+    
+    # Create VM
+    if ! create_vm_from_image "$image_path" "$dist_format"; then
+        log_error "Failed to create VM from image"
+        return 1
+    fi
+    
+    # Configure cloud-init
+    if ! configure_cloud_init; then
+        log_error "Failed to configure cloud-init"
+        return 1
+    fi
+    
+    # Install packages if selected
+    if [[ ${#SELECTED_PACKAGES[@]} -gt 0 ]]; then
+        if ! install_packages_virt_customize "$image_path" "$dist_pkgmgr"; then
+            log_error "Failed to install packages"
+            return 1
+        fi
+    fi
+    
+    # Convert to template
+    if ! convert_to_template; then
+        log_error "Failed to convert VM to template"
+        return 1
+    fi
+    
+    # Execute Terraform modules if selected (for template deployment)
+    if [[ "$TERRAFORM_ENABLED" == "true" && ${#SELECTED_TERRAFORM_MODULES[@]} -gt 0 ]]; then
+        execute_terraform_modules "$VMID_DEFAULT" "$VM_NAME"
+    fi
+    
+    log_success "Template creation completed successfully!"
+    log_info "Template ID: $VMID_DEFAULT"
+    log_info "Template Name: $VM_NAME"
+    
+    return 0
+}
+
+# Get next available VM ID
+get_next_available_vmid() {
+    local start_id="${VMID_DEFAULT:-9000}"
+    local current_id="$start_id"
+    
+    while qm status "$current_id" &>/dev/null; do
+        ((current_id++))
+    done
+    
+    echo "$current_id"
+}
+
+# Download distribution image
+download_distribution_image() {
+    local url="$1"
+    local format="$2"
+    local filename=$(basename "$url")
+    local download_path="$SCRIPT_DIR/temp/$filename"
+    
+    # Create temp directory
+    mkdir -p "$SCRIPT_DIR/temp"
+    
+    # Skip download if file already exists and is valid
+    if [[ -f "$download_path" ]]; then
+        log_info "Image already exists: $download_path"
+        echo "$download_path"
+        return 0
+    fi
+    
+    log_info "Downloading image: $url"
+    if wget -q --show-progress -O "$download_path" "$url"; then
+        log_success "Image downloaded: $download_path"
+        echo "$download_path"
+        return 0
+    else
+        log_error "Failed to download image: $url"
+        return 1
+    fi
+}
+
+# Create VM from image
+create_vm_from_image() {
+    local image_path="$1"
+    local format="$2"
+    
+    log_info "Creating VM from image: $image_path"
+    
+    # Create VM with basic configuration
+    if qm create "$VMID_DEFAULT" \
+        --name "$VM_NAME" \
+        --memory "$VM_MEMORY" \
+        --cores "$VM_CORES" \
+        --net0 "virtio,bridge=$NETWORK_BRIDGE" \
+        --ostype "$OS_TYPE" \
+        --agent 1; then
+        
+        log_success "VM $VMID_DEFAULT created successfully"
+        
+        # Import disk
+        local disk_import_cmd="qm importdisk $VMID_DEFAULT $image_path $VM_STORAGE"
+        if $disk_import_cmd; then
+            log_success "Disk imported successfully"
+            
+            # Set boot disk
+            if qm set "$VMID_DEFAULT" --scsi0 "$VM_STORAGE:vm-$VMID_DEFAULT-disk-0"; then
+                log_success "Boot disk configured"
+                return 0
+            else
+                log_error "Failed to configure boot disk"
+                return 1
+            fi
+        else
+            log_error "Failed to import disk"
+            return 1
+        fi
+    else
+        log_error "Failed to create VM"
+        return 1
+    fi
+}
+
+# Configure cloud-init
+configure_cloud_init() {
+    log_info "Configuring cloud-init for VM $VMID_DEFAULT"
+    
+    local cloud_init_cmd="qm set $VMID_DEFAULT"
+    cloud_init_cmd="$cloud_init_cmd --ide2 $VM_STORAGE:cloudinit"
+    cloud_init_cmd="$cloud_init_cmd --boot c --bootdisk scsi0"
+    cloud_init_cmd="$cloud_init_cmd --serial0 socket --vga serial0"
+    
+    # Set cloud-init user
+    if [[ -n "$CLOUD_USER_DEFAULT" ]]; then
+        cloud_init_cmd="$cloud_init_cmd --ciuser $CLOUD_USER_DEFAULT"
+    fi
+    
+    # Set SSH key if provided
+    if [[ -n "$SSH_KEY" ]]; then
+        cloud_init_cmd="$cloud_init_cmd --sshkey \"$SSH_KEY\""
+    fi
+    
+    # Execute cloud-init configuration
+    if eval "$cloud_init_cmd"; then
+        log_success "Cloud-init configured successfully"
+        return 0
+    else
+        log_error "Failed to configure cloud-init"
+        return 1
+    fi
+}
+
+# Install packages using virt-customize
+install_packages_virt_customize() {
+    local image_path="$1"
+    local pkg_manager="$2"
+    
+    log_info "Installing ${#SELECTED_PACKAGES[@]} packages using virt-customize"
+    
+    local install_cmd="virt-customize -a $image_path"
+    
+    # Build package installation command based on package manager
+    case "$pkg_manager" in
+        apt)
+            install_cmd="$install_cmd --update"
+            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+            ;;
+        dnf|yum)
+            install_cmd="$install_cmd --run-command 'dnf update -y'"
+            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+            ;;
+        zypper)
+            install_cmd="$install_cmd --run-command 'zypper refresh'"
+            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+            ;;
+        *)
+            log_warn "Package manager $pkg_manager not fully supported, skipping package installation"
+            return 0
+            ;;
+    esac
+    
+    # Execute package installation
+    if eval "$install_cmd"; then
+        log_success "Packages installed successfully"
+        return 0
+    else
+        log_error "Failed to install packages"
+        return 1
+    fi
+}
+
+# Convert VM to template
+convert_to_template() {
+    log_info "Converting VM $VMID_DEFAULT to template"
+    
+    if qm template "$VMID_DEFAULT"; then
+        log_success "VM successfully converted to template"
+        
+        # Add template tag
+        if qm set "$VMID_DEFAULT" --tags "template"; then
+            log_success "Template tagged successfully"
+        fi
+        
+        return 0
+    else
+        log_error "Failed to convert VM to template"
+        return 1
+    fi
 }
 
 # Only run main if script is executed directly (not sourced)

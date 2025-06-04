@@ -1,9 +1,0 @@
-- hosts: "{{ hosts }}"
-  become: true
-  tasks:
-    - name: Install core packages
-      ansible.builtin.apt:
-        name:
-          - prometheus-node-exporter
-          - nfs-common
-        update_cache: true

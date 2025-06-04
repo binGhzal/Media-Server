@@ -2,24 +2,6 @@
 **/.vscode
 **/.DS_Store
 
-# Docker Secrets, Environment Files
-**/secret.*
-**/.env
-
-
-# Packer state files
-**/credentials.pkr.hcl
-
-# Terraform workspace files
-**/*.terraform
-**/*.terraform.lock.hcl
-**/*.tfstate
-**/*tfvars
-
-
 # Ignore backup files
 **/*.backup
 **/*.bak
-
-# Ansible files
-**/.ansible

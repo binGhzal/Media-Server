@@ -45,9 +45,9 @@
 
 # Script version and metadata
 SCRIPT_VERSION="5.0"
-SCRIPT_NAME="Proxmox Template Creator"
-SCRIPT_AUTHOR="binGhzal"
-SCRIPT_DATE="2025"
+SCRIPT_NAME="Proxmox Template Creator Ultra Enhanced"
+SCRIPT_AUTHOR="Homelab Infrastructure Team"
+SCRIPT_DATE="2025-06-04"
 
 # Essential dependency check
 # Enhanced dependency check with auto-installation
@@ -93,6 +93,9 @@ check_root() {
         echo "  su - root"
         echo "  cd $(pwd)"
         echo "  ./create-template.sh"
+        echo ""
+        echo "Or use sudo with preserved environment:"
+        echo "  sudo -E ./create-template.sh"
         echo ""
         exit 1
     fi

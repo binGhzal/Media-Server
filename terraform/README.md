@@ -19,10 +19,6 @@ terraform apply
 
 - [Proxmox Template Creator Documentation](../proxmox/README-create-template.md)
 
-# Terraform Modules for Proxmox Template Creator
-
-This directory contains example Terraform modules and scripts for use with the Proxmox Template Creator automation workflow.
-
 ## Dynamic Module/Script Discovery
 
 - The main script (`create-template.sh`) will automatically list all `.tf` files in this directory for user selection (UI and CLI).
@@ -46,3 +42,7 @@ This directory contains example Terraform modules and scripts for use with the P
 - `providers.tf`: Provider configuration.
 
 See each module/script for details and variable usage.
+
+## Note
+
+> Terraform modules will run only after a VM template is created. Use the `--terraform` flag and select modules via `--terraform-module` to deploy VMs from templates.

@@ -36,21 +36,33 @@ This document provides detailed information about each feature of the Proxmox Te
 - Error Recovery: Retry logic and cleanup on failure.
 - Monitoring & Health Checks: Optional installation of monitoring agents and post-creation checks.
 
-## Command-Line Usage Examples
+## Planned Features
 
-```bash
-# Interactive mode (default)
-./create-template.sh
+- Auto-build Docker container templates under `docker/`
+- Auto-generate Kubernetes VM templates under `kubernetes/`
+- SSH bastion setup for template enrollment
+- Template publishing to private registry
 
-# CLI mode with Ansible and Terraform
-echo "user=admin,env=dev" > vars.list
-./create-template.sh \
-  --distribution ubuntu-22.04 \
-  --name "ubuntu-dev-template" \
-  --vmid 9000 \
-  --cores 2 --memory 4096 --disk-size 32G \
-  --ansible --ansible-playbook install-docker.yml,system-hardening.yml \
-  --ansible-var user=devops \
-  --terraform --terraform-module main.tf,network.tf \
-  --terraform-var vm_count=2
-```
+## Docker & Kubernetes Templates
+
+- Docker Template Discovery: Lists all files in `docker/templates/` folder with `list_docker_templates()`.
+- UI Radiolist & CLI Flags (`--docker-template`): Select a Docker template interactively or via `--docker-template name1,name2`.
+- Kubernetes Template Discovery: Lists all files in `kubernetes/templates/` folder with `list_k8s_templates()`.
+- UI Radiolist & CLI Flags (`--k8s-template`): Select a Kubernetes template interactively or via `--k8s-template name1,name2`.
+
+## Quick Start
+
+1. **Download the Repository:**
+
+   ```bash
+   wget https://github.com/binghzal/homelab/archive/main.zip
+   unzip main.zip
+   cd homelab-main/proxmox
+   ```
+
+2. **Run the Script (as root):**
+
+   ```bash
+   chmod +x create-template.sh
+   ./create-template.sh
+   ```

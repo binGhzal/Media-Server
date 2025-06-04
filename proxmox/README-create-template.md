@@ -449,6 +449,17 @@ DISTRO_LIST+=(
 )
 ```
 
+### Docker & Kubernetes Templates
+
+- Place Dockerfile templates under `docker/templates/`
+- Place K8s manifests under `kubernetes/templates/`
+- Use UI or `--docker-template` / `--k8s-template` flags to select
+
+### New Distros & Packages
+
+- Added Void Linux, Gentoo, NixOS distributions
+- Added `fish`, `hcloud`, `azure-cli` packages
+
 ## 🤝 Contributing
 
 1. Fork the repository

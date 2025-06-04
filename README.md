@@ -67,7 +67,7 @@ The template creation script includes support for:
    cd homelab-main/proxmox
    ```
 
-2. **Run the Script (as root):**
+2. **Prepare and Run the Script (as root):**
 
    ```bash
    chmod +x create-template.sh
@@ -87,6 +87,7 @@ The template creation script includes support for:
    - Set up SSH keys and cloud-init
 
 5. **Template Creation:**
+
    - Script automatically downloads ISO if needed
    - Creates VM with specified configuration
    - Installs selected packages via virt-customize

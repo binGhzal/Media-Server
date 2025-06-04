@@ -87,20 +87,8 @@ check_dependencies() {
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        echo "=============================================="
-        echo "ERROR: Root privileges required!"
-        echo "=============================================="
-        echo ""
-        echo "This script must be run as root (not with sudo)."
-        echo ""
-        echo "To run as root:"
-        echo "  su - root"
-        echo "  cd $(pwd)"
-        echo "  ./create-template.sh"
-        echo ""
-        echo "Or use sudo with preserved environment:"
-        echo "  sudo -E ./create-template.sh"
-        echo ""
+        echo "ERROR: This script must be run as root!"
+        echo "Run: ./create-template.sh"
         exit 1
     fi
 }
@@ -122,6 +110,8 @@ initialize_script() {
     mkdir -p "$REPO_ROOT/ansible/roles"
     mkdir -p "$REPO_ROOT/ansible/group_vars"
     mkdir -p "$REPO_ROOT/ansible/host_vars"
+    mkdir -p "$REPO_ROOT/docker/templates"
+    mkdir -p "$REPO_ROOT/kubernetes/templates"
     
     # Set global paths
     TERRAFORM_DIR="$REPO_ROOT/terraform/templates"
@@ -414,20 +404,8 @@ check_dependencies() {
 # Check if running as root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        echo "=============================================="
-        echo "ERROR: Root privileges required!"
-        echo "=============================================="
-        echo ""
-        echo "This script must be run as root (not with sudo)."
-        echo ""
-        echo "To run as root:"
-        echo "  su - root"
-        echo "  cd $(pwd)"
-        echo "  ./create-template.sh"
-        echo ""
-        echo "Or use sudo with preserved environment:"
-        echo "  sudo -E ./create-template.sh"
-        echo ""
+        echo "ERROR: This script must be run as root!"
+        echo "Run: ./create-template.sh"
         exit 1
     fi
 }
@@ -531,6 +509,10 @@ declare -A DISTRO_LIST=(
     ["gparted-live"]="GParted Live (Latest)|https://downloads.sourceforge.net/gparted/gparted-live-1.6.0-6-amd64.iso|iso|apt|l26|user|1G|Partition/Rescue"
     # ==== CUSTOM ISO/IMAGE (UI/CLI Option) ====
     ["custom-iso"]="Custom ISO/Image|prompt|custom|auto|custom|custom|auto|User-supplied ISO or image"
+    # ==== OTHER DISTRIBUTIONS ====
+    ["voidlinux"]="Void Linux|https://alpha.de.repo.voidlinux.org/live/current/void-x86_64-musl-ROOTFS-20240619.x86_64.xz|tar.xz|xbps|l26|void|4G|Rolling musl-based distro"
+    ["gentoo"]="Gentoo Linux|https://gentoo.osuosl.org/releases/amd64/autobuilds/20240619/stage3-amd64-20240619.tar.xz|tar.xz|emerge|l26|root|8G|Source-based, highly customizable"
+    ["nixos"]="NixOS|https://releases.nixos.org/nixos/23.11/nixos-23.11.2398.4a2b4f0a068/nixos-minimal-23.11.2398.4a2b4f0a068-x86_64-linux.iso|iso|nixpkg|l26|nixos|4G|Declarative package manager and system"
 )
 
 # Distribution categories for organized selection
@@ -991,6 +973,14 @@ create_single_template() {
         collect_ansible_vars_ui
     fi
     
+    # Step 6b: Select Docker/Kubernetes templates (if present)
+    if [[ -d "$REPO_ROOT/docker/templates" ]]; then
+        select_docker_template_ui || log_warn "Docker template selection skipped"
+    fi
+    if [[ -d "$REPO_ROOT/kubernetes/templates" ]]; then
+        select_k8s_template_ui || log_warn "Kubernetes template selection skipped"
+    fi
+    
     # Step 7: Select Terraform modules (if enabled)
     if [[ "$TERRAFORM_ENABLED" == true ]]; then
         select_terraform_modules_ui || return 1
@@ -1380,167 +1370,39 @@ select_terraform_modules_ui() {
     return 0
 }
 
-# UI: Collect Ansible/Terraform variables
-collect_ansible_vars_ui() {
-    ANSIBLE_EXTRA_VARS=()
-    while true; do
-        local var
-        var=$(whiptail --title "Ansible Variable" --inputbox "Enter Ansible variable (key=value), or leave blank to finish:" 10 60 "" 3>&1 1>&2 2>&3)
-        [[ -z "$var" ]] && break
-        ANSIBLE_EXTRA_VARS+=("$var")
-    done
+# === DYNAMIC DISCOVERY FOR DOCKER & KUBERNETES TEMPLATES ===
+# List available Docker templates
+list_docker_templates() {
+    local dir="$REPO_ROOT/docker/templates"
+    if [[ -d "$dir" ]]; then
+        find "$dir" -maxdepth 1 -type f -exec basename {} \; | sort
+    fi
 }
 
-collect_terraform_vars_ui() {
-    TERRAFORM_EXTRA_VARS=()
-    while true; do
-        local var
-        var=$(whiptail --title "Terraform Variable" --inputbox "Enter Terraform variable (key=value), or leave blank to finish:" 10 60 "" 3>&1 1>&2 2>&3)
-        [[ -z "$var" ]] && break
-        TERRAFORM_EXTRA_VARS+=("$var")
-    done
+# List available Kubernetes templates
+list_k8s_templates() {
+    local dir="$REPO_ROOT/kubernetes/templates"
+    if [[ -d "$dir" ]]; then
+        find "$dir" -maxdepth 1 -type f -exec basename {} \; | sort
+    fi
 }
 
-# CLI: Parse Ansible/Terraform playbook/module and variable flags
-# Add to parse_cli_arguments:
-#   --ansible-playbook PB1[,PB2,...]
-#   --terraform-module MOD1[,MOD2,...]
-#   --ansible-var key=value (repeatable)
-#   --terraform-var key=value (repeatable)
-parse_cli_arguments() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help)
-                show_cli_help
-                exit 0
-                ;;
-            -v|--version)
-                echo "$SCRIPT_NAME v$SCRIPT_VERSION"
-                exit 0
-                ;;
-            --list-distributions)
-                list_supported_distributions
-                exit 0
-                ;;
-            --validate-config)
-                VALIDATE_CONFIG=true
-                shift
-                ;;
-            --import-config)
-                CONFIG_FILE="$2"
-                shift 2
-                ;;
-            --export-config)
-                EXPORT_CONFIG_FILE="$2"
-                shift 2
-                ;;
-            --batch)
-                BATCH_MODE=true
-                shift
-                ;;
-            --queue)
-                QUEUE_MODE=true
-                shift
-                ;;
-            --ansible)
-                ANSIBLE_ENABLED=true
-                shift
-                ;;
-            --terraform)
-                TERRAFORM_ENABLED=true
-                shift
-                ;;
-            --distribution|-d)
-                CLI_DISTRIBUTION="$2"
-                shift 2
-                ;;
-            --version)
-                CLI_VERSION="$2"
-                shift 2
-                ;;
-            --name|-n)
-                CLI_TEMPLATE_NAME="$2"
-                shift 2
-                ;;
-            --vmid|-i)
-                CLI_VMID="$2"
-                shift 2
-                ;;
-            --cores|-c)
-                CLI_CORES="$2"
-                shift 2
-                ;;
-            --memory|-m)
-                CLI_MEMORY="$2"
-                shift 2
-                ;;
-            --storage|-s)
-                CLI_STORAGE="$2"
-                shift 2
-                ;;
-            --disk-size)
-                CLI_DISK_SIZE="$2"
-                shift 2
-                ;;
-            --bridge)
-                CLI_BRIDGE="$2"
-                shift 2
-                ;;
-            --vlan)
-                CLI_VLAN="$2"
-                shift 2
-                ;;
-            --ssh-key)
-                CLI_SSH_KEY="$2"
-                shift 2
-                ;;
-            --user)
-                CLI_USER="$2"
-                shift 2
-                ;;
-            --packages)
-                CLI_PACKAGES="$2"
-                shift 2
-                ;;
-            --ansible-playbook)
-                IFS=',' read -ra SELECTED_ANSIBLE_PLAYBOOKS <<< "$2"
-                shift 2
-                ;;
-            --terraform-module)
-                IFS=',' read -ra SELECTED_TERRAFORM_MODULES <<< "$2"
-                shift 2
-                ;;
-            --ansible-var)
-                ANSIBLE_EXTRA_VARS+=("$2")
-                shift 2
-                ;;
-            --terraform-var)
-                TERRAFORM_EXTRA_VARS+=("$2")
-                shift 2
-                ;;
-            --no-interaction)
-                NO_INTERACTION=true
-                shift
-                ;;
-            --dry-run)
-                DRY_RUN=true
-                shift
-                ;;
-            --verbose)
-                VERBOSE=true
-                shift
-                ;;
-            --log-level)
-                LOG_LEVEL="$2"
-                shift 2
-                ;;
-            *)
-                log_error "Unknown option: $1"
-                show_cli_help
-                exit 1
-                ;;
-        esac
+# UI: Select Docker template
+select_docker_template_ui() {
+    local options=()
+    for tpl in $(list_docker_templates); do
+        options+=("$tpl" "" OFF)
     done
+    SELECTED_DOCKER_TEMPLATES=($(whiptail --title "Select Docker Template" --radiolist "Choose a Docker template:" 15 60 5 "${options[@]}" 3>&1 1>&2 2>&3))
+}
+
+# UI: Select Kubernetes template
+select_k8s_template_ui() {
+    local options=()
+    for tpl in $(list_k8s_templates); do
+        options+=("$tpl" "" OFF)
+    done
+    SELECTED_K8S_TEMPLATES=($(whiptail --title "Select Kubernetes Template" --radiolist "Choose a Kubernetes template:" 15 60 5 "${options[@]}" 3>&1 1>&2 2>&3))
 }
 
 # Run CLI mode operations

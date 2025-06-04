@@ -494,25 +494,11 @@ declare -A DISTRO_LIST=(
     # ==== CLOUD-NATIVE ====
     ["flatcar"]="Flatcar Container Linux|https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img.bz2|raw|emerge|l26|core|4G|Cloud-native"
     ["bottlerocket"]="Bottlerocket OS|https://github.com/bottlerocket-os/bottlerocket/releases/download/v1.18.2/bottlerocket-vmware-k8s-1.18.2-x86_64-disk.img|raw|rpm-ostree|l26|ec2-user|4G|AWS K8s OS"
-    # ==== NETWORK/FIREWALL DISTROS ====
-    ["opnsense-latest"]="OPNsense (Latest)|https://mirror.dns-root.de/opnsense/releases/24.1/OPNsense-24.1-OpenSSL-dvd-amd64.iso|iso|-|bsd|root|8G|Firewall/Router"
-    ["pfsense-latest"]="pfSense (Latest)|https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz|iso|-|bsd|root|8G|Firewall/Router"
-    ["vyos-latest"]="VyOS (Latest)|https://github.com/vyos/vyos-rolling-nightly-builds/releases/download/current/vyos-1.4-rolling-202406040317-amd64.iso|iso|apt|l26|vyos|4G|Network OS"
-    ["routeros-latest"]="MikroTik RouterOS (Latest)|https://download.mikrotik.com/routeros/7.14.2/chr-7.14.2.img.zip|raw|-|l26|admin|2G|Router/Firewall"
-    # ==== MINIMAL DISTROS ====
-    ["tinycorelinux"]="TinyCore Linux (Latest)|http://tinycorelinux.net/14.x/x86_64/release/TinyCorePure64-current.iso|iso|tce|l26|tc|1G|Ultra-minimal"
-    ["slitaz"]="SliTaz GNU/Linux (Latest)|http://mirror.slitaz.org/iso/rolling/slitaz-rolling-core64.iso|iso|tazpkg|l26|tux|1G|Minimal/Lightweight"
-    ["puppy-linux"]="Puppy Linux (FossaPup64)|https://distro.ibiblio.org/puppylinux/puppy-fossa/puppy-fossapup64-9.5.iso|iso|pet|l26|root|2G|Minimal/Lightweight"
-    # ==== SPECIALIZED DISTROS ====
-    ["clearlinux"]="Clear Linux OS (Latest)|https://cdn.download.clearlinux.org/releases/41890/clear/clear-41890-cloud.img.xz|raw|swupd|l26|clr|8G|Performance-optimized"
-    ["rescuezilla"]="Rescuezilla (Latest)|https://github.com/rescuezilla/rescuezilla/releases/download/2.5.7/rescuezilla-2.5.7-64bit.iso|iso|apt|l26|user|2G|Rescue/Backup"
-    ["gparted-live"]="GParted Live (Latest)|https://downloads.sourceforge.net/gparted/gparted-live-1.6.0-6-amd64.iso|iso|apt|l26|user|1G|Partition/Rescue"
-    # ==== CUSTOM ISO/IMAGE (UI/CLI Option) ====
-    ["custom-iso"]="Custom ISO/Image|prompt|custom|auto|custom|custom|auto|User-supplied ISO or image"
-    # ==== OTHER DISTRIBUTIONS ====
-    ["voidlinux"]="Void Linux|https://alpha.de.repo.voidlinux.org/live/current/void-x86_64-musl-ROOTFS-20240619.x86_64.xz|tar.xz|xbps|l26|void|4G|Rolling musl-based distro"
-    ["gentoo"]="Gentoo Linux|https://gentoo.osuosl.org/releases/amd64/autobuilds/20240619/stage3-amd64-20240619.tar.xz|tar.xz|emerge|l26|root|8G|Source-based, highly customizable"
-    ["nixos"]="NixOS|https://releases.nixos.org/nixos/23.11/nixos-23.11.2398.4a2b4f0a068/nixos-minimal-23.11.2398.4a2b4f0a068-x86_64-linux.iso|iso|nixpkg|l26|nixos|4G|Declarative package manager and system"
+
+    # ==== NEW DISTRIBUTIONS ====
+    ["amazon-linux-2"]="Amazon Linux 2|https://cdn.amazonlinux.com/2/cloud-images/2.0.20231026.0/amazon-linux-2-x86_64-kvm.qcow2|qcow2|yum|l26|ec2-user|8G|AWS optimized"
+    ["gentoo"]="Gentoo Linux|https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20240603/openrc-stage3-amd64-systemd-20240603T235136Z.tar.xz|raw|emerge|l26|root|10G|Source-based"
+    ["nixos-23.11"]="NixOS 23.11|https://nixos.org/channels/nixos-23.11/nixos-23.11.x86_64-linux.iso|iso|nix|l26|nixos|8G|Declarative Linux"
 )
 
 # Distribution categories for organized selection

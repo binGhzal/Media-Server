@@ -24,3 +24,36 @@
       service:
         name: ssh
         state: restarted
+
+---
+- name: Update all packages to latest version
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update package cache
+      when: ansible_pkg_mgr == 'apt'
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      register: update_cache
+
+    - name: Upgrade all apt packages
+      when: ansible_pkg_mgr == 'apt'
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      notify: report_upgrade
+
+    - name: Upgrade all yum packages
+      when: ansible_pkg_mgr in ['yum','dnf']
+      dnf:
+        name: "*"
+        state: latest
+        autoremove: yes
+      notify: report_upgrade
+
+  handlers:
+    - name: report_upgrade
+      debug:
+        msg: "All packages upgraded successfully"

@@ -160,6 +160,18 @@ else
 fi
 echo ""
 
+# Test new distributions
+echo "Test 11: Testing new distributions..."
+echo "Testing Void Linux distro"
+./create-template.sh --distribution void-linux --dry-run || exit 1
+
+echo "Testing NixOS 24.05 distro"
+./create-template.sh --distribution nixos-24.05 --dry-run || exit 1
+
+echo "Testing Custom ISO option"
+./create-template.sh --distribution custom-iso --iso-url http://example.com/my.iso --iso-type iso --dry-run || exit 1
+echo ""
+
 # Summary
 echo "🎉 ALL TESTS PASSED!"
 echo ""

@@ -494,11 +494,12 @@ declare -A DISTRO_LIST=(
     # ==== CLOUD-NATIVE ====
     ["flatcar"]="Flatcar Container Linux|https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img.bz2|raw|emerge|l26|core|4G|Cloud-native"
     ["bottlerocket"]="Bottlerocket OS|https://github.com/bottlerocket-os/bottlerocket/releases/download/v1.18.2/bottlerocket-vmware-k8s-1.18.2-x86_64-disk.img|raw|rpm-ostree|l26|ec2-user|4G|AWS K8s OS"
-
     # ==== NEW DISTRIBUTIONS ====
-    ["amazon-linux-2"]="Amazon Linux 2|https://cdn.amazonlinux.com/2/cloud-images/2.0.20231026.0/amazon-linux-2-x86_64-kvm.qcow2|qcow2|yum|l26|ec2-user|8G|AWS optimized"
-    ["gentoo"]="Gentoo Linux|https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/20240603/openrc-stage3-amd64-systemd-20240603T235136Z.tar.xz|raw|emerge|l26|root|10G|Source-based"
-    ["nixos-23.11"]="NixOS 23.11|https://nixos.org/channels/nixos-23.11/nixos-23.11.x86_64-linux.iso|iso|nix|l26|nixos|8G|Declarative Linux"
+    ["void-linux"]="Void Linux (Stable)|https://alpha.de.repo.voidlinux.org/live/static/20240202/void-x86_64-musl-musl-ROOTFS-20240202.tar.xz|raw|xbps|l26|root|5G|Minimal rolling"
+    ["nixos-24.05"]="NixOS 24.05|https://channels.nixos.org/nixos-24.05/latest-nixos-24.05.x86_64-linux.iso|iso|nixos|l26|nixos|8G|Declarative single-file ISO"
+    ["gentoo-current"]="Gentoo Current|https://bouncer.gentoo.org/fetch/root/all/releases/amd64/autobuilds/current-stage3-amd64/stage3-amd64-*.tar.xz|tar.xz|emerge|l26|root|10G|Cutting-edge"
+    ["amazonlinux-2"]="Amazon Linux 2|https://cdn.amazonlinux.com/os-images/2.x.x.x/amazon-linux-2-*-cloudimg-x86_64.img|raw|yum|l26|ec2-user|8G|AWS compatible"
+    ["custom-iso"]="Custom ISO/Image|prompt|custom|auto|custom|custom|auto|User-supplied image or ISO"
 )
 
 # Distribution categories for organized selection
@@ -1355,6 +1356,7 @@ select_terraform_modules_ui() {
     done
     return 0
 }
+
 
 # === DYNAMIC DISCOVERY FOR DOCKER & KUBERNETES TEMPLATES ===
 # List available Docker templates

@@ -1,259 +1,139 @@
 # Proxmox Template Creator
 
-A comprehensive bash script for creating VM templates in Proxmox VE with advanced features including support for 25+ Linux distributions, package management, Ansible integration, and Terraform configuration generation.
+A comprehensive bash script for creating VM templates in Proxmox VE with advanced features including support for 50+ Linux distributions and BSDs, 150+ packages in 16 categories, Ansible and Terraform integration, queue/batch processing, and full automation.
 
 ## 🚀 Features
 
 ### Core Functionality
 
-- **25+ Linux Distributions & BSD Support**: Ubuntu, Debian, CentOS, Rocky Linux, AlmaLinux, RHEL, Fedora, openSUSE, Arch Linux, Alpine Linux, FreeBSD, OpenBSD, NetBSD, Oracle Linux, Parrot Security OS, Talos Linux, and more
-- **Comprehensive Package Management**: 80+ pre-defined packages organized in 10 categories
+- **50+ Linux Distributions & BSD Support**: Ubuntu, Debian, CentOS, Rocky, AlmaLinux, RHEL, Fedora, openSUSE, Arch, Alpine, FreeBSD, OpenBSD, NetBSD, Oracle, Parrot, Talos, Flatcar, Bottlerocket, Gentoo, NixOS, and more
+- **Comprehensive Package Management**: 150+ pre-defined packages in 16 categories
 - **Cloud-init Integration**: Automated user creation, SSH key setup, and initial configuration
-- **Advanced Networking**: Bridge configuration, VLAN tagging, and multiple network modes
-- **Hardware Customization**: CPU, memory, disk size, and storage pool configuration
+- **Advanced Networking**: Bridge config, VLAN tagging, static/DHCP/manual
+- **Hardware Customization**: CPU, memory, disk, storage pool, UEFI/BIOS, QEMU agent
+- **Batch/Queue Processing**: Create multiple templates in sequence or from config
+- **Configuration Management**: Export/import template configs, dry-run preview
+- **Robust Logging & Error Handling**: Full logs, recovery, and cleanup
 
 ### Advanced Integrations
 
 - **Ansible Integration**:
-  - Dedicated LXC container for Ansible management
-  - Automatic inventory generation
+  - Dedicated LXC control node
+  - Dynamic inventory generation
   - Pre-built playbooks for system hardening, Docker, and Kubernetes
-  - Seamless template management
+  - Post-creation automation
 - **Terraform Integration**:
-  - Complete Terraform configuration generation
-  - Variables, providers, and main configuration files
-  - Infrastructure-as-code approach
-  - Multi-VM deployment support
+  - Complete configuration generation
+  - Multi-VM support
+  - Network automation
+  - Usage documentation
 
 ### User Experience
 
-- **Interactive GUI**: User-friendly whiptail-based interface
+- **Interactive GUI**: Whiptail-based interface for all options
 - **CLI Mode**: Full command-line support for automation
-- **Batch Processing**: Create multiple templates in queue
-- **Configuration Management**: Export/import template configurations
-- **Comprehensive Help System**: Built-in documentation and distribution information
+- **Comprehensive Help System**: Built-in documentation and distro info
 
 ## 📋 Requirements
 
 - **Proxmox VE**: Version 7.0 or later
-- **Operating System**: Debian-based Proxmox host
+- **OS**: Debian-based Proxmox host
 - **Privileges**: Root or sudo access
-- **Network**: Internet connection for image downloads
-- **Storage**: Sufficient space for template images (varies by distribution)
-- **Dependencies**:
-  - `whiptail` (for interactive mode)
-  - `wget` (for image downloads)
-  - `qm` (Proxmox VE commands)
+- **Network**: Internet for image downloads
+- **Storage**: Sufficient space for images
+- **Dependencies**: whiptail, wget, curl, jq, qm, virt-customize, guestfs-tools
 
-## 🔧 Installation
+## 🗂️ Supported Distributions (Grouped by Family)
 
-1. **Download the script**:
+| Family/Key              | Versions/Variants                                                         | Package Manager    | Notes/Examples                     |
+| ----------------------- | ------------------------------------------------------------------------- | ------------------ | ---------------------------------- |
+| **Ubuntu**              | 20.04, 22.04, 24.04, 24.10, Minimal                                       | apt                | LTS, Minimal                       |
+| **Debian**              | 11, 12, Testing                                                           | apt                | Stable, Rolling                    |
+| **CentOS/RHEL/Clones**  | CentOS 7, 8, Stream 9; RHEL 8, 9; Rocky 8, 9; AlmaLinux 8, 9; Oracle 8, 9 | dnf/yum/apt        | RHEL, Rocky, Alma, Oracle          |
+| **Fedora**              | 38, 39, 40                                                                | dnf                | Stable, Latest                     |
+| **openSUSE**            | Leap 15.4, 15.5, Tumbleweed                                               | zypper             | Stable, Rolling                    |
+| **Arch Linux**          | Latest, ARM                                                               | pacman             | Rolling, ARM                       |
+| **Alpine Linux**        | 3.17, 3.18, 3.19, Edge                                                    | apk                | Minimal, Rolling                   |
+| **BSD**                 | FreeBSD 13, 14; OpenBSD 7.3, 7.4; NetBSD 9, 10                            | pkg/pkg_add        | BSD, Security-focused              |
+| **Security/DevOps**     | Kali Linux, Parrot OS, Talos Linux                                        | apt/-              | Security, Kubernetes OS            |
+| **Cloud-Native**        | Flatcar, Bottlerocket                                                     | emerge/rpm-ostree  | Container/K8s OS                   |
+| **Minimal/Lightweight** | TinyCore, SliTaz, Puppy Linux, Alpine                                     | tce/tazpkg/pet/apk | Ultra-minimal, Lightweight         |
+| **Network/Firewall**    | OPNsense, pfSense, VyOS, RouterOS                                         | -/apt              | Firewall, Router, Network OS       |
+| **Specialized/Rescue**  | Clear Linux, Rescuezilla, GParted Live                                    | swupd/apt          | Performance, Rescue, Partition     |
+| **Void/Gentoo/NixOS**   | Void Linux, Gentoo, NixOS                                                 | xbps/emerge/nix    | Minimal, Source-based, Declarative |
+| **Custom ISO/Image**    | User-supplied ISO/image                                                   | auto               | Any custom distro or version       |
 
-   ```bash
-   wget https://raw.githubusercontent.com/binghzal/homelab/main/proxmox/create-template.sh
-   chmod +x create-template.sh
-   ```
+## 📦 Distro Categories (with Examples)
 
-2. **Install dependencies** (if not already present):
+- **Ubuntu Family**: Ubuntu 20.04, 22.04, 24.04, Minimal
+- **Debian Family**: Debian 11, 12, Testing
+- **Red Hat Enterprise Family**: CentOS, RHEL, Rocky, AlmaLinux, Oracle
+- **Fedora**: Fedora 38, 39, 40
+- **SUSE Family**: openSUSE Leap, Tumbleweed
+- **Arch Linux Family**: Arch Linux, Arch ARM
+- **Security-Focused**: Kali Linux, Parrot OS, OpenBSD
+- **Container-Optimized**: Talos Linux, Flatcar, Bottlerocket
+- **BSD Systems**: FreeBSD, OpenBSD, NetBSD
+- **Minimal/Lightweight**: Alpine, TinyCore, SliTaz, Puppy Linux
+- **Network/Firewall**: OPNsense, pfSense, VyOS, RouterOS
+- **Specialized/Rescue**: Clear Linux, Rescuezilla, GParted Live
+- **Custom ISO/Image**: Any user-supplied ISO or image (see below)
 
-   ```bash
-   apt update
-   apt install whiptail wget curl -y
-   ```
+## 🆕 Custom ISO/Image Support
 
-3. **Run the script**:
-   ```bash
-    ./create-template.sh
-   ```
+You can now select "Custom ISO/Image" in the distribution selection menu (UI or CLI) to use any ISO, QCOW2, RAW, or other supported image. The script will prompt for the URL or local path and image type. This allows you to:
 
-## 📖 Usage
+- Deploy custom or less common distros
+- Use your own pre-built images
+- Test new or experimental OS releases
 
-### Interactive Mode (Default)
+**How to use:**
 
-Run the script without arguments for the full interactive experience:
+- In the UI: Select "Custom ISO/Image" and follow the prompts
+- In CLI: Use `--distribution custom-iso` and provide `--custom-image-url` and `--custom-image-type` as needed
 
-```bash
-./create-template.sh
-```
+## 🚀 Advanced Features (Recap)
 
-#### Main Menu Options:
+- Batch/queue processing for multiple templates
+- Ansible and Terraform integration
+- Full configuration export/import
+- Robust error handling and logging
+- Category-based package selection (150+ packages)
+- Custom ISO/image support for any distro
 
-1. **Select Distribution** - Choose from 25+ supported distributions
-2. **Configure Template** - Set hardware, networking, and cloud-init options
-3. **Select Packages** - Choose from 80+ pre-defined packages in 10 categories
-4. **Configure Integrations** - Enable Ansible and/or Terraform integration
-5. **Template Queue** - Manage multiple template configurations
-6. **Configuration Management** - Export/import configurations
-7. **Create Template** - Start the template creation process
+## 📦 Package Categories (150+ packages in 16 categories)
 
-### Command Line Interface (CLI)
+- **essential**: curl, wget, git, vim, nano, htop, tree, jq, yq, openssh-server, net-tools, rsync, unzip, zip, ca-certificates, gnupg, software-properties-common, apt-transport-https, etc.
+- **development**: build-essential, tmux, screen, zsh, fzf, ripgrep, fd-find, bat, exa, neovim, emacs, code, gh, micro, joe, git-lfs
+- **programming**: python3, python3-pip, python3-venv, nodejs, npm, yarn, golang-go, rustc, cargo, openjdk-11-jdk, openjdk-17-jdk, php, ruby, perl, lua5.3, r-base, etc.
+- **monitoring**: btop, iotop, nethogs, iftop, ncdu, duf, glances, nmon, atop, sysstat, lsof, strace, tcpdump, wireshark, bandwhich, prometheus-node-exporter, collectd
+- **security**: fail2ban, ufw, nmap, nftables, iptables-persistent, wireguard, openvpn, lynis, rkhunter, chkrootkit, clamav, aide, ossec-hids, john, hashcat, nikto, sqlmap, metasploit-framework
+- **webserver**: nginx, apache2, caddy, haproxy, traefik, squid, varnish
+- **database**: mysql-server, postgresql, mariadb-server, redis-server, sqlite3, mongodb-org, influxdb, prometheus, cassandra, elasticsearch
+- **containers**: docker.io, docker-compose, podman, buildah, skopeo, kubectl, helm, k9s, kind, minikube, containerd, runc
+- **infrastructure**: terraform, ansible, packer, vagrant, consul, vault, nomad, jenkins, gitlab-runner, awscli, azure-cli, gcloud, pulumi
+- **backup**: rsnapshot, borgbackup, rclone, restic, duplicity, timeshift, bacula-client, amanda-client, rdiff-backup
+- **sysadmin**: systemd-timesyncd, chrony, cron, anacron, logrotate, rsyslog, auditd, acct, quotatool, etckeeper, debsums, apt-file, deborphan, localepurge
+- **filesystem**: nfs-common, cifs-utils, sshfs, lvm2, cryptsetup, btrfs-progs, zfsutils-linux, xfsprogs, e2fsprogs, ntfs-3g, exfat-utils, dosfstools
+- **recovery**: testdisk, photorec, ddrescue, foremost, sleuthkit, autopsy, volatility, binwalk
+- **mail**: postfix, dovecot-core, exim4, sendmail, msmtp, mutt, alpine, mailutils
+- **multimedia**: ffmpeg, imagemagick, graphicsmagick, gimp, inkscape, blender, vlc, mpv
+- **specialized**: libguestfs-tools, kpartx, qemu-guest-agent, open-vm-tools, cloud-init, cloud-utils, virt-manager, spice-vdagent, xe-guest-utilities
 
-For automation and scripting, use CLI mode:
-
-```bash
-# Basic template creation
-sudo ./create-template.sh -d ubuntu -v 22.04 -n ubuntu-22.04-template -i 9000
-
-# Advanced configuration
-sudo ./create-template.sh \
-  --distribution ubuntu \
-  --version 22.04 \
-  --name "Ubuntu 22.04 Server" \
-  --vmid 9001 \
-  --cores 4 \
-  --memory 4096 \
-  --disk-size 40G \
-  --storage local-lvm \
-  --bridge vmbr0 \
-  --vlan 100 \
-  --user admin \
-  --ssh-key /root/.ssh/id_rsa.pub \
-  --packages "docker.io,kubectl,ansible" \
-  --ansible \
-  --terraform \
-  --batch
-```
-
-#### CLI Options:
-
-- `-h, --help` - Show help information
-- `-d, --distribution` - Distribution name (ubuntu, debian, centos, etc.)
-- `-v, --version` - Distribution version
-- `-n, --name` - Template name
-- `-i, --vmid` - VM ID (100-999999999)
-- `-c, --cores` - Number of CPU cores
-- `-m, --memory` - Memory in MB
-- `-s, --storage` - Storage pool name
-- `--disk-size` - Disk size (e.g., 20G, 50G)
-- `--bridge` - Network bridge (default: vmbr0)
-- `--vlan` - VLAN tag
-- `--ssh-key` - Path to SSH public key file
-- `--user` - Cloud-init username
-- `--packages` - Comma-separated package list
-- `--ansible` - Enable Ansible integration
-- `--terraform` - Enable Terraform integration
-- `--batch` - Non-interactive batch mode
-- `--import-config` - Import configuration file
-- `--export-config` - Export current configuration
-- `--list-distributions` - List all supported distributions
-- `--validate-config` - Validate current configuration
-
-### Batch Mode Examples
-
-```bash
-# Create multiple templates from configuration files
-sudo ./create-template.sh --import-config ubuntu-templates.conf --batch
-
-# List supported distributions
-./create-template.sh --list-distributions
-
-# Validate configuration before creation
-sudo ./create-template.sh -d debian -v 12 -i 9002 --validate-config
-```
-
-## 🗂️ Supported Distributions
-
-### Linux Distributions
-
-| Distribution       | Versions                     | Package Manager | Notes                 |
-| ------------------ | ---------------------------- | --------------- | --------------------- |
-| Ubuntu             | 20.04, 22.04, 24.04          | APT             | LTS releases          |
-| Debian             | 11 (Bullseye), 12 (Bookworm) | APT             | Stable releases       |
-| CentOS             | 7, 8, 9                      | YUM/DNF         | Stream versions       |
-| Rocky Linux        | 8, 9                         | DNF             | RHEL rebuild          |
-| AlmaLinux          | 8, 9                         | DNF             | RHEL rebuild          |
-| RHEL               | 8, 9                         | DNF             | Subscription required |
-| Fedora             | 38, 39, 40                   | DNF             | Latest releases       |
-| openSUSE           | Leap 15.4, 15.5, Tumbleweed  | Zypper          | Stable & rolling      |
-| Arch Linux         | Latest                       | Pacman          | Rolling release       |
-| Alpine Linux       | 3.17, 3.18, 3.19             | APK             | Minimal & secure      |
-| Oracle Linux       | 8, 9                         | DNF             | Enterprise-focused    |
-| Parrot Security OS | Latest                       | APT             | Security-focused      |
-| Talos Linux        | Latest                       | -               | Kubernetes-focused    |
-
-### BSD Variants
-
-| Distribution | Versions | Package Manager | Notes            |
-| ------------ | -------- | --------------- | ---------------- |
-| FreeBSD      | 13, 14   | pkg             | General purpose  |
-| OpenBSD      | 7.3, 7.4 | pkg_add         | Security-focused |
-| NetBSD       | 9, 10    | pkg_add         | Portable         |
-
-## 📦 Package Categories
-
-The script provides 80+ pre-defined packages organized into 10 categories:
-
-### 1. Essential System Tools
-
-- Basic utilities: `curl`, `wget`, `git`, `vim`, `nano`
-- System monitoring: `htop`, `tmux`, `screen`
-- File management: `rsync`, `unzip`, `zip`, `tree`
-- JSON/YAML tools: `jq`, `yq`
-
-### 2. Development Tools
-
-- Runtime environments: `nodejs`, `python3`, `golang`, `openjdk-11-jdk`
-- Build tools: `maven`, `gradle`, `make`, `gcc`
-- DevOps tools: `docker-compose`, `kubectl`, `helm`
-- Infrastructure tools: `terraform`, `ansible`, `packer`, `vagrant`
-
-### 3. Network & Security
-
-- Network services: `openssh-server`, `nginx-extras`
-- Security tools: `ufw`, `fail2ban`, `nmap`, `wireshark-common`
-- VPN tools: `wireguard`, `openvpn`
-- SSL/TLS: `openssl`, `certbot`
-
-### 4. Monitoring & Performance
-
-- System monitoring: `prometheus`, `node-exporter`, `grafana-agent`
-- Performance analysis: `htop`, `iotop`, `nethogs`, `iftop`
-- System statistics: `sysstat`, `dstat`, `glances`, `atop`
-
-### 5. Container & Virtualization
-
-- Container runtimes: `docker.io`, `containerd`, `podman`
-- Container tools: `buildah`, `skopeo`
-- VM tools: `qemu-guest-agent`, `cloud-init`, `cloud-utils`
-
-### 6. Web & Database Servers
-
-- Web servers: `nginx`, `apache2`
-- Databases: `mysql-server`, `postgresql`, `redis-server`, `mongodb`
-- Application servers: `php-fpm`, `nodejs`
-- Search & analytics: `elasticsearch`, `logstash`, `kibana`
-
-### 7. File & Storage Management
-
-- Network filesystems: `nfs-common`, `cifs-utils`, `samba`
-- File transfer: `ftp`, `vsftpd`, `rclone`
-- Backup tools: `duplicity`, `borgbackup`, `restic`
-- Cloud storage: `s3fs-fuse`
-
-### 8. Text Editors & IDEs
-
-- Console editors: `vim`, `neovim`, `emacs`, `nano`, `micro`, `joe`
-- GUI editors: `code`, `sublime-text-installer`, `atom`, `gedit`
-
-### 9. Backup & Synchronization
-
-- Backup tools: `rsync`, `rdiff-backup`, `duplicity`, `borgbackup`, `restic`
-- Sync tools: `rclone`, `syncthing`, `nextcloud-client`
-
-### 10. Desktop Environment (GUI)
-
-- Desktop environments: `ubuntu-desktop-minimal`, `xfce4`, `lxde`
-- Window managers: `kde-plasma-desktop`, `gnome-core`, `mate-desktop`
-- Lightweight options: `cinnamon-desktop-environment`
-
-## 🔗 Ansible Integration
+## 🔗 Ansible & 🏗️ Terraform Integration
 
 ### Features
 
-- **Dedicated LXC Container**: Creates a separate Ansible control node
-- **Inventory Management**: Automatic Proxmox inventory generation
-- **Pre-built Playbooks**: System hardening, Docker setup, Kubernetes preparation
-- **Template Management**: Easy deployment and configuration of created templates
+- **Ansible Integration**:
+  - Dedicated LXC control node
+  - Dynamic inventory generation
+  - Pre-built playbooks for system hardening, Docker, and Kubernetes
+  - Post-creation automation
+- **Terraform Integration**:
+  - Complete configuration generation
+  - Multi-VM support
+  - Network automation
+  - Usage documentation
 
 ### Setup Process
 
@@ -279,44 +159,40 @@ ansible-playbook -i /opt/ansible/inventory/proxmox.yml /opt/ansible/playbooks/sy
 ansible-playbook -i /opt/ansible/inventory/proxmox.yml /opt/ansible/playbooks/install-docker.yml --limit template-group
 ```
 
-## 🏗️ Terraform Integration
+## 🔄 Template Queue (Batch Processing)
 
-### Features
+Create multiple templates in sequence:
 
-- **Complete Configuration Generation**: Variables, providers, main config, outputs
-- **Multi-VM Support**: Deploy multiple VMs from single template
-- **Network Configuration**: Automatic network and IP management
-- **Documentation**: Generated README with usage instructions
+### Interactive Queue Management
 
-### Generated Structure
+1. Configure first template
+2. Add to queue
+3. Configure additional templates
+4. Review queue
+5. Create all templates
 
-```
-terraform-proxmox/
-├── variables.tf          # Input variables
-├── providers.tf          # Terraform providers
-├── main.tf               # Main configuration
-├── outputs.tf            # Output values
-└── README.md             # Usage documentation
-```
-
-### Example Usage
+### CLI Batch Processing
 
 ```bash
-cd terraform-proxmox
-terraform init
-terraform plan
-terraform apply
+# Import queue configuration and process
+./create-template.sh --import-config template-queue.conf --batch
 ```
 
-### Generated Variables
+### Queue Configuration Example
 
-- `vm_count` - Number of VMs to create
-- `vm_name_prefix` - VM name prefix
-- `template_id` - Source template ID
-- `cpu_cores` - CPU configuration
-- `memory_mb` - Memory configuration
-- `disk_size` - Disk size
-- `network_bridge` - Network configuration
+```ini
+[TEMPLATE_1]
+DIST_NAME="ubuntu"
+DIST_VERSION="22.04"
+TEMPL_NAME_DEFAULT="ubuntu-22.04"
+VMID_DEFAULT="9000"
+
+[TEMPLATE_2]
+DIST_NAME="debian"
+DIST_VERSION="12"
+TEMPL_NAME_DEFAULT="debian-12"
+VMID_DEFAULT="9001"
+```
 
 ## 💾 Configuration Management
 
@@ -370,41 +246,6 @@ ANSIBLE_ENABLED="true"
 
 [TERRAFORM]
 TERRAFORM_ENABLED="true"
-```
-
-## 🔄 Template Queue (Batch Processing)
-
-Create multiple templates in sequence:
-
-### Interactive Queue Management
-
-1. Configure first template
-2. Add to queue
-3. Configure additional templates
-4. Review queue
-5. Create all templates
-
-### CLI Batch Processing
-
-```bash
-# Import queue configuration and process
-./create-template.sh --import-config template-queue.conf --batch
-```
-
-### Queue Configuration Example
-
-```ini
-[TEMPLATE_1]
-DIST_NAME="ubuntu"
-DIST_VERSION="22.04"
-TEMPL_NAME_DEFAULT="ubuntu-22.04"
-VMID_DEFAULT="9000"
-
-[TEMPLATE_2]
-DIST_NAME="debian"
-DIST_VERSION="12"
-TEMPL_NAME_DEFAULT="debian-12"
-VMID_DEFAULT="9001"
 ```
 
 ## 🛠️ Troubleshooting
@@ -601,8 +442,8 @@ This script is released under the MIT License. See LICENSE file for details.
 
 ### Version 2.0.0 (Current)
 
-- Added support for 25+ distributions
-- Implemented 80+ package categories
+- Added support for 50+ distributions
+- Implemented 150+ package categories
 - Added Ansible integration
 - Added Terraform integration
 - Implemented batch processing
@@ -618,4 +459,8 @@ This script is released under the MIT License. See LICENSE file for details.
 
 ---
 
-**Note**: This script is designed for Proxmox VE environments. Ensure you have proper backups and test in a non-production environment before using in production.
+**Note**: This script is designed for Proxmox VE environments. Test in non-production before use in production.
+
+```bash
+# Example code block with language specified
+```

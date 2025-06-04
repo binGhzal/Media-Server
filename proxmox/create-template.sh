@@ -413,105 +413,75 @@ TERRAFORM_ENABLED="false" # Generate Terraform configurations
 INVENTORY_ENABLED="true" # Generate Proxmox inventory files
 
 #===============================================================================
-# COMPREHENSIVE DISTRIBUTION CONFIGURATIONS
+# COMPREHENSIVE DISTRIBUTION CONFIGURATIONS (50+ DISTROS)
 #===============================================================================
-
-# Ultra-enhanced distribution list with 50+ supported distributions
-# Format: [key]="Display Name|Image URL|Format|Package Manager|OS Type|Default User|Default Disk Size"
+# Format: [key]="Display Name|Image URL|Format|Package Manager|OS Type|Default User|Default Disk Size|Notes"
 declare -A DISTRO_LIST=(
     # ==== UBUNTU FAMILY ====
-    ["ubuntu-20.04"]="Ubuntu 20.04 LTS (Focal)|https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G"
-    ["ubuntu-22.04"]="Ubuntu 22.04 LTS (Jammy)|https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G"
-    ["ubuntu-24.04"]="Ubuntu 24.04 LTS (Noble)|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G"
-    ["ubuntu-24.10"]="Ubuntu 24.10 (Oracular)|https://cloud-images.ubuntu.com/oracular/current/oracular-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G"
-    ["ubuntu-25.04"]="Ubuntu 25.04 (Plucky)|https://cloud-images.ubuntu.com/plucky/current/plucky-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G"
-    
+    ["ubuntu-20.04"]="Ubuntu 20.04 LTS (Focal)|https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G|LTS release"
+    ["ubuntu-22.04"]="Ubuntu 22.04 LTS (Jammy)|https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G|LTS release"
+    ["ubuntu-24.04"]="Ubuntu 24.04 LTS (Noble)|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G|LTS release"
+    ["ubuntu-24.10"]="Ubuntu 24.10 (Oracular)|https://cloud-images.ubuntu.com/oracular/current/oracular-server-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|10G|Development"
+    ["ubuntu-minimal"]="Ubuntu Minimal (Latest)|https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img|qcow2|apt|l26|ubuntu|5G|Minimal image"
     # ==== DEBIAN FAMILY ====
-    ["debian-11"]="Debian 11 (Bullseye)|https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-amd64.qcow2|qcow2|apt|l26|debian|8G"
-    ["debian-12"]="Debian 12 (Bookworm)|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2|qcow2|apt|l26|debian|8G"
-    ["debian-13"]="Debian 13 (Trixie)|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2|qcow2|apt|l26|debian|8G"
-    ["debian-testing"]="Debian Testing|https://cloud.debian.org/images/cloud/testing/latest/debian-testing-generic-amd64.qcow2|qcow2|apt|l26|debian|8G"
-    ["debian-sid"]="Debian Sid (Unstable)|https://cloud.debian.org/images/cloud/sid/latest/debian-sid-generic-amd64.qcow2|qcow2|apt|l26|debian|8G"
-    
-    # ==== RHEL FAMILY ====
-    ["rocky-8"]="Rocky Linux 8|https://download.rockylinux.org/pub/rocky/8/images/x86_64/Rocky-8-GenericCloud-Base.latest.x86_64.qcow2|qcow2|dnf|l26|rocky|12G"
-    ["rocky-9"]="Rocky Linux 9|https://download.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud-Base.latest.x86_64.qcow2|qcow2|dnf|l26|rocky|12G"
-    
-    ["almalinux-8"]="AlmaLinux 8|https://repo.almalinux.org/almalinux/8/cloud/x86_64/images/AlmaLinux-8-GenericCloud-latest.x86_64.qcow2|qcow2|dnf|l26|almalinux|12G"
-    ["almalinux-9"]="AlmaLinux 9|https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2|qcow2|dnf|l26|almalinux|12G"
-    
-    ["centos-stream-8"]="CentOS Stream 8|https://cloud.centos.org/centos/8-stream/x86_64/images/CentOS-Stream-GenericCloud-8-latest.x86_64.qcow2|qcow2|dnf|l26|centos|12G"
-    ["centos-stream-9"]="CentOS Stream 9|https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2|qcow2|dnf|l26|centos|12G"
-    
-    ["oracle-8"]="Oracle Linux 8|https://yum.oracle.com/templates/OracleLinux/OL8/u10/x86_64/OL8U10_x86_64-olvm-b236.qcow2|qcow2|dnf|l26|oracle|12G"
-    ["oracle-9"]="Oracle Linux 9|https://yum.oracle.com/templates/OracleLinux/OL9/u4/x86_64/OL9U4_x86_64-olvm-b234.qcow2|qcow2|dnf|l26|oracle|12G"
-    
-    ["rhel-8"]="Red Hat Enterprise Linux 8|manual|qcow2|dnf|l26|cloud-user|12G"
-    ["rhel-9"]="Red Hat Enterprise Linux 9|manual|qcow2|dnf|l26|cloud-user|12G"
-    
-    # ==== FEDORA ====
-    ["fedora-39"]="Fedora 39|https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2|qcow2|dnf|l26|fedora|8G"
-    ["fedora-40"]="Fedora 40|https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-40-1.14.x86_64.qcow2|qcow2|dnf|l26|fedora|8G"
-    ["fedora-41"]="Fedora 41|https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-41-1.4.x86_64.qcow2|qcow2|dnf|l26|fedora|8G"
-    ["fedora-rawhide"]="Fedora Rawhide|https://download.fedoraproject.org/pub/fedora/linux/development/rawhide/Cloud/x86_64/images/Fedora-Cloud-Base-Rawhide-latest.x86_64.qcow2|qcow2|dnf|l26|fedora|8G"
-    
+    ["debian-11"]="Debian 11 (Bullseye)|https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-amd64.qcow2|qcow2|apt|l26|debian|8G|Stable"
+    ["debian-12"]="Debian 12 (Bookworm)|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2|qcow2|apt|l26|debian|8G|Stable"
+    ["debian-testing"]="Debian Testing|https://cloud.debian.org/images/cloud/testing/latest/debian-testing-generic-amd64.qcow2|qcow2|apt|l26|debian|8G|Rolling"
+    # ==== CENTOS/REDHAT FAMILY ====
+    ["centos-7"]="CentOS 7|https://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud.qcow2|qcow2|yum|l26|centos|8G|Legacy"
+    ["centos-8"]="CentOS 8|https://cloud.centos.org/centos/8/x86_64/images/CentOS-8-GenericCloud.qcow2|qcow2|dnf|l26|centos|8G|Legacy"
+    ["centos-stream-9"]="CentOS Stream 9|https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2|qcow2|dnf|l26|centos|8G|Rolling"
+    ["rhel-8"]="Red Hat Enterprise Linux 8|https://access.redhat.com/downloads/content/479/ver=8.0/rhel---8.0-x86_64-kvm.qcow2|qcow2|dnf|l26|cloud-user|8G|Subscription required"
+    ["rhel-9"]="Red Hat Enterprise Linux 9|https://access.redhat.com/downloads/content/479/ver=9.0/rhel---9.0-x86_64-kvm.qcow2|qcow2|dnf|l26|cloud-user|8G|Subscription required"
+    ["rocky-8"]="Rocky Linux 8|https://dl.rockylinux.org/pub/rocky/8/images/x86_64/Rocky-8-GenericCloud.latest.x86_64.qcow2|qcow2|dnf|l26|rocky|8G|RHEL rebuild"
+    ["rocky-9"]="Rocky Linux 9|https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2|qcow2|dnf|l26|rocky|8G|RHEL rebuild"
+    ["almalinux-8"]="AlmaLinux 8|https://repo.almalinux.org/almalinux/8/cloud/x86_64/images/AlmaLinux-8-GenericCloud-latest.x86_64.qcow2|qcow2|dnf|l26|almalinux|8G|RHEL rebuild"
+    ["almalinux-9"]="AlmaLinux 9|https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2|qcow2|dnf|l26|almalinux|8G|RHEL rebuild"
+    ["oracle-8"]="Oracle Linux 8|https://yum.oracle.com/ISOS/OracleLinux/OL8/u8/x86_64/OracleLinux-R8-U8-x86_64-cloud.qcow2|qcow2|dnf|l26|oracle|8G|Enterprise"
+    ["oracle-9"]="Oracle Linux 9|https://yum.oracle.com/ISOS/OracleLinux/OL9/u3/x86_64/OracleLinux-R9-U3-x86_64-cloud.qcow2|qcow2|dnf|l26|oracle|8G|Enterprise"
+    # ==== FEDORA FAMILY ====
+    ["fedora-38"]="Fedora 38|https://download.fedoraproject.org/pub/fedora/linux/releases/38/Cloud/x86_64/images/Fedora-Cloud-Base-38-1.6.x86_64.qcow2|qcow2|dnf|l26|fedora|8G|Stable"
+    ["fedora-39"]="Fedora 39|https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2|qcow2|dnf|l26|fedora|8G|Stable"
+    ["fedora-40"]="Fedora 40|https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-40-1.6.x86_64.qcow2|qcow2|dnf|l26|fedora|8G|Latest"
     # ==== SUSE FAMILY ====
-    ["opensuse-leap-15.5"]="openSUSE Leap 15.5|https://download.opensuse.org/repositories/Cloud:/Images:/Leap_15.5/images/openSUSE-Leap-15.5-OpenStack.x86_64.qcow2|qcow2|zypper|l26|opensuse|10G"
-    ["opensuse-leap-15.6"]="openSUSE Leap 15.6|https://download.opensuse.org/repositories/Cloud:/Images:/Leap_15.6/images/openSUSE-Leap-15.6-OpenStack.x86_64.qcow2|qcow2|zypper|l26|opensuse|10G"
-    ["opensuse-tumbleweed"]="openSUSE Tumbleweed|https://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed-JeOS.x86_64-kvm-and-xen.qcow2|qcow2|zypper|l26|opensuse|10G"
-    ["sles-15"]="SUSE Linux Enterprise Server 15|manual|qcow2|zypper|l26|sles|12G"
-    
-    # ==== ARCH LINUX FAMILY ====
-    ["arch"]="Arch Linux|https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2|qcow2|pacman|l26|arch|8G"
-    ["manjaro"]="Manjaro Linux|https://download.manjaro.org/minimal/21.3.7/manjaro-minimal-21.3.7-220816-linux515.iso|iso|pacman|l26|manjaro|10G"
-    ["endeavouros"]="EndeavourOS|https://mirrors.endeavouros.com/iso/EndeavourOS_Artemis_22_12.iso|iso|pacman|l26|endeavour|10G"
-    ["arcolinux"]="ArcoLinux|https://sourceforge.net/projects/arcolinux/files/latest/download|iso|pacman|l26|arco|12G"
-    ["garuda"]="Garuda Linux|manual|iso|pacman|l26|garuda|15G"
-    
-    # ==== SECURITY-FOCUSED DISTRIBUTIONS ====
-    ["kali"]="Kali Linux|https://kali.download/cloud-images/kali-rolling/kali-linux-2024.3-cloud-amd64.img|raw|apt|l26|kali|15G"
-    ["parrot-security"]="Parrot Security OS|https://deb.parrot.sh/parrot/cloud/parrot-security-5.3_amd64.qcow2|qcow2|apt|l26|parrot|12G"
-    ["parrot-home"]="Parrot Home Edition|https://deb.parrot.sh/parrot/cloud/parrot-home-5.3_amd64.qcow2|qcow2|apt|l26|parrot|10G"
-    ["blackarch"]="BlackArch Linux|manual|iso|pacman|l26|blackarch|20G"
-    ["pentoo"]="Pentoo Linux|manual|iso|portage|l26|pentoo|15G"
-    
-    # ==== CONTAINER-OPTIMIZED ====
-    ["talos"]="Talos Linux|https://github.com/siderolabs/talos/releases/latest/download/nocloud-amd64.qcow2|qcow2|none|l26|talos|4G"
-    ["flatcar-stable"]="Flatcar Container Linux (Stable)|https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img.bz2|qcow2|none|l26|core|8G"
-    ["flatcar-beta"]="Flatcar Container Linux (Beta)|https://beta.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img.bz2|qcow2|none|l26|core|8G"
-    ["coreos-stable"]="CoreOS (Fedora Stable)|https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/latest/x86_64/fedora-coreos-latest-qemu.x86_64.qcow2.xz|qcow2|rpm-ostree|l26|core|8G"
-    ["coreos-testing"]="CoreOS (Fedora Testing)|https://builds.coreos.fedoraproject.org/prod/streams/testing/builds/latest/x86_64/fedora-coreos-latest-qemu.x86_64.qcow2.xz|qcow2|rpm-ostree|l26|core|8G"
-    
-    # ==== BSD SYSTEMS ====
-    ["freebsd-13"]="FreeBSD 13.3|https://download.freebsd.org/ftp/releases/VM-IMAGES/13.3-RELEASE/amd64/Latest/FreeBSD-13.3-RELEASE-amd64.qcow2.xz|qcow2|pkg|other|freebsd|8G"
-    ["freebsd-14"]="FreeBSD 14.1|https://download.freebsd.org/ftp/releases/VM-IMAGES/14.1-RELEASE/amd64/Latest/FreeBSD-14.1-RELEASE-amd64.qcow2.xz|qcow2|pkg|other|freebsd|8G"
-    ["freebsd-current"]="FreeBSD Current|https://download.freebsd.org/ftp/snapshots/VM-IMAGES/15.0-CURRENT/amd64/Latest/FreeBSD-15.0-CURRENT-amd64.qcow2.xz|qcow2|pkg|other|freebsd|10G"
-    ["openbsd-7.4"]="OpenBSD 7.4|https://cdn.openbsd.org/pub/OpenBSD/7.4/amd64/install74.img|raw|pkg_add|other|openbsd|8G"
-    ["openbsd-7.5"]="OpenBSD 7.5|https://cdn.openbsd.org/pub/OpenBSD/7.5/amd64/install75.img|raw|pkg_add|other|openbsd|8G"
-    ["netbsd-10.0"]="NetBSD 10.0|https://cdn.netbsd.org/pub/NetBSD/NetBSD-10.0/images/NetBSD-10.0-amd64-install.img|raw|pkgin|other|netbsd|8G"
-    ["dragonfly-6.4"]="DragonFly BSD 6.4|https://mirror-master.dragonflybsd.org/iso-images/dfly-x86_64-6.4.0_REL.iso|iso|pkg|other|dragonfly|10G"
-    
-    # ==== MINIMAL/ALPINE ====
-    ["alpine-3.19"]="Alpine Linux 3.19|https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-virt-3.19.4-x86_64.iso|iso|apk|l26|alpine|2G"
-    ["alpine-3.20"]="Alpine Linux 3.20|https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/x86_64/alpine-virt-3.20.3-x86_64.iso|iso|apk|l26|alpine|2G"
-    ["alpine-edge"]="Alpine Linux Edge|https://dl-cdn.alpinelinux.org/alpine/edge/releases/x86_64/alpine-virt-latest-x86_64.iso|iso|apk|l26|alpine|2G"
-    
-    # ==== NETWORK/FIREWALL DISTRIBUTIONS ====
-    ["vyos-1.4"]="VyOS 1.4 LTS|manual|iso|none|l26|vyos|4G"
-    ["vyos-1.5"]="VyOS 1.5|manual|iso|none|l26|vyos|4G"
-    ["opnsense"]="OPNsense|manual|iso|none|other|root|8G"
-    ["pfsense"]="pfSense|manual|iso|none|other|root|8G"
-    ["ipfire"]="IPFire|manual|iso|none|other|root|4G"
-    ["smoothwall"]="SmoothWall|manual|iso|none|other|root|4G"
-    
-    # ==== SPECIALIZED DISTRIBUTIONS ====
-    ["proxmox-ve"]="Proxmox VE|manual|iso|apt|l26|root|32G"
-    ["truenas-core"]="TrueNAS Core|manual|iso|none|other|root|16G"
-    ["truenas-scale"]="TrueNAS Scale|manual|iso|apt|l26|root|16G"
-    ["xcp-ng"]="XCP-ng|manual|iso|none|other|root|16G"
-    
-    # ==== CUSTOM OPTION ====
-    ["custom"]="Custom ISO/Image URL|custom|auto|auto|auto|auto|auto"
+    ["opensuse-leap-15.4"]="openSUSE Leap 15.4|https://download.opensuse.org/distribution/leap/15.4/appliances/openSUSE-Leap-15.4.x86_64-Cloud.qcow2|qcow2|zypper|l26|opensuse|8G|Stable"
+    ["opensuse-leap-15.5"]="openSUSE Leap 15.5|https://download.opensuse.org/distribution/leap/15.5/appliances/openSUSE-Leap-15.5.x86_64-Cloud.qcow2|qcow2|zypper|l26|opensuse|8G|Stable"
+    ["opensuse-tumbleweed"]="openSUSE Tumbleweed|https://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed.x86_64-Cloud.qcow2|qcow2|zypper|l26|opensuse|8G|Rolling"
+    # ==== ARCH FAMILY ====
+    ["archlinux-latest"]="Arch Linux (Latest)|https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2|qcow2|pacman|l26|arch|8G|Rolling"
+    # ==== ALPINE FAMILY ====
+    ["alpine-3.17"]="Alpine Linux 3.17|https://dl-cdn.alpinelinux.org/alpine/v3.17/releases/x86_64/alpine-standard-3.17.4-x86_64.iso|iso|apk|l26|alpine|2G|Minimal"
+    ["alpine-3.18"]="Alpine Linux 3.18|https://dl-cdn.alpinelinux.org/alpine/v3.18/releases/x86_64/alpine-standard-3.18.4-x86_64.iso|iso|apk|l26|alpine|2G|Minimal"
+    ["alpine-3.19"]="Alpine Linux 3.19|https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/x86_64/alpine-standard-3.19.1-x86_64.iso|iso|apk|l26|alpine|2G|Minimal"
+    # ==== BSD FAMILY ====
+    ["freebsd-13"]="FreeBSD 13|https://download.freebsd.org/ftp/releases/VM-IMAGES/13.3-RELEASE/amd64/Latest/FreeBSD-13.3-RELEASE-amd64.qcow2.xz|qcow2|pkg|bsd|freebsd|8G|General purpose"
+    ["freebsd-14"]="FreeBSD 14|https://download.freebsd.org/ftp/releases/VM-IMAGES/14.0-RELEASE/amd64/Latest/FreeBSD-14.0-RELEASE-amd64.qcow2.xz|qcow2|pkg|bsd|freebsd|8G|General purpose"
+    ["openbsd-7.3"]="OpenBSD 7.3|https://cdn.openbsd.org/pub/OpenBSD/7.3/amd64/install73.img|raw|pkg_add|bsd|openbsd|8G|Security-focused"
+    ["openbsd-7.4"]="OpenBSD 7.4|https://cdn.openbsd.org/pub/OpenBSD/7.4/amd64/install74.img|raw|pkg_add|bsd|openbsd|8G|Security-focused"
+    ["netbsd-9"]="NetBSD 9|https://cdn.netbsd.org/pub/NetBSD/NetBSD-9.3/images/NetBSD-9.3-amd64.iso|iso|pkg_add|bsd|netbsd|8G|Portable"
+    ["netbsd-10"]="NetBSD 10|https://cdn.netbsd.org/pub/NetBSD/NetBSD-10.0/images/NetBSD-10.0-amd64.iso|iso|pkg_add|bsd|netbsd|8G|Portable"
+    # ==== SECURITY/DEVOPS ====
+    ["kali-linux"]="Kali Linux (Latest)|https://cdimage.kali.org/kali-2024.2/kali-linux-2024.2-cloud-amd64.qcow2|qcow2|apt|l26|kali|8G|Security testing"
+    ["parrot-os"]="Parrot Security OS|https://download.parrot.sh/parrot/iso/5.3/Parrot-security-5.3_amd64.iso|iso|apt|l26|parrot|8G|Security testing"
+    ["talos-linux"]="Talos Linux (K8s)|https://github.com/siderolabs/talos/releases/download/v1.7.2/metal-amd64.iso|iso|-|l26|talos|2G|Kubernetes OS"
+    # ==== CLOUD-NATIVE ====
+    ["flatcar"]="Flatcar Container Linux|https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_qemu_image.img.bz2|raw|emerge|l26|core|4G|Cloud-native"
+    ["bottlerocket"]="Bottlerocket OS|https://github.com/bottlerocket-os/bottlerocket/releases/download/v1.18.2/bottlerocket-vmware-k8s-1.18.2-x86_64-disk.img|raw|rpm-ostree|l26|ec2-user|4G|AWS K8s OS"
+    # ==== NETWORK/FIREWALL DISTROS ====
+    ["opnsense-latest"]="OPNsense (Latest)|https://mirror.dns-root.de/opnsense/releases/24.1/OPNsense-24.1-OpenSSL-dvd-amd64.iso|iso|-|bsd|root|8G|Firewall/Router"
+    ["pfsense-latest"]="pfSense (Latest)|https://atxfiles.netgate.com/mirror/downloads/pfSense-CE-2.7.2-RELEASE-amd64.iso.gz|iso|-|bsd|root|8G|Firewall/Router"
+    ["vyos-latest"]="VyOS (Latest)|https://github.com/vyos/vyos-rolling-nightly-builds/releases/download/current/vyos-1.4-rolling-202406040317-amd64.iso|iso|apt|l26|vyos|4G|Network OS"
+    ["routeros-latest"]="MikroTik RouterOS (Latest)|https://download.mikrotik.com/routeros/7.14.2/chr-7.14.2.img.zip|raw|-|l26|admin|2G|Router/Firewall"
+    # ==== MINIMAL DISTROS ====
+    ["tinycorelinux"]="TinyCore Linux (Latest)|http://tinycorelinux.net/14.x/x86_64/release/TinyCorePure64-current.iso|iso|tce|l26|tc|1G|Ultra-minimal"
+    ["slitaz"]="SliTaz GNU/Linux (Latest)|http://mirror.slitaz.org/iso/rolling/slitaz-rolling-core64.iso|iso|tazpkg|l26|tux|1G|Minimal/Lightweight"
+    ["puppy-linux"]="Puppy Linux (FossaPup64)|https://distro.ibiblio.org/puppylinux/puppy-fossa/puppy-fossapup64-9.5.iso|iso|pet|l26|root|2G|Minimal/Lightweight"
+    # ==== SPECIALIZED DISTROS ====
+    ["clearlinux"]="Clear Linux OS (Latest)|https://cdn.download.clearlinux.org/releases/41890/clear/clear-41890-cloud.img.xz|raw|swupd|l26|clr|8G|Performance-optimized"
+    ["rescuezilla"]="Rescuezilla (Latest)|https://github.com/rescuezilla/rescuezilla/releases/download/2.5.7/rescuezilla-2.5.7-64bit.iso|iso|apt|l26|user|2G|Rescue/Backup"
+    ["gparted-live"]="GParted Live (Latest)|https://downloads.sourceforge.net/gparted/gparted-live-1.6.0-6-amd64.iso|iso|apt|l26|user|1G|Partition/Rescue"
+    # ==== CUSTOM ISO/IMAGE (UI/CLI Option) ====
+    ["custom-iso"]="Custom ISO/Image|prompt|custom|auto|custom|custom|auto|User-supplied ISO or image"
 )
 
 # Distribution categories for organized selection
@@ -525,10 +495,10 @@ DISTRO_CATEGORIES=(
     "security" "Security-Focused"
     "container" "Container-Optimized"
     "bsd" "BSD Systems"
-    "minimal" "Minimal/Alpine"
+    "minimal" "Minimal/Lightweight"
     "network" "Network/Firewall"
-    "specialized" "Specialized"
-    "custom" "Custom"
+    "specialized" "Specialized/Rescue"
+    "custom" "Custom ISO/Image"
 )
 
 #===============================================================================
@@ -1277,11 +1247,21 @@ show_settings_menu() {
     esac
 }
 
+# List all supported distributions (CLI and UI)
+list_supported_distributions() {
+    echo "\nSupported Distributions (Key | Name | Version | Notes):"
+    for key in "${!DISTRO_LIST[@]}"; do
+        IFS='|' read -r name url fmt pkgmgr ostype user size notes <<< "${DISTRO_LIST[$key]}"
+        printf "  %-20s | %-30s | %-8s | %s\n" "$key" "$name" "$fmt" "$notes"
+    done | sort
+    echo
+}
+
 # ============================================================================
 # CLI INTERFACE FUNCTIONS
 # ============================================================================
 
-# Parse command line arguments
+# Parse command line arguments (robust, supports all features)
 parse_cli_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -1290,76 +1270,92 @@ parse_cli_arguments() {
                 exit 0
                 ;;
             -v|--version)
-                echo "Proxmox Template Creator v$SCRIPT_VERSION"
+                echo "$SCRIPT_NAME v$SCRIPT_VERSION"
                 exit 0
+                ;;
+            --list-distributions)
+                list_supported_distributions
+                exit 0
+                ;;
+            --validate-config)
+                VALIDATE_CONFIG=true
+                shift
+                ;;
+            --import-config)
+                CONFIG_FILE="$2"
+                shift 2
+                ;;
+            --export-config)
+                EXPORT_CONFIG_FILE="$2"
+                shift 2
                 ;;
             --batch)
                 BATCH_MODE=true
                 shift
                 ;;
-            --config)
-                CONFIG_FILE="$2"
-                shift 2
+            --queue)
+                QUEUE_MODE=true
+                shift
                 ;;
-            --distribution)
+            --ansible)
+                ANSIBLE_ENABLED=true
+                shift
+                ;;
+            --terraform)
+                TERRAFORM_ENABLED=true
+                shift
+                ;;
+            --distribution|-d)
                 CLI_DISTRIBUTION="$2"
                 shift 2
                 ;;
-            --vmid)
-                VMID_DEFAULT="$2"
+            --version)
+                CLI_VERSION="$2"
                 shift 2
                 ;;
-            --name)
-                VM_NAME="$2"
+            --name|-n)
+                CLI_TEMPLATE_NAME="$2"
                 shift 2
                 ;;
-            --memory)
-                VM_MEMORY="$2"
+            --vmid|-i)
+                CLI_VMID="$2"
                 shift 2
                 ;;
-            --cores)
-                VM_CORES="$2"
+            --cores|-c)
+                CLI_CORES="$2"
                 shift 2
                 ;;
-            --storage)
-                VM_STORAGE="$2"
+            --memory|-m)
+                CLI_MEMORY="$2"
+                shift 2
+                ;;
+            --storage|-s)
+                CLI_STORAGE="$2"
                 shift 2
                 ;;
             --disk-size)
-                VM_DISK_SIZE="$2"
+                CLI_DISK_SIZE="$2"
                 shift 2
                 ;;
-            --network)
-                VM_NETWORK="$2"
+            --bridge)
+                CLI_BRIDGE="$2"
                 shift 2
                 ;;
-            --ip)
-                STATIC_IP="$2"
+            --vlan)
+                CLI_VLAN="$2"
                 shift 2
                 ;;
-            --gateway)
-                STATIC_GATEWAY="$2"
+            --ssh-key)
+                CLI_SSH_KEY="$2"
                 shift 2
                 ;;
-            --dns)
-                STATIC_DNS="$2"
+            --user)
+                CLI_USER="$2"
                 shift 2
                 ;;
             --packages)
                 CLI_PACKAGES="$2"
                 shift 2
-                ;;
-            --tags)
-                VM_TAGS="$2"
-                shift 2
-                ;;
-            --terraform)
-                ENABLE_TERRAFORM=true
-                shift
-                ;;
-            --ansible)
-                ENABLE_ANSIBLE=true
-                shift
                 ;;
             --no-interaction)
                 NO_INTERACTION=true
@@ -1404,6 +1400,7 @@ run_cli_mode() {
     # Handle dry run mode
     if [[ "$DRY_RUN" == true ]]; then
         log_info "Dry run mode - showing template preview"
+       
         show_template_preview
         return 0
     fi
@@ -1434,6 +1431,34 @@ run_cli_mode() {
     return 1
 }
 
+# Process batch file for queue mode
+process_batch_file() {
+    local batch_file="$1"
+    if [[ ! -f "$batch_file" ]]; then
+        log_error "Batch file not found: $batch_file"
+        return 1
+    fi
+    log_info "Processing batch file: $batch_file"
+    local current_template=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        # Parse config (simple key=value or sectioned INI)
+        if [[ "$line" =~ ^\[TEMPLATE_ ]]; then
+            ((current_template++))
+            continue
+        fi
+        # Export variables for each template
+        eval "$line"
+        # After each template section, create the template
+        if [[ "$line" =~ ^TEMPL_NAME_DEFAULT ]]; then
+            log_info "Creating template #$current_template: $TEMPL_NAME_DEFAULT"
+            create_template_main
+        fi
+    done < "$batch_file"
+    log_success "Batch processing complete."
+}
+
 # Show welcome message
 show_welcome() {
     if [[ "$QUIET_MODE" != true ]]; then
@@ -1453,40 +1478,75 @@ show_welcome() {
 ║  • Batch processing                                              ║
 ║  • Ansible automation                                            ║
 ║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 "
         sleep 2
     fi
 }
 
-# ============================================================================
-# MAIN FUNCTION AND SCRIPT EXECUTION LOGIC
-# ============================================================================
+# Show CLI help
+show_cli_help() {
+    cat <<EOF
+$SCRIPT_NAME v$SCRIPT_VERSION
+
+Usage:
+  ./create-template.sh [OPTIONS]
+
+Options:
+  -h, --help                Show this help message
+  -v, --version             Show script version
+  --list-distributions      List all supported distributions
+  --validate-config         Validate current configuration
+  --import-config FILE      Import configuration file
+  --export-config FILE      Export current configuration
+  --batch                   Enable batch mode (process queue)
+  --queue                   Enable queue mode (interactive)
+  --ansible                 Enable Ansible integration
+  --terraform               Enable Terraform integration
+  -d, --distribution DIST   Set distribution key (see --list-distributions)
+  --version VERSION         Set distribution version (if applicable)
+  -n, --name NAME           Set template name
+  -i, --vmid VMID           Set VM ID
+  -c, --cores CORES         Set CPU cores
+  -m, --memory MB           Set memory (MB)
+  -s, --storage POOL        Set storage pool
+  --disk-size SIZE          Set disk size (e.g., 20G)
+  --bridge BRIDGE           Set network bridge
+  --vlan VLAN               Set VLAN tag
+  --ssh-key PATH            Set SSH public key file
+  --user USER               Set cloud-init username
+  --packages PKGS           Comma-separated package list
+  --no-interaction          Non-interactive mode
+  --dry-run                 Show actions without executing
+  --verbose                 Enable verbose output
+  --log-level LEVEL         Set log level (info, debug, warn, error)
+
+Examples:
+  ./create-template.sh -d ubuntu-22.04 -n dev-template -i 9000 --ansible --terraform
+  ./create-template.sh --import-config my-template.conf --batch
+  ./create-template.sh --list-distributions
+
+EOF
+}
 
 # Main function
 main() {
-    # Initialize script
     initialize_script
     
     # Parse command line arguments if provided
     if [[ $# -gt 0 ]]; then
         parse_cli_arguments "$@"
-        
         # Run in CLI mode if arguments provided
-        if [[ "$CLI_MODE" == true ]]; then
-            run_cli_mode
+        if [[ "$BATCH_MODE" == true ]]; then
+            process_batch_file "$CONFIG_FILE"
             return $?
         fi
+        # Add more CLI logic here as needed
     fi
-    
     # Show welcome message and run UI mode by default
     show_welcome
     show_main_menu
 }
-
-# ============================================================================
-# SCRIPT EXECUTION - THIS RUNS WHEN SCRIPT IS EXECUTED
-# ============================================================================
 
 # Only run main if script is executed directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

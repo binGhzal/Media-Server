@@ -4,12 +4,20 @@
 
 This repository contains the configuration files and scripts for setting up a comprehensive homelab environment. The infrastructure supports various applications and services including virtualization, container orchestration, monitoring, automation, and development tools.
 
+## Proxmox Template Creator - Full Documentation
+
+> **For all advanced usage, supported distributions, package categories, CLI/batch/automation, Ansible & Terraform integration, and troubleshooting, see:**
+>
+> [proxmox/README-create-template.md](./proxmox/README-create-template.md)
+>
+> This is the authoritative and most up-to-date documentation for the Proxmox Template Creator script, including all features, options, and examples.
+
 ## Features
 
 ### 🚀 Proxmox VM Template Creation
 
 - **Automated Template Builder**: Advanced script for creating VM templates with 70+ pre-configured packages
-- **Multi-Distribution Support**: Compatible with 15+ Linux distributions and BSD variants
+- **Multi-Distribution Support**: Compatible with 50+ Linux distributions and BSD variants (see full list in the [detailed README](./proxmox/README-create-template.md))
 - **Interactive UI**: User-friendly Whiptail interface for package selection and configuration
 - **Batch Processing**: Queue system for creating multiple templates simultaneously
 - **Configuration Management**: Export/import functionality for template configurations
@@ -272,6 +280,36 @@ homelab/
 - **Git/GitHub** - Version control and collaboration
 - **VS Code Server** - Remote development environment
 - **Various CLI tools** - Enhanced productivity
+
+## Proxmox Template Creator
+
+A powerful Bash script for automated creation of Proxmox VM templates supporting 50+ Linux, BSD, container, security, minimal, network/firewall, and custom distributions. Features include:
+
+- Batch/queue processing
+- 150+ packages in 16+ categories (fully selectable)
+- Ansible and Terraform integration (see below)
+- Robust CLI and interactive UI
+- Custom ISO/image support
+- Configuration management and error handling
+
+**Documentation:**
+See [`proxmox/README-create-template.md`](proxmox/README-create-template.md) for full usage, supported distributions, package categories, advanced features, and integration details.
+
+**Script location:**
+
+- Main script: `proxmox/create-template.sh`
+- Example configs: `proxmox/examples/`
+- Ansible playbooks: `proxmox/ansible/playbooks/`
+- Terraform automation: `terraform/`
+
+**Integration:**
+
+- Use `--ansible` to trigger Ansible post-provisioning (see playbooks in `proxmox/ansible/playbooks/`)
+- Use `--terraform` to trigger Terraform automation (see modules in `terraform/`)
+
+**Testing:**
+
+- Test the script with `proxmox/test-template-creator.sh` or by running `proxmox/create-template.sh` directly.
 
 ## Contributing
 

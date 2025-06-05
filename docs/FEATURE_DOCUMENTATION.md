@@ -4,7 +4,7 @@
 
 The Proxmox Template Creator is a comprehensive infrastructure automation tool that creates VM templates and deploys container workloads on Proxmox VE. This tool supports 50+ Linux distributions, Docker containers, Kubernetes clusters, and complete infrastructure stacks.
 
-## Quick Start
+## Quick Start Guide
 
 ```bash
 # Download and extract
@@ -224,7 +224,7 @@ k8s_templates=webapp,monitoring
 - `firewall.tf`: Security rules
 - `user.tf`: User management
 
-#### Container Workloads
+#### Container Workload Deployment
 
 - `docker-containers.tf`: Docker VM deployment with containers
 - `kubernetes-cluster.tf`: Multi-node Kubernetes clusters

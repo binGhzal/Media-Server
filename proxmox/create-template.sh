@@ -1157,14 +1157,17 @@ create_single_template() {
 
 # Configure VM settings interactively
 configure_vm_settings() {
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
 
     # VM Name
     VM_NAME=$(whiptail --title "VM Configuration" \
         --inputbox "Enter template name:" 10 60 \
         "${VM_NAME:-$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1 | tr '[:upper:]' '[:lower:]')-template}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # VM ID
     local suggested_vmid
@@ -1173,35 +1176,45 @@ configure_vm_settings() {
         --inputbox "Enter VM ID:" 10 60 \
         "${VMID_DEFAULT:-$suggested_vmid}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # Memory
     VM_MEMORY=$(whiptail --title "VM Configuration" \
         --inputbox "Enter memory (MB):" 10 60 \
         "${VM_MEMORY:-2048}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # CPU Cores
     VM_CORES=$(whiptail --title "VM Configuration" \
         --inputbox "Enter CPU cores:" 10 60 \
         "${VM_CORES:-2}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # Disk Size
     VM_DISK_SIZE=$(whiptail --title "VM Configuration" \
         --inputbox "Enter disk size (e.g., 20G):" 10 60 \
         "${VM_DISK_SIZE:-20G}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # Storage Pool
     VM_STORAGE=$(whiptail --title "VM Configuration" \
         --inputbox "Enter storage pool:" 10 60 \
         "${VM_STORAGE:-local-lvm}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     rm -f "$temp_file"
     return 0
@@ -1463,7 +1476,8 @@ show_settings_menu() {
 
 # Configure VM defaults settings
 configure_vm_defaults() {
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
 
     # CPU Cores
     VM_CORES=$(whiptail --title "VM Defaults - CPU" \
@@ -1477,14 +1491,18 @@ configure_vm_defaults() {
         --inputbox "Default memory (MB):" 10 60 \
         "${VM_MEMORY:-2048}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # Disk Size
     VM_DISK_SIZE=$(whiptail --title "VM Defaults - Disk" \
         --inputbox "Default disk size:" 10 60 \
         "${VM_DISK_SIZE:-20G}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # Storage
     local storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1}' | tr '\n' ' ')
@@ -1497,7 +1515,9 @@ configure_vm_defaults() {
         --menu "Select default storage pool:" 15 60 8 \
         "${storage_options[@]}" \
         3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     # QEMU Agent
     if whiptail --title "VM Defaults - QEMU Agent" \
@@ -2036,7 +2056,7 @@ generate_terraform_config() {
     [[ $? -ne 0 ]] && return 1
 
     # Remove quotes from selection
-    selected_modules=$(echo $selected_modules | tr -d '"')
+    selected_modules=$(echo "$selected_modules" | tr -d '"')
 
     # Collect Terraform variables interactively
     local tf_vars=()

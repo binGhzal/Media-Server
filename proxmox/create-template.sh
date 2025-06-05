@@ -1285,454 +1285,1096 @@ show_settings_menu() {
     esac
 }
 
-# List all supported distributions (CLI and UI)
-list_supported_distributions() {
-    echo "\nSupported Distributions (Key | Name | Version | Notes):"
-    for key in "${!DISTRO_LIST[@]}"; do
-        IFS='|' read -r name url fmt pkgmgr ostype user size notes <<< "${DISTRO_LIST[$key]}"
-        printf "  %-20s | %-30s | %-8s | %s\n" "$key" "$name" "$fmt" "$notes"
-    done | sort
-    echo
-}
-
-# === DYNAMIC DISCOVERY OF ANSIBLE PLAYBOOKS AND TERRAFORM MODULES ===
-
-# List available Ansible playbooks (from ansible/playbooks/templates/ dir)
-list_ansible_playbooks() {
-    local playbook_dir="$REPO_ROOT/ansible/playbooks/templates"
-    if [[ -d "$playbook_dir" ]]; then
-        find "$playbook_dir" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -exec basename {} \; 2>/dev/null | sort
-    else
-        log_warn "Ansible playbooks directory not found: $playbook_dir"
-        return 1
-    fi
-}
-
-# List available Terraform modules/scripts (from terraform dir)
-list_terraform_modules() {
-    local tf_dir="$REPO_ROOT/terraform"
-    if [[ -d "$tf_dir" ]]; then {
-        find "$tf_dir" -maxdepth 1 -type f -name '*.tf' -exec basename {} \; 2>/dev/null | sort
-    else
-        log_warn "Terraform directory not found: $tf_dir"
-        return 1
-    fi
-}
-
-# UI: Select Ansible playbooks
-select_ansible_playbooks_ui() {
-    local playbooks=( $(list_ansible_playbooks) )
-    local options=()
-    for pb in "${playbooks[@]}"; do
-        options+=("$pb" "" OFF)
-    done
-    local selected
-    selected=$(whiptail --title "Select Ansible Playbooks" --checklist "Choose Ansible playbooks to run after template creation:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3)
+# Configure VM defaults settings
+configure_vm_defaults() {
+    local temp_file=$(mktemp)
+    
+    # CPU Cores
+    VM_CORES=$(whiptail --title "VM Defaults - CPU" \
+        --inputbox "Default CPU cores:" 10 60 \
+        "${VM_CORES:-2}" \
+        3>&1 1>&2 2>&3)
     [[ $? -ne 0 ]] && return 1
-    # Remove quotes and store
-    SELECTED_ANSIBLE_PLAYBOOKS=()
-    for pb in $selected; do
-        pb="${pb//\"/}"
-        SELECTED_ANSIBLE_PLAYBOOKS+=("$pb")
-    done
-    return 0
-}
-
-# UI: Select Terraform modules/scripts
-select_terraform_modules_ui() {
-    local modules=( $(list_terraform_modules) )
-    local options=()
-    for mod in "${modules[@]}"; do
-        options+=("$mod" "" OFF)
-    done
-    local selected
-    selected=$(whiptail --title "Select Terraform Modules" --checklist "Choose Terraform modules/scripts to apply after template creation:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3)
+    
+    # Memory
+    VM_MEMORY=$(whiptail --title "VM Defaults - Memory" \
+        --inputbox "Default memory (MB):" 10 60 \
+        "${VM_MEMORY:-2048}" \
+        3>&1 1>&2 2>&3)
     [[ $? -ne 0 ]] && return 1
-    # Remove quotes and store
-    SELECTED_TERRAFORM_MODULES=()
-    for mod in $selected; do
-        mod="${mod//\"/}"
-        SELECTED_TERRAFORM_MODULES+=("$mod")
-    done
-    return 0
-}
-
-
-# === DYNAMIC DISCOVERY FOR DOCKER & KUBERNETES TEMPLATES ===
-# List available Docker templates
-list_docker_templates() {
-    local dir="$REPO_ROOT/docker/templates"
-    if [[ -d "$dir" ]]; then
-        find "$dir" -maxdepth 1 -type f -exec basename {} \; | sort
-    fi
-}
-
-# List available Kubernetes templates
-list_k8s_templates() {
-    local dir="$REPO_ROOT/kubernetes/templates"
-    if [[ -d "$dir" ]]; then
-        find "$dir" -maxdepth 1 -type f -exec basename {} \; | sort
-    fi
-}
-
-# UI: Select Docker template
-select_docker_template_ui() {
-    local options=()
-    for tpl in $(list_docker_templates); do
-        options+=("$tpl" "" OFF)
-    done
-    SELECTED_DOCKER_TEMPLATES=($(whiptail --title "Select Docker Template" --radiolist "Choose a Docker template:" 15 60 5 "${options[@]}" 3>&1 1>&2 2>&3))
-}
-
-# UI: Select Kubernetes template
-select_k8s_template_ui() {
-    local options=()
-    for tpl in $(list_k8s_templates); do
-        options+=("$tpl" "" OFF)
-    done
-    SELECTED_K8S_TEMPLATES=($(whiptail --title "Select Kubernetes Template" --radiolist "Choose a Kubernetes template:" 15 60 5 "${options[@]}" 3>&1 1>&2 2>&3))
-}
-
-# Run CLI mode operations
-run_cli_mode() {
-    log_info "Running in CLI mode"
     
-    # Handle batch mode
-    if [[ "$BATCH_MODE" == true ]]; then
-        if [[ -f "$BATCH_FILE" ]]; then
-            process_batch_file "$BATCH_FILE"
-            return $?
-        else
-            log_error "Batch file not found: $BATCH_FILE"
-            return 1
+    # Disk Size
+    VM_DISK_SIZE=$(whiptail --title "VM Defaults - Disk" \
+        --inputbox "Default disk size:" 10 60 \
+        "${VM_DISK_SIZE:-20G}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    # Storage
+    local storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1}' | tr '\n' ' ')
+    local storage_options=()
+    for storage in $storage_list; do
+        storage_options+=("$storage" "Storage: $storage")
+    done
+    
+    VM_STORAGE=$(whiptail --title "VM Defaults - Storage" \
+        --menu "Select default storage:" 15 60 8 \
+        "${storage_options[@]}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    # QEMU Agent
+    if whiptail --title "VM Defaults - QEMU Agent" \
+        --yesno "Enable QEMU agent by default?" 8 60; then
+        QEMU_AGENT="1"
+    else
+        QEMU_AGENT="0"
+    fi
+    
+    # UEFI vs BIOS
+    if whiptail --title "VM Defaults - BIOS" \
+        --yesno "Use UEFI (OVMF) by default? (Select No for BIOS)" 8 60; then
+        BIOS_TYPE="ovmf"
+    else
+        BIOS_TYPE="seabios"
+    fi
+    
+    whiptail --title "VM Defaults Updated" \
+        --msgbox "VM defaults updated successfully:\n\nCPU: $VM_CORES cores\nMemory: $VM_MEMORY MB\nDisk: $VM_DISK_SIZE\nStorage: $VM_STORAGE\nQEMU Agent: $QEMU_AGENT\nBIOS: $BIOS_TYPE" 12 60
+    
+    log_info "VM defaults updated: CPU=$VM_CORES, Memory=$VM_MEMORY, Disk=$VM_DISK_SIZE, Storage=$VM_STORAGE"
+}
+
+# Configure network settings
+configure_network_settings() {
+    local choice
+    
+    choice=$(whiptail --title "Network Configuration" \
+        --menu "Configure network settings:" 20 70 10 \
+        "1" "Network Bridge" \
+        "2" "VLAN Configuration" \
+        "3" "Default IP Configuration" \
+        "4" "DNS Settings" \
+        "5" "Firewall Settings" \
+        "6" "MAC Address Settings" \
+        "0" "Back" \
+        3>&1  1>&2 2>&3)
+    
+    case $choice in
+        1) configure_network_bridge ;;
+        2) configure_vlan_settings ;;
+        3) configure_ip_settings ;;
+        4) configure_dns_settings ;;
+        5) configure_firewall_settings ;;
+        6) configure_mac_settings ;;
+        0) return ;;
+    esac
+}
+
+# Configure network bridge
+configure_network_bridge() {
+    # List available bridges
+    local bridge_list=$(ip link show type bridge | grep -o 'vmbr[0-9]*' | tr '\n' ' ')
+    local bridge_options=()
+    for bridge in $bridge_list; do
+        bridge_options+=("$bridge" "Bridge: $bridge")
+    done
+    
+    NETWORK_BRIDGE=$(whiptail --title "Network Bridge" \
+        --menu "Select default network bridge:" 15 60 8 \
+        "${bridge_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "Bridge Updated" \
+            --msgbox "Default network bridge set to: $NETWORK_BRIDGE" 8 50
+        log_info "Network bridge updated: $NETWORK_BRIDGE"
+    fi
+}
+
+# Configure VLAN settings
+configure_vlan_settings() {
+    # Enable/disable VLAN
+    if whiptail --title "VLAN Configuration" \
+        --yesno "Enable VLAN tagging by default?" 8 60; then
+        VLAN_ENABLED="true"
+        
+        VLAN_ID=$(whiptail --title "VLAN ID" \
+            --inputbox "Enter default VLAN ID (1-4094):" 10 60 \
+            "${VLAN_ID:-100}" \
+            3>&1 1>&2 2>&3)
+        
+        if [[ $? -eq 0 ]]; then
+            whiptail --title "VLAN Updated" \
+                --msgbox "VLAN enabled with ID: $VLAN_ID" 8 50
+            log_info "VLAN settings updated: enabled=$VLAN_ENABLED, ID=$VLAN_ID"
         fi
+    else
+        VLAN_ENABLED="false"
+        whiptail --title "VLAN Disabled" \
+            --msgbox "VLAN tagging disabled" 8 50
+        log_info "VLAN disabled"
     fi
-    
-    # Handle dry run mode
-    if [[ "$DRY_RUN" == true ]]; then
-        log_info "Dry run mode - showing template preview"
-       
-        show_template_preview
-        return 0
-    fi
-    
-    # Handle single template creation from CLI
-    if [[ -n "$CONFIG_FILE" ]]; then
-        if [[ -f "$CONFIG_FILE" ]]; then
-            log_info "Creating template from configuration file: $CONFIG_FILE"
-            load_configuration_file "$CONFIG_FILE"
-            create_template_main
-            return $?
-        else
-            log_error "Configuration file not found: $CONFIG_FILE"
-            return 1
-        fi
-    fi
-    
-    # Create template with CLI parameters
-    if [[ -n "$TEMPLATE_NAME" && -n "$DISTRIBUTION" ]]; then
-        log_info "Creating template: $TEMPLATE_NAME ($DISTRIBUTION)"
-        create_template_main
-        return $?
-    fi
-    
-    # Show help if insufficient parameters
-    log_error "Insufficient parameters for CLI mode"
-    echo "Use --help for usage information"
-    return 1
 }
 
-# Process batch file for queue mode
-process_batch_file() {
-    local batch_file="$1"
-    if [[ ! -f "$batch_file" ]]; then
-        log_error "Batch file not found: $batch_file"
+# Configure IP settings
+configure_ip_settings() {
+    local ip_type
+    ip_type=$(whiptail --title "IP Configuration" \
+        --menu "Select default IP configuration:" 15 60 8 \
+        "dhcp" "DHCP (automatic)" \
+        "static" "Static IP" \
+        "manual" "Manual configuration" \
+        3>&1 1>&2 2>&3)
+    
+    case $ip_type in
+        dhcp)
+            NETWORK_TYPE="dhcp"
+            whiptail --title "IP Updated" \
+                --msgbox "Default IP configuration set to DHCP" 8 50
+            ;;
+        static)
+            NETWORK_TYPE="static"
+            configure_static_ip_defaults
+            ;;
+        manual)
+            NETWORK_TYPE="manual"
+            whiptail --title "IP Updated" \
+                --msgbox "Default IP configuration set to manual" 8 50
+            ;;
+    esac
+    
+    log_info "IP configuration updated: $NETWORK_TYPE"
+}
+
+# Configure static IP defaults
+configure_static_ip_defaults() {
+    STATIC_IP=$(whiptail --title "Static IP - Default IP" \
+        --inputbox "Default static IP (CIDR format):" 10 60 \
+        "${STATIC_IP:-192.168.1.100/24}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    STATIC_GATEWAY=$(whiptail --title "Static IP - Gateway" \
+        --inputbox "Default gateway:" 10 60 \
+        "${STATIC_GATEWAY:-192.168.1.1}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    STATIC_DNS=$(whiptail --title "Static IP - DNS" \
+        --inputbox "Default DNS servers (space-separated):" 10 60 \
+        "${STATIC_DNS:-8.8.8.8 8.8.4.4}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    whiptail --title "Static IP Updated" \
+        --msgbox "Static IP defaults updated:\n\nIP: $STATIC_IP\nGateway: $STATIC_GATEWAY\nDNS: $STATIC_DNS" 10 60
+}
+
+# Configure DNS settings
+configure_dns_settings() {
+    DNS_SERVERS=$(whiptail --title "DNS Configuration" \
+        --inputbox "Default DNS servers (space-separated):" 10 60 \
+        "${DNS_SERVERS:-8.8.8.8 8.8.4.4 1.1.1.1}" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "DNS Updated" \
+            --msgbox "Default DNS servers updated to:\n$DNS_SERVERS" 8 60
+        log_info "DNS servers updated: $DNS_SERVERS"
+    fi
+}
+
+# Configure firewall settings
+configure_firewall_settings() {
+    if whiptail --title "Firewall Configuration" \
+        --yesno "Enable firewall on VMs by default?" 8 60; then
+        FIREWALL_ENABLED="true"
+        
+        local fw_policy
+        fw_policy=$(whiptail --title "Firewall Policy" \
+            --menu "Select default firewall policy:" 15 60 8 \
+            "ACCEPT" "Allow all traffic (open)" \
+            "DROP" "Block all traffic (strict)" \
+            "REJECT" "Reject all traffic (notify sender)" \
+            3>&1 1>&2 2>&3)
+        
+        if [[ $? -eq 0 ]]; then
+            FIREWALL_POLICY="$fw_policy"
+            whiptail --title "Firewall Updated" \
+                --msgbox "Firewall enabled with policy: $FIREWALL_POLICY" 8 60
+        fi
+    else
+        FIREWALL_ENABLED="false"
+        whiptail --title "Firewall Disabled" \
+            --msgbox "Firewall disabled by default" 8 50
+    fi
+    
+    log_info "Firewall settings updated: enabled=$FIREWALL_ENABLED, policy=${FIREWALL_POLICY:-N/A}"
+}
+
+# Configure MAC address settings
+configure_mac_settings() {
+    if whiptail --title "MAC Address Configuration" \
+        --yesno "Auto-generate MAC addresses?" 8 60; then
+        MAC_AUTO_GENERATE="true"
+        MAC_PREFIX=$(whiptail --title "MAC Prefix" \
+            --inputbox "MAC address prefix (format: XX:XX:XX):" 10 60 \
+            "${MAC_PREFIX:-52:54:00}" \
+            3>&1 1>&2 2>&3)
+    else
+        MAC_AUTO_GENERATE="false"
+    fi
+    
+    whiptail --title "MAC Settings Updated" \
+        --msgbox "MAC address settings updated:\nAuto-generate: $MAC_AUTO_GENERATE\nPrefix: ${MAC_PREFIX:-N/A}" 8 60
+    
+    log_info "MAC settings updated: auto=$MAC_AUTO_GENERATE, prefix=${MAC_PREFIX:-N/A}"
+}
+
+# Configure storage settings
+configure_storage_settings() {
+    local choice
+    
+    choice=$(whiptail --title "Storage Configuration" \
+        --menu "Configure storage settings:" 20 70 10 \
+        "1" "Default Storage Pool" \
+        "2" "Disk Format Settings" \
+        "3" "Backup Storage" \
+        "4" "ISO Storage" \
+        "5" "Template Storage" \
+        "6" "Disk Cache Settings" \
+        "7" "Storage Quotas" \
+        "0" "Back" \
+        3>&1 1>&2 2>&3)
+    
+    case $choice in
+        1) configure_default_storage ;;
+        2) configure_disk_format ;;
+        3) configure_backup_storage ;;
+        4) configure_iso_storage ;;
+        5) configure_template_storage ;;
+        6) configure_disk_cache ;;
+        7) configure_storage_quotas ;;
+        0) return ;;
+    esac
+}
+
+# Configure default storage pool
+configure_default_storage() {
+    local storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1 " " $2}')
+    local storage_options=()
+    
+    while IFS=' ' read -r storage_name storage_type; do
+        [[ -n "$storage_name" ]] && storage_options+=("$storage_name" "Type: $storage_type")
+    done <<< "$storage_list"
+    
+    VM_STORAGE=$(whiptail --title "Default Storage Pool" \
+        --menu "Select default storage pool:" 15 70 8 \
+        "${storage_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "Storage Updated" \
+            --msgbox "Default storage pool set to: $VM_STORAGE" 8 50
+        log_info "Default storage updated: $VM_STORAGE"
+    fi
+}
+
+# Configure disk format
+configure_disk_format() {
+    local disk_format
+    disk_format=$(whiptail --title "Disk Format" \
+        --menu "Select default disk format:" 15 60 8 \
+        "qcow2" "QCOW2 (recommended, supports snapshots)" \
+        "raw" "Raw (better performance)" \
+        "vmdk" "VMDK (VMware compatibility)" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        DISK_FORMAT="$disk_format"
+        whiptail --title "Disk Format Updated" \
+            --msgbox "Default disk format set to: $DISK_FORMAT" 8 50
+        log_info "Disk format updated: $DISK_FORMAT"
+    fi
+}
+
+# Configure backup storage
+configure_backup_storage() {
+    local backup_list=$(pvesm status | grep -E 'backup.*active' | awk '{print $1}')
+    local backup_options=()
+    
+    for backup in $backup_list; do
+        backup_options+=("$backup" "Backup storage: $backup")
+    done
+    
+    if [[ ${#backup_options[@]} -eq 0 ]]; then
+        whiptail --title "No Backup Storage" \
+            --msgbox "No backup storage found. Configure backup storage in Proxmox first." 8 70
         return 1
     fi
-    log_info "Processing batch file: $batch_file"
-    local current_template=0
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip comments and empty lines
-        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-        # Parse config (simple key=value or sectioned INI)
-        if [[ "$line" =~ ^\[TEMPLATE_ ]]; then
-            ((current_template++))
-            continue
-        fi
-        # Export variables for each template
-        eval "$line"
-        # After each template section, create the template
-        if [[ "$line" =~ ^TEMPL_NAME_DEFAULT ]]; then
-            log_info "Creating template #$current_template: $TEMPL_NAME_DEFAULT"
-            create_template_main
-        fi
-    done < "$batch_file"
-    log_success "Batch processing complete."
-}
-
-# Show welcome message
-show_welcome() {
-    if [[ "$QUIET_MODE" != true ]]; then
-        clear
-        echo "
-╔══════════════════════════════════════════════════════════════════╗
-║                    Proxmox Template Creator                      ║
-║                        Version $SCRIPT_VERSION                   ║
-╠══════════════════════════════════════════════════════════════════╣
-║                                                                  ║
-║  Automated VM template creation for Proxmox Virtual Environment  ║
-║                                                                  ║
-║  Features:                                                       ║
-║  • Multiple Linux distributions                                  ║
-║  • Package pre-installation                                      ║
-║  • Cloud-init integration                                        ║
-║  • Batch processing                                              ║
-║  • Ansible automation                                            ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
-"
-        sleep 2
+    
+    BACKUP_STORAGE=$(whiptail --title "Backup Storage" \
+        --menu "Select default backup storage:" 15 60 8 \
+        "${backup_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "Backup Storage Updated" \
+            --msgbox "Default backup storage set to: $BACKUP_STORAGE" 8 50
+        log_info "Backup storage updated: $BACKUP_STORAGE"
     fi
 }
 
-# Show CLI help
-show_cli_help() {
-    cat <<EOF
-$SCRIPT_NAME v$SCRIPT_VERSION
-
-Usage:
-  ./create-template.sh [OPTIONS]
-
-Options:
-  -h, --help                Show this help message
-  -v, --version             Show script version
-  --list-distributions      List all supported distributions
-  --validate-config         Validate current configuration
-  --import-config FILE      Import configuration file
-  --export-config FILE      Export current configuration
-  --batch                   Enable batch mode (process queue)
-  --queue                   Enable queue mode (interactive)
-  --ansible                 Enable Ansible integration
-  --terraform               Enable Terraform integration
-  -d, --distribution DIST   Set distribution key (see --list-distributions)
-  --version VERSION         Set distribution version (if applicable)
-  -n, --name NAME           Set template name
-  -i, --vmid VMID           Set VM ID
-  -c, --cores CORES         Set CPU cores
-  -m, --memory MB           Set memory (MB)
-  -s, --storage POOL        Set storage pool
-  --disk-size SIZE          Set disk size (e.g., 20G)
-  --bridge BRIDGE           Set network bridge
-  --vlan VLAN               Set VLAN tag
-  --ssh-key PATH            Set SSH public key file
-  --user USER               Set cloud-init username
-  --packages PKGS           Comma-separated package list
-  --ansible-playbook PB1[,PB2,...]   Select Ansible playbooks to run
-  --terraform-module MOD1[,MOD2,...] Select Terraform modules/scripts to apply
-  --ansible-var key=value            Pass variable to Ansible (repeatable)
-  --terraform-var key=value          Pass variable to Terraform (repeatable)
-  --no-interaction          Non-interactive mode
-  --dry-run                 Show actions without executing
-  --verbose                 Enable verbose output
-  --log-level LEVEL         Set log level (info, debug, warn, error)
-
-Examples:
-  ./create-template.sh -d ubuntu-22.04 -n dev-template -i 9000 --ansible --terraform
-  ./create-template.sh --import-config my-template.conf --batch
-  ./create-template.sh --list-distributions
-
-EOF
-}
-
-# === ANSIBLE AND TERRAFORM EXECUTION FUNCTIONS ===
-
-# Execute selected Ansible playbooks on VMs (not templates)
-execute_ansible_playbooks() {
-    local vm_id="$1"
-    local vm_ip="$2"
+# Configure ISO storage
+configure_iso_storage() {
+    local iso_list=$(pvesm status | grep -E 'iso.*active' | awk '{print $1}')
+    local iso_options=()
     
-    if [[ ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} -eq 0 ]]; then
-        log_info "No Ansible playbooks selected, skipping Ansible execution"
+    for iso in $iso_list; do
+        iso_options+=("$iso" "ISO storage: $iso")
+    done
+    
+    if [[ ${#iso_options[@]} -eq 0 ]]; then
+        whiptail --title "No ISO Storage" \
+            --msgbox "No ISO storage found. Using default 'local' storage." 8 60
+        ISO_STORAGE="local"
         return 0
     fi
     
-    log_info "Executing Ansible playbooks on VM $vm_id ($vm_ip)"
+    ISO_STORAGE=$(whiptail --title "ISO Storage" \
+        --menu "Select default ISO storage:" 15 60 8 \
+        "${iso_options[@]}" \
+        3>&1 1>&2 2>&3)
     
-    # Create temporary inventory file for this VM
-    local temp_inventory="/tmp/proxmox-vm-$vm_id.yml"
-    cat > "$temp_inventory" <<EOF
-all:
-  hosts:
-    vm-$vm_id:
-      ansible_host: $vm_ip
-      ansible_user: ${CLOUD_USER_DEFAULT:-ubuntu}
-      ansible_ssh_private_key_file: ~/.ssh/id_rsa
-      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
-EOF
-    
-    # Execute each selected playbook
-    for playbook in "${SELECTED_ANSIBLE_PLAYBOOKS[@]}"; do
-        local playbook_path="$REPO_ROOT/ansible/playbooks/templates/$playbook"
-        if [[ -f "$playbook_path" ]]; then
-            log_info "Running Ansible playbook: $playbook"
-            
-            # Build ansible-playbook command with variables
-            local ansible_cmd="ansible-playbook -i $temp_inventory $playbook_path"
-            
-            # Add extra variables if provided
-            for var in "${ANSIBLE_EXTRA_VARS[@]}"; do
-                ansible_cmd="$ansible_cmd -e $var"
-            done
-            
-            # Execute playbook
-            if eval "$ansible_cmd"; then
-                log_success "Ansible playbook $playbook completed successfully"
-            else
-                log_error "Ansible playbook $playbook failed"
-            fi
-        else
-            log_warn "Ansible playbook not found: $playbook_path"
-        fi
-    done
-    
-    # Cleanup temporary inventory
-    rm -f "$temp_inventory"
-}
-
-# Execute Terraform modules for template deployment
-execute_terraform_modules() {
-    local template_id="$1"
-    local template_name="$2"
-    
-    if [[ ${#SELECTED_TERRAFORM_MODULES[@]} -eq 0 ]]; then
-        log_info "No Terraform modules selected, skipping Terraform execution"
-        return 0
-    fi
-    
-    log_info "Executing Terraform modules for template $template_id ($template_name)"
-    
-    # Create temporary Terraform directory
-    local temp_tf_dir="/tmp/proxmox-terraform-$$"
-    mkdir -p "$temp_tf_dir"
-    
-    # Copy selected modules to temporary directory
-    for module in "${SELECTED_TERRAFORM_MODULES[@]}"; do
-        local module_path="$REPO_ROOT/terraform/$module"
-        if [[ -f "$module_path" ]]; then
-            cp "$module_path" "$temp_tf_dir/"
-            log_info "Copied Terraform module: $module"
-        else
-            log_warn "Terraform module not found: $module_path"
-        fi
-    done
-    
-    # Create terraform.tfvars file with provided variables
-    local tfvars_file="$temp_tf_dir/terraform.tfvars"
-    cat > "$tfvars_file" <<EOF
-# Auto-generated terraform.tfvars for template deployment
-template_id = "$template_id"
-vm_name_prefix = "${template_name}-vm-"
-EOF
-    
-    # Add extra variables if provided
-    for var in "${TERRAFORM_EXTRA_VARS[@]}"; do
-        echo "$var" >> "$tfvars_file"
-    done
-    
-    # Execute Terraform commands
-    cd "$temp_tf_dir"
-    
-    log_info "Initializing Terraform..."
-    if terraform init; then
-        log_success "Terraform initialized successfully"
-        
-        log_info "Planning Terraform deployment..."
-        if terraform plan; then
-            log_success "Terraform plan completed successfully"
-            
-            # Ask for confirmation before applying
-            if whiptail --title "Terraform Apply" \
-                --yesno "Terraform plan completed. Apply changes to deploy VMs from template?" 8 60; then
-                
-                log_info "Applying Terraform configuration..."
-                if terraform apply -auto-approve; then
-                    log_success "Terraform apply completed successfully"
-                    
-                    # Show outputs if available
-                    log_info "Terraform outputs:"
-                    terraform output
-                else
-                    log_error "Terraform apply failed"
-                fi
-            else
-                log_info "Terraform apply cancelled by user"
-            fi
-        else
-            log_error "Terraform plan failed"
-        fi
-    else
-        log_error "Terraform initialization failed"
-    fi
-    
-    # Return to original directory
-    cd - > /dev/null
-    
-    # Cleanup (optional - user might want to inspect)
-    if [[ "$TERRAFORM_CLEANUP_TEMP" == "true" ]]; then
-        rm -rf "$temp_tf_dir"
-    else
-        log_info "Terraform files preserved in: $temp_tf_dir"
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "ISO Storage Updated" \
+            --msgbox "Default ISO storage set to: $ISO_STORAGE" 8 50
+        log_info "ISO storage updated: $ISO_STORAGE"
     fi
 }
 
-# Create VM from template and run Ansible if configured
-deploy_vm_from_template() {
-    local template_id="$1"
-    local vm_name="$2"
-    local vm_id="$3"
+# Configure template storage
+configure_template_storage() {
+    local template_list=$(pvesm status | grep -E 'images.*active' | awk '{print $1}')
+    local template_options=()
     
-    log_info "Deploying VM $vm_name (ID: $vm_id) from template $template_id"
+    for template in $template_list; do
+        template_options+=("$template" "Template storage: $template")
+    done
     
-    # Clone template to create VM
-    if qm clone "$template_id" "$vm_id" --name "$vm_name"; then
-        log_success "VM $vm_name created from template"
+    TEMPLATE_STORAGE=$(whiptail --title "Template Storage" \
+        --menu "Select template storage:" 15 60 8 \
+        "${template_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        whiptail --title "Template Storage Updated" \
+            --msgbox "Template storage set to: $TEMPLATE_STORAGE" 8 50
+        log_info "Template storage updated: $TEMPLATE_STORAGE"
+    fi
+}
+
+# Configure disk cache settings
+configure_disk_cache() {
+    local cache_mode
+    cache_mode=$(whiptail --title "Disk Cache Mode" \
+        --menu "Select disk cache mode:" 15 60 8 \
+        "none" "No cache (safest)" \
+        "writethrough" "Write-through cache" \
+        "writeback" "Write-back cache (fastest)" \
+        "unsafe" "Unsafe cache (testing only)" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
+        DISK_CACHE="$cache_mode"
+        whiptail --title "Disk Cache Updated" \
+            --msgbox "Disk cache mode set to: $DISK_CACHE" 8 50
+        log_info "Disk cache updated: $DISK_CACHE"
+    fi
+}
+
+# Configure storage quotas
+configure_storage_quotas() {
+    if whiptail --title "Storage Quotas" \
+        --yesno "Enable storage quotas for templates?" 8 60; then
         
-        # Start the VM
-        if qm start "$vm_id"; then
-            log_success "VM $vm_name started"
-            
-            # Wait for VM to get IP address
-            log_info "Waiting for VM to obtain IP address..."
-            local vm_ip=""
-            local retry_count=0
-            local max_retries=30
-            
-            while [[ -z "$vm_ip" && $retry_count -lt $max_retries ]]; do
-                sleep 10
-                vm_ip=$(qm guest cmd "$vm_id" network-get-interfaces 2>/dev/null | jq -r '.[] | select(.name=="eth0") | .["ip-addresses"][] | select(.["ip-address-type"]=="ipv4") | .["ip-address"]' 2>/dev/null | head -1)
-                ((retry_count++))
-            done
-            
-            if [[ -n "$vm_ip" ]]; then
-                log_success "VM IP address: $vm_ip"
-                
-                # Execute Ansible playbooks if configured
-                if [[ "$ANSIBLE_ENABLED" == "true" && ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} -gt 0 ]]; then
-                    log_info "Waiting for SSH to be available..."
-                    sleep 30  # Additional wait for SSH service
-                    execute_ansible_playbooks "$vm_id" "$vm_ip"
-                fi
-            else
-                log_warn "Could not determine VM IP address"
-            fi
-        else
-            log_error "Failed to start VM $vm_name"
-        fi
+        TEMPLATE_QUOTA=$(whiptail --title "Template Quota" \
+            --inputbox "Maximum template size (GB, 0 for unlimited):" 10 60 \
+            "${TEMPLATE_QUOTA:-0}" \
+            3>&1 1>&2 2>&3)
+        
+        VM_QUOTA=$(whiptail --title "VM Quota" \
+            --inputbox "Maximum VM disk size (GB, 0 for unlimited):" 10 60 \
+            "${VM_QUOTA:-0}" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Quotas Updated" \
+            --msgbox "Storage quotas updated:\nTemplate: ${TEMPLATE_QUOTA}GB\nVM: ${VM_QUOTA}GB" 8 60
+        
+        log_info "Storage quotas updated: template=${TEMPLATE_QUOTA}GB, vm=${VM_QUOTA}GB"
     else
-        log_error "Failed to create VM from template"
+        TEMPLATE_QUOTA="0"
+        VM_QUOTA="0"
+        whiptail --title "Quotas Disabled" \
+            --msgbox "Storage quotas disabled" 8 50
+    fi
+}
+
+# Configure automation settings
+configure_automation_settings() {
+    local choice
+    
+    choice=$(whiptail --title "Automation Configuration" \
+        --menu "Configure automation settings:" 20 70 10 \
+        "1" "Ansible Settings" \
+        "2" "Terraform Settings" \
+        "3" "Docker Integration" \
+        "4" "Kubernetes Integration" \
+        "5" "CI/CD Settings" \
+        "6" "Batch Processing" \
+        "7" "Auto-cleanup Settings" \
+        "0" "Back" \
+        3>&1 1>&2 2>&3)
+    
+    case $choice in
+        1) configure_ansible_automation ;;
+        2) configure_terraform_automation ;;
+        3) configure_docker_automation ;;
+        4) configure_kubernetes_automation ;;
+        5) configure_cicd_settings ;;
+        6) configure_batch_settings ;;
+        7) configure_cleanup_settings ;;
+        0) return ;;
+    esac
+}
+
+# Configure Ansible automation
+configure_ansible_automation() {
+    if whiptail --title "Ansible Configuration" \
+        --yesno "Enable Ansible integration by default?" 8 60; then
+        ANSIBLE_ENABLED="true"
+        
+        # Configure Ansible LXC settings
+        ANSIBLE_LXC_CORES=$(whiptail --title "Ansible LXC - CPU" \
+            --inputbox "CPU cores for Ansible LXC container:" 10 60 \
+            "${ANSIBLE_LXC_CORES:-1}" \
+            3>&1 1>&2 2>&3)
+        
+        ANSIBLE_LXC_MEMORY=$(whiptail --title "Ansible LXC - Memory" \
+            --inputbox "Memory for Ansible LXC (MB):" 10 60 \
+            "${ANSIBLE_LXC_MEMORY:-1024}" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Ansible Updated" \
+            --msgbox "Ansible integration enabled:\nCPU: $ANSIBLE_LXC_CORES cores\nMemory: $ANSIBLE_LXC_MEMORY MB" 8 60
+    else
+        ANSIBLE_ENABLED="false"
+        whiptail --title "Ansible Disabled" \
+            --msgbox "Ansible integration disabled" 8 50
+    fi
+    
+    log_info "Ansible settings updated: enabled=$ANSIBLE_ENABLED"
+}
+
+# Configure Terraform automation
+configure_terraform_automation() {
+    if whiptail --title "Terraform Configuration" \
+        --yesno "Enable Terraform integration by default?" 8 60; then
+        TERRAFORM_ENABLED="true"
+        
+        TERRAFORM_PROVIDER=$(whiptail --title "Terraform Provider" \
+            --inputbox "Terraform provider:" 10 60 \
+            "${TERRAFORM_PROVIDER:-telmate/proxmox}" \
+            3>&1 1>&2 2>&3)
+        
+        if whiptail --title "Terraform Cleanup" \
+            --yesno "Cleanup temporary Terraform files after execution?" 8 60; then
+            TERRAFORM_CLEANUP_TEMP="true"
+        else
+            TERRAFORM_CLEANUP_TEMP="false"
+        fi
+        
+        whiptail --title "Terraform Updated" \
+            --msgbox "Terraform integration enabled:\nProvider: $TERRAFORM_PROVIDER\nCleanup: $TERRAFORM_CLEANUP_TEMP" 8 60
+    else
+        TERRAFORM_ENABLED="false"
+        whiptail --title "Terraform Disabled" \
+            --msgbox "Terraform integration disabled" 8 50
+    fi
+    
+    log_info "Terraform settings updated: enabled=$TERRAFORM_ENABLED"
+}
+
+# Configure Docker automation
+configure_docker_automation() {
+    if whiptail --title "Docker Integration" \
+        --yesno "Enable Docker template integration?" 8 60; then
+        DOCKER_INTEGRATION="true"
+        
+        DOCKER_TEMPLATE_DIR=$(whiptail --title "Docker Template Directory" \
+            --inputbox "Docker template directory:" 10 60 \
+            "${DOCKER_TEMPLATE_DIR:-$REPO_ROOT/docker/templates}" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Docker Integration Updated" \
+            --msgbox "Docker integration enabled:\nTemplate dir: $DOCKER_TEMPLATE_DIR" 8 70
+    else
+        DOCKER_INTEGRATION="false"
+        whiptail --title "Docker Integration Disabled" \
+            --msgbox "Docker template integration disabled" 8 50
+    fi
+    
+    log_info "Docker integration updated: enabled=$DOCKER_INTEGRATION"
+}
+
+# Configure Kubernetes automation
+configure_kubernetes_automation() {
+    if whiptail --title "Kubernetes Integration" \
+        --yesno "Enable Kubernetes template integration?" 8 60; then
+        K8S_INTEGRATION="true"
+        
+        K8S_TEMPLATE_DIR=$(whiptail --title "Kubernetes Template Directory" \
+            --inputbox "Kubernetes template directory:" 10 60 \
+            "${K8S_TEMPLATE_DIR:-$REPO_ROOT/kubernetes/templates}" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Kubernetes Integration Updated" \
+            --msgbox "Kubernetes integration enabled:\nTemplate dir: $K8S_TEMPLATE_DIR" 8 70
+    else
+        K8S_INTEGRATION="false"
+        whiptail --title "Kubernetes Integration Disabled" \
+            --msgbox "Kubernetes template integration disabled" 8 50
+    fi
+    
+    log_info "Kubernetes integration updated: enabled=$K8S_INTEGRATION"
+}
+
+# Configure CI/CD settings
+configure_cicd_settings() {
+    if whiptail --title "CI/CD Integration" \
+        --yesno "Enable CI/CD webhook support?" 8 60; then
+        CICD_ENABLED="true"
+        
+        CICD_WEBHOOK_URL=$(whiptail --title "Webhook URL" \
+            --inputbox "CI/CD webhook URL:" 10 70 \
+            "${CICD_WEBHOOK_URL:-http://jenkins.local/webhook}" \
+            3>&1 1>&2 2>&3)
+        
+        CICD_API_TOKEN=$(whiptail --title "API Token" \
+            --passwordbox "CI/CD API token (will be hidden):" 10 60 \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "CI/CD Updated" \
+            --msgbox "CI/CD integration enabled:\nWebhook: $CICD_WEBHOOK_URL" 8 70
+    else
+        CICD_ENABLED="false"
+        whiptail --title "CI/CD Disabled" \
+            --msgbox "CI/CD webhook support disabled" 8 50
+    fi
+    
+    log_info "CI/CD settings updated: enabled=$CICD_ENABLED"
+}
+
+# Configure batch processing settings
+configure_batch_settings() {
+    BATCH_VMID_START=$(whiptail --title "Batch Processing - Starting VMID" \
+        --inputbox "Starting VMID for batch creation:" 10 60 \
+        "${BATCH_VMID_START:-52000}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    BATCH_COUNT=$(whiptail --title "Batch Processing - Default Count" \
+        --inputbox "Default number of templates in batch:" 10 60 \
+        "${BATCH_COUNT:-1}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    if whiptail --title "Auto-increment VMID" \
+        --yesno "Auto-increment VMID for batch creation?" 8 60; then
+        AUTO_INCREMENT_VMID="true"
+    else
+        AUTO_INCREMENT_VMID="false"
+    fi
+    
+    whiptail --title "Batch Settings Updated" \
+        --msgbox "Batch processing settings:\nStart VMID: $BATCH_VMID_START\nDefault count: $BATCH_COUNT\nAuto-increment: $AUTO_INCREMENT_VMID" 10 60
+    
+    log_info "Batch settings updated: start=$BATCH_VMID_START, count=$BATCH_COUNT, auto-increment=$AUTO_INCREMENT_VMID"
+}
+
+# Configure auto-cleanup settings
+configure_cleanup_settings() {
+    if whiptail --title "Auto-cleanup" \
+        --yesno "Enable automatic cleanup of temporary files?" 8 60; then
+        CLEANUP_ENABLED="true"
+        
+        CLEANUP_TEMP_DAYS=$(whiptail --title "Cleanup - Temp Files" \
+            --inputbox "Delete temp files older than (days):" 10 60 \
+            "${CLEANUP_TEMP_DAYS:-7}" \
+            3>&1 1>&2 2>&3)
+        
+        CLEANUP_LOG_DAYS=$(whiptail --title "Cleanup - Log Files" \
+            --inputbox "Delete log files older than (days):" 10 60 \
+            "${CLEANUP_LOG_DAYS:-30}" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Cleanup Updated" \
+            --msgbox "Auto-cleanup enabled:\nTemp files: $CLEANUP_TEMP_DAYS days\nLog files: $CLEANUP_LOG_DAYS days" 8 60
+    else
+        CLEANUP_ENABLED="false"
+        whiptail --title "Cleanup Disabled" \
+            --msgbox "Auto-cleanup disabled" 8 50
+    fi
+    
+    log_info "Cleanup settings updated: enabled=$CLEANUP_ENABLED"
+}
+
+# Configure security settings
+configure_security_settings() {
+    local choice
+    
+    choice=$(whiptail --title "Security Configuration" \
+        --menu "Configure security settings:" 20 70 10 \
+        "1" "SSH Key Settings" \
+        "2" "User Account Settings" \
+        "3" "Firewall Defaults" \
+        "4" "Encryption Settings" \
+        "5" "Access Control" \
+        "6" "Audit Settings" \
+        "7" "Password Policies" \
+        "0" "Back" \
+        3>&1 1>&2 2>&3)
+    
+    case $choice in
+        1) configure_ssh_settings ;;
+        2) configure_user_settings ;;
+        3) configure_security_firewall ;;
+        4) configure_encryption_settings ;;
+        5) configure_access_control ;;
+        6) configure_audit_settings ;;
+        7) configure_password_policies ;;
+        0) return ;;
+    esac
+}
+
+# Configure SSH settings
+configure_ssh_settings() {
+    if whiptail --title "SSH Key Configuration" \
+        --yesno "Use SSH key authentication by default?" 8 60; then
+        SSH_KEY_ENABLED="true"
+        
+        SSH_KEY_PATH=$(whiptail --title "SSH Key Path" \
+            --inputbox "Default SSH public key path:" 10 70 \
+            "${SSH_KEY_PATH:-~/.ssh/id_rsa.pub}" \
+            3>&1 1>&2 2>&3)
+        
+        if whiptail --title "Disable Password Auth" \
+            --yesno "Disable password authentication when SSH key is used?" 8 60; then
+            SSH_DISABLE_PASSWORD="true"
+        else
+            SSH_DISABLE_PASSWORD="false"
+        fi
+        
+        whiptail --title "SSH Settings Updated" \
+            --msgbox "SSH settings updated:\nKey path: $SSH_KEY_PATH\nDisable password: $SSH_DISABLE_PASSWORD" 8 70
+    else
+        SSH_KEY_ENABLED="false"
+        whiptail --title "SSH Key Disabled" \
+            --msgbox "SSH key authentication disabled" 8 50
+    fi
+    
+    log_info "SSH settings updated: key_enabled=$SSH_KEY_ENABLED"
+}
+
+# Configure user settings
+configure_user_settings() {
+    CLOUD_USER_DEFAULT=$(whiptail --title "Default User" \
+        --inputbox "Default user account name:" 10 60 \
+        "${CLOUD_USER_DEFAULT:-ubuntu}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    if whiptail --title "Sudo Access" \
+        --yesno "Grant sudo access to default user?" 8 60; then
+        ADD_SUDO_NOPASSWD="true"
+    else
+        ADD_SUDO_NOPASSWD="false"
+    fi
+    
+    SHELL_DEFAULT=$(whiptail --title "Default Shell" \
+        --menu "Select default shell:" 15 60 8 \
+        "/bin/bash" "Bash (recommended)" \
+        "/bin/zsh" "Zsh" \
+        "/bin/fish" "Fish" \
+        "/bin/sh" "Bourne Shell" \
+        3>&1 1>&2 2>&3)
+    
+    whiptail --title "User Settings Updated" \
+        --msgbox "User settings updated:\nUser: $CLOUD_USER_DEFAULT\nSudo: $ADD_SUDO_NOPASSWD\nShell: $SHELL_DEFAULT" 10 60
+    
+    log_info "User settings updated: user=$CLOUD_USER_DEFAULT, sudo=$ADD_SUDO_NOPASSWD, shell=$SHELL_DEFAULT"
+}
+
+# Configure security firewall
+configure_security_firewall() {
+    if whiptail --title "Security Firewall" \
+        --yesno "Enable restrictive firewall by default?" 8 60; then
+        SECURITY_FIREWALL="true"
+        
+        local fw_ports
+        fw_ports=$(whiptail --title "Allowed Ports" \
+            --inputbox "Default allowed ports (comma-separated):" 10 60 \
+            "${SECURITY_PORTS:-22,80,443}" \
+            3>&1 1>&2 2>&3)
+        
+        if [[ $? -eq 0 ]]; then
+            SECURITY_PORTS="$fw_ports"
+        fi
+        
+        whiptail --title "Security Firewall Updated" \
+            --msgbox "Security firewall enabled with ports: $SECURITY_PORTS" 8 60
+    else
+        SECURITY_FIREWALL="false"
+        whiptail --title "Security Firewall Disabled" \
+            --msgbox "Security firewall disabled" 8 50
+    fi
+    
+    log_info "Security firewall updated: enabled=$SECURITY_FIREWALL"
+}
+
+# Configure encryption settings
+configure_encryption_settings() {
+    if whiptail --title "Disk Encryption" \
+        --yesno "Enable disk encryption by default?" 8 60; then
+        DISK_ENCRYPTION="true"
+        
+        ENCRYPTION_TYPE=$(whiptail --title "Encryption Type" \
+            --menu "Select encryption type:" 15 60 8 \
+            "luks" "LUKS (recommended)" \
+            "luks2" "LUKS2 (newer)" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Encryption Updated" \
+            --msgbox "Disk encryption enabled with type: $ENCRYPTION_TYPE" 8 60
+    else
+        DISK_ENCRYPTION="false"
+        whiptail --title "Encryption Disabled" \
+            --msgbox "Disk encryption disabled" 8 50
+    fi
+    
+    log_info "Encryption settings updated: enabled=$DISK_ENCRYPTION, type=${ENCRYPTION_TYPE:-N/A}"
+}
+
+# Configure access control
+configure_access_control() {
+    if whiptail --title "Access Control" \
+        --yesno "Enable role-based access control?" 8 60; then
+        RBAC_ENABLED="true"
+        
+        DEFAULT_ROLE=$(whiptail --title "Default Role" \
+            --menu "Select default user role:" 15 60 8 \
+            "user" "Standard User" \
+            "admin" "Administrator" \
+            "developer" "Developer" \
+            "operator" "Operator" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Access Control Updated" \
+            --msgbox "RBAC enabled with default role: $DEFAULT_ROLE" 8 60
+    else
+        RBAC_ENABLED="false"
+        whiptail --title "Access Control Disabled" \
+            --msgbox "Role-based access control disabled" 8 50
+    fi
+    
+    log_info "Access control updated: rbac=$RBAC_ENABLED, role=${DEFAULT_ROLE:-N/A}"
+}
+
+# Configure audit settings
+configure_audit_settings() {
+    if whiptail --title "Audit Logging" \
+        --yesno "Enable audit logging for templates?" 8 60; then
+        AUDIT_ENABLED="true"
+        
+        AUDIT_LEVEL=$(whiptail --title "Audit Level" \
+            --menu "Select audit level:" 15 60 8 \
+            "basic" "Basic (create/delete operations)" \
+            "detailed" "Detailed (all operations)" \
+            "debug" "Debug (everything)" \
+            3>&1 1>&2 2>&3)
+        
+        whiptail --title "Audit Updated" \
+            --msgbox "Audit logging enabled with level: $AUDIT_LEVEL" 8 60
+    else
+        AUDIT_ENABLED="false"
+        whiptail --title "Audit Disabled" \
+            --msgbox "Audit logging disabled" 8 50
+    fi
+    
+    log_info "Audit settings updated: enabled=$AUDIT_ENABLED, level=${AUDIT_LEVEL:-N/A}"
+}
+
+# Configure password policies
+configure_password_policies() {
+    PASSWORD_MIN_LENGTH=$(whiptail --title "Password Policy - Length" \
+        --inputbox "Minimum password length:" 10 60 \
+        "${PASSWORD_MIN_LENGTH:-12}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    if whiptail --title "Password Complexity" \
+        --yesno "Require complex passwords (uppercase, lowercase, numbers, symbols)?" 8 60; then
+        PASSWORD_COMPLEXITY="true"
+    else
+        PASSWORD_COMPLEXITY="false"
+    fi
+    
+    PASSWORD_EXPIRY=$(whiptail --title "Password Expiry" \
+        --inputbox "Password expiry (days, 0 for never):" 10 60 \
+        "${PASSWORD_EXPIRY:-90}" \
+        3>&1 1>&2 2>&3)
+    [[ $? -ne 0 ]] && return 1
+    
+    whiptail --title "Password Policy Updated" \
+        --msgbox "Password policy updated:\nMin length: $PASSWORD_MIN_LENGTH\nComplexity: $PASSWORD_COMPLEXITY\nExpiry: $PASSWORD_EXPIRY days" 10 60
+    
+    log_info "Password policy updated: length=$PASSWORD_MIN_LENGTH, complexity=$PASSWORD_COMPLEXITY, expiry=$PASSWORD_EXPIRY"
+}
+
+# Export configuration to file
+export_configuration() {
+    local config_file
+    config_file=$(whiptail --title "Export Configuration" \
+        --inputbox "Enter filename to save configuration:" 10 70 \
+        "$SCRIPT_DIR/configs/$(date +%Y%m%d_%H%M%S)_template_config.conf" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    # Create config directory if it doesn't exist
+    mkdir -p "$(dirname "$config_file")"
+    
+    # Export current configuration
+    cat > "$config_file" <<EOF
+# Proxmox Template Creator Configuration
+# Generated: $(date)
+
+# VM Configuration
+VM_NAME="$VM_NAME"
+VMID_DEFAULT="$VMID_DEFAULT"
+VM_MEMORY="$VM_MEMORY"
+VM_CORES="$VM_CORES"
+VM_DISK_SIZE="$VM_DISK_SIZE"
+VM_STORAGE="$VM_STORAGE"
+BIOS_TYPE="$BIOS_TYPE"
+QEMU_AGENT="$QEMU_AGENT"
+
+# Network Configuration
+NETWORK_TYPE="$NETWORK_TYPE"
+NETWORK_BRIDGE="$NETWORK_BRIDGE"
+VLAN_ENABLED="$VLAN_ENABLED"
+VLAN_ID="$VLAN_ID"
+STATIC_IP="$STATIC_IP"
+STATIC_GATEWAY="$STATIC_GATEWAY"
+STATIC_DNS="$STATIC_DNS"
+FIREWALL_ENABLED="$FIREWALL_ENABLED"
+FIREWALL_POLICY="$FIREWALL_POLICY"
+
+# Storage Configuration
+DISK_FORMAT="$DISK_FORMAT"
+BACKUP_STORAGE="$BACKUP_STORAGE"
+ISO_STORAGE="$ISO_STORAGE"
+TEMPLATE_STORAGE="$TEMPLATE_STORAGE"
+DISK_CACHE="$DISK_CACHE"
+
+# Automation Configuration
+ANSIBLE_ENABLED="$ANSIBLE_ENABLED"
+TERRAFORM_ENABLED="$TERRAFORM_ENABLED"
+DOCKER_INTEGRATION="$DOCKER_INTEGRATION"
+K8S_INTEGRATION="$K8S_INTEGRATION"
+CICD_ENABLED="$CICD_ENABLED"
+
+# Security Configuration
+SSH_KEY_ENABLED="$SSH_KEY_ENABLED"
+SSH_KEY_PATH="$SSH_KEY_PATH"
+CLOUD_USER_DEFAULT="$CLOUD_USER_DEFAULT"
+ADD_SUDO_NOPASSWD="$ADD_SUDO_NOPASSWD"
+SECURITY_FIREWALL="$SECURITY_FIREWALL"
+DISK_ENCRYPTION="$DISK_ENCRYPTION"
+
+# Cleanup Configuration
+CLEANUP_ENABLED="$CLEANUP_ENABLED"
+CLEANUP_TEMP_DAYS="$CLEANUP_TEMP_DAYS"
+CLEANUP_LOG_DAYS="$CLEANUP_LOG_DAYS"
+
+# Selected Distribution
+SELECTED_DISTRIBUTION="$SELECTED_DISTRIBUTION"
+SELECTED_DISTRIBUTION_KEY="$SELECTED_DISTRIBUTION_KEY"
+
+# Selected Packages
+SELECTED_PACKAGES=($(printf "'%s' " "${SELECTED_PACKAGES[@]}"))
+
+# Selected Ansible Playbooks
+SELECTED_ANSIBLE_PLAYBOOKS=($(printf "'%s' " "${SELECTED_ANSIBLE_PLAYBOOKS[@]}"))
+
+# Selected Terraform Modules
+SELECTED_TERRAFORM_MODULES=($(printf "'%s' " "${SELECTED_TERRAFORM_MODULES[@]}"))
+
+# Selected Docker Templates
+SELECTED_DOCKER_TEMPLATES=($(printf "'%s' " "${SELECTED_DOCKER_TEMPLATES[@]}"))
+
+# Selected K8s Templates
+SELECTED_K8S_TEMPLATES=($(printf "'%s' " "${SELECTED_K8S_TEMPLATES[@]}"))
+EOF
+    
+    whiptail --title "Configuration Exported" \
+        --msgbox "Configuration exported to:\n$config_file" 8 70
+    
+    log_info "Configuration exported to: $config_file"
+}
+
+# Import configuration from file
+import_configuration() {
+    local config_file
+    config_file=$(whiptail --title "Import Configuration" \
+        --inputbox "Enter path to configuration file:" 10 70 \
+        "$SCRIPT_DIR/configs/" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    if [[ ! -f "$config_file" ]]; then
+        whiptail --title "File Not Found" \
+            --msgbox "Configuration file not found:\n$config_file" 8 70
+        return 1
+    fi
+    
+    # Source the configuration file
+    if source "$config_file" 2>/dev/null; then
+        whiptail --title "Configuration Imported" \
+            --msgbox "Configuration imported successfully from:\n$config_file" 8 70
+        log_info "Configuration imported from: $config_file"
+    else
+        whiptail --title "Import Error" \
+            --msgbox "Failed to import configuration from:\n$config_file\n\nPlease check the file format." 10 70
+        log_error "Failed to import configuration from: $config_file"
         return 1
     fi
 }
+
+# Reset to defaults
+reset_to_defaults() {
+    if whiptail --title "Reset to Defaults" \
+        --yesno "Are you sure you want to reset all settings to defaults?\n\nThis will clear all current configuration." 10 60; then
+        
+        # Reset all variables to defaults
+        VM_NAME=""
+        VMID_DEFAULT="9000"
+        VM_MEMORY="2048"
+        VM_CORES="2"
+        VM_DISK_SIZE="20G"
+        VM_STORAGE="local-lvm"
+        BIOS_TYPE="seabios"
+        QEMU_AGENT="1"
+        NETWORK_TYPE="dhcp"
+        NETWORK_BRIDGE="vmbr0"
+        VLAN_ENABLED="false"
+        VLAN_ID="100"
+        STATIC_IP=""
+        STATIC_GATEWAY=""
+        STATIC_DNS=""
+        FIREWALL_ENABLED="false"
+        FIREWALL_POLICY="ACCEPT"
+        DISK_FORMAT="qcow2"
+        BACKUP_STORAGE=""
+        ISO_STORAGE="local"
+        TEMPLATE_STORAGE=""
+        DISK_CACHE="none"
+        ANSIBLE_ENABLED="false"
+        TERRAFORM_ENABLED="false"
+        DOCKER_INTEGRATION="false"
+        K8S_INTEGRATION="false"
+        CICD_ENABLED="false"
+        SSH_KEY_ENABLED="true"
+        SSH_KEY_PATH="~/.ssh/id_rsa.pub"
+        CLOUD_USER_DEFAULT="ubuntu"
+        ADD_SUDO_NOPASSWD="true"
+        SECURITY_FIREWALL="false"
+        DISK_ENCRYPTION="false"
+        CLEANUP_ENABLED="true"
+        CLEANUP_TEMP_DAYS="7"
+        CLEANUP_LOG_DAYS="30"
+        
+        # Clear arrays
+        SELECTED_PACKAGES=()
+        SELECTED_ANSIBLE_PLAYBOOKS=()
+        SELECTED_TERRAFORM_MODULES=()
+        SELECTED_DOCKER_TEMPLATES=()
+        SELECTED_K8S_TEMPLATES=()
+        
+        whiptail --title "Reset Complete" \
+            --msgbox "All settings have been reset to defaults." 8 50
+        
+        log_info "Configuration reset to defaults"
+    fi
+}
+
+# View current settings
+view_current_settings() {
+    local settings_summary="Current Configuration Settings:
+
+VM Configuration:
+  Name: ${VM_NAME:-<not set>}
+  VMID: ${VMID_DEFAULT:-9000}
+  Memory: ${VM_MEMORY:-2048} MB
+  CPU Cores: ${VM_CORES:-2}
+  Disk Size: ${VM_DISK_SIZE:-20G}
+  Storage: ${VM_STORAGE:-local-lvm}
+  BIOS: ${BIOS_TYPE:-seabios}
+  QEMU Agent: ${QEMU_AGENT:-1}
+
+Network Configuration:
+  Type: ${NETWORK_TYPE:-dhcp}
+  Bridge: ${NETWORK_BRIDGE:-vmbr0}
+  VLAN: ${VLAN_ENABLED:-false}
+  VLAN ID: ${VLAN_ID:-100}
+  Static IP: ${STATIC_IP:-<not set>}
+  Gateway: ${STATIC_GATEWAY:-<not set>}
+  DNS: ${STATIC_DNS:-<not set>}
+
+Storage Configuration:
+  Disk Format: ${DISK_FORMAT:-qcow2}
+  ISO Storage: ${ISO_STORAGE:-local}
+  Disk Cache: ${DISK_CACHE:-none}
+
+Automation:
+  Ansible: ${ANSIBLE_ENABLED:-false}
+  Terraform: ${TERRAFORM_ENABLED:-false}
+  Docker: ${DOCKER_INTEGRATION:-false}
+  Kubernetes: ${K8S_INTEGRATION:-false}
+
+Security:
+  SSH Key: ${SSH_KEY_ENABLED:-true}
+  Default User: ${CLOUD_USER_DEFAULT:-ubuntu}
+  Sudo Access: ${ADD_SUDO_NOPASSWD:-true}
+  Firewall: ${SECURITY_FIREWALL:-false}
+  Encryption: ${DISK_ENCRYPTION:-false}
+
+Selected Items:
+  Packages: ${#SELECTED_PACKAGES[@]} selected
+  Ansible Playbooks: ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} selected
+  Terraform Modules: ${#SELECTED_TERRAFORM_MODULES[@]} selected
+  Docker Templates: ${#SELECTED_DOCKER_TEMPLATES[@]} selected
+  K8s Templates: ${#SELECTED_K8S_TEMPLATES[@]} selected"
+    
+    whiptail --title "Current Settings" \
+        --msgbox "$settings_summary" 30 80
+    
+    log_info "Current settings viewed"
+}
+
+# ...existing code...
 #===============================================================================
 # MISSING CORE FUNCTIONS IMPLEMENTATION
 #===============================================================================

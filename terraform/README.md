@@ -32,6 +32,8 @@ terraform apply
 
 ## Example Modules/Scripts
 
+### Core Infrastructure
+
 - `main.tf`: Main VM provisioning logic.
 - `firewall.tf`: Firewall rules and security groups.
 - `network.tf`: Network and subnet configuration.
@@ -40,6 +42,13 @@ terraform apply
 - `variables.tf`: Variable definitions.
 - `outputs.tf`: Output values.
 - `providers.tf`: Provider configuration.
+
+### Container Workloads
+
+- `docker-containers.tf`: Deploy Docker VMs with container workloads.
+- `kubernetes-cluster.tf`: Deploy multi-node Kubernetes cluster.
+- `container-registry.tf`: Deploy private container registry.
+- `monitoring-stack.tf`: Deploy Prometheus/Grafana monitoring stack.
 
 See each module/script for details and variable usage.
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #===============================================================================
 # Proxmox Template Creator
@@ -1066,7 +1066,22 @@ show_main_menu() {
     local choice
 
     while true; do
-        choice=$(whiptail --title "Proxmox Template Creator v$SCRIPT_VERSION" \
+        choice=$(whiptail --title "Main Menu" --menu "Select an option:" 20 60 10 \
+            "1" "Create single template" \
+            "2" "Load configuration" \
+            "3" "View template list" \
+            "0" "Exit" \
+            3>&1 1>&2 2>&3)
+        case $choice in
+            "1") create_single_template ;;
+            "2") load_configuration_file ;;
+            "3") view_template_list ;;
+            "0") break ;;
+            *) log_warn "Invalid option" ;;
+        esac
+    done
+}
+l --title "Proxmox Template Creator v$SCRIPT_VERSION" \
             --menu "Choose an option:" 20 78 10 \
             "1" "Create Single Template" \
             "2" "Create Multiple Templates (Batch)" \
@@ -1667,12 +1682,10 @@ configure_static_ip_defaults() {
 
 # Configure DNS settings
 configure_dns_settings() {
-    DNS_SERVERS=$(whiptail --title "DNS Configuration" \
+    if DNS_SERVERS=$(whiptail --title "DNS Configuration" \
         --inputbox "Default DNS servers (space-separated):" 10 60 \
         "${DNS_SERVERS:-8.8.8.8 8.8.4.4 1.1.1.1}" \
-        3>&1 1>&2 2>&3)
-
-    if [[ $? -eq 0 ]]; then
+        3>&1 1>&2 2>&3); then
         whiptail --title "DNS Updated" \
             --msgbox "Default DNS servers updated to:\n$DNS_SERVERS" 8 60
         log_info "DNS servers updated: $DNS_SERVERS"
@@ -1686,14 +1699,12 @@ configure_firewall_settings() {
         FIREWALL_ENABLED="true"
 
         local fw_policy
-        fw_policy=$(whiptail --title "Firewall Policy" \
+        if fw_policy=$(whiptail --title "Firewall Policy" \
             --menu "Select default firewall policy:" 15 60 8 \
             "ACCEPT" "Allow all traffic (open)" \
             "DROP" "Block all traffic (strict)" \
             "REJECT" "Reject all traffic (notify sender)" \
-            3>&1 1>&2 2>&3)
-
-        if [[ $? -eq 0 ]]; then
+            3>&1 1>&2 2>&3); then
             FIREWALL_POLICY="$fw_policy"
             whiptail --title "Firewall Updated" \
                 --msgbox "Firewall enabled with policy: $FIREWALL_POLICY" 8 60
@@ -3468,16 +3479,12 @@ provision_k8s_templates() {
     # Copy selected templates to container
     log_info "Copying Kubernetes templates to container"
     for template_path in "${SELECTED_K8S_TEMPLATES[@]}"; do
-        if [[ -f "$template_path" ]]; then
-            template_name=$(basename "$template_path")
-            pct push "$k8s_container_id" "$template_path" "/srv/k8s-templates/$template_name" || {
-                log_warn "Failed to copy template: $template_path"
-                continue
-            }
-            log_info "Copied template: $template_name"
-        else
-            log_warn "Template file not found: $template_path"
-        fi
+        template_name=$(basename "$template_path")
+        pct push "$k8s_container_id" "$template_path" "/srv/k8s-templates/$template_name" || {
+            log_warn "Failed to copy template: $template_path"
+            continue
+        }
+        log_info "Copied template: $template_name"
     done
 
     # Set up kubeconfig if provided
@@ -4047,4 +4054,5 @@ select_k8s_template_ui() {
     SELECTED_K8S_TEMPLATES=("$sel")
     K8S_INTEGRATION="true"
     return 0
+}
 }

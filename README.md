@@ -1,6 +1,6 @@
 # Homelab Infrastructure
 
-Access the wiki by clocking this button:
+Access the wiki by clicking this button:
 [![GitBook](https://img.shields.io/badge/GitBook-%23000000.svg?style=for-the-badge&logo=gitbook&logoColor=white)](https://bizarreindustries.gitbook.io/homelab)
 
 ## Introduction

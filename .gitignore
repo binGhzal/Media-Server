@@ -2,6 +2,7 @@
 **/.vscode
 **/.DS_Store
 **/.github/instructions
+**/bin
 
 # Ignore backup files
 **/*.backup

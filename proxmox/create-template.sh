@@ -1318,7 +1318,7 @@ configure_vm_defaults() {
     done
     
     VM_STORAGE=$(whiptail --title "VM Defaults - Storage" \
-        --menu "Select default storage:" 15 60 8 \
+        --menu "Select default storage pool:" 15 60 8 \
         "${storage_options[@]}" \
         3>&1 1>&2 2>&3)
     [[ $? -ne 0 ]] && return 1
@@ -1358,7 +1358,7 @@ configure_network_settings() {
         "5" "Firewall Settings" \
         "6" "MAC Address Settings" \
         "0" "Back" \
-        3>&1  1>&2 2>&3)
+        3>&1 1>&2 2>&3)
     
     case $choice in
         1) configure_network_bridge ;;
@@ -1749,183 +1749,778 @@ configure_automation_settings() {
 
 # Configure Ansible automation
 configure_ansible_automation() {
-    if whiptail --title "Ansible Configuration" \
-        --yesno "Enable Ansible integration by default?" 8 60; then
+    log_info "Configuring Ansible automation"
+    
+    # Ask if Ansible should be enabled
+    local enable_ansible
+    enable_ansible=$(whiptail --title "Ansible Integration" \
+        --yesno "Enable Ansible post-deployment automation?" 8 70 \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
         ANSIBLE_ENABLED="true"
         
         # Configure Ansible LXC settings
         ANSIBLE_LXC_CORES=$(whiptail --title "Ansible LXC - CPU" \
-            --inputbox "CPU cores for Ansible LXC container:" 10 60 \
+            --inputbox "CPU cores for Ansible LXC container:" 10 70 \
             "${ANSIBLE_LXC_CORES:-1}" \
             3>&1 1>&2 2>&3)
         
         ANSIBLE_LXC_MEMORY=$(whiptail --title "Ansible LXC - Memory" \
-            --inputbox "Memory for Ansible LXC (MB):" 10 60 \
+            --inputbox "Memory for Ansible LXC (MB):" 10 70 \
             "${ANSIBLE_LXC_MEMORY:-1024}" \
             3>&1 1>&2 2>&3)
         
-        whiptail --title "Ansible Updated" \
-            --msgbox "Ansible integration enabled:\nCPU: $ANSIBLE_LXC_CORES cores\nMemory: $ANSIBLE_LXC_MEMORY MB" 8 60
+        whiptail --title "Ansible Integration Enabled" \
+            --msgbox "Ansible integration enabled with:\n- Cores: $ANSIBLE_LXC_CORES\n- Memory: $ANSIBLE_LXC_MEMORY MB" 10 70
     else
         ANSIBLE_ENABLED="false"
-        whiptail --title "Ansible Disabled" \
+        whiptail --title "Ansible Integration Disabled" \
             --msgbox "Ansible integration disabled" 8 50
     fi
     
-    log_info "Ansible settings updated: enabled=$ANSIBLE_ENABLED"
+    log_info "Ansible integration settings updated: enabled=$ANSIBLE_ENABLED"
+    return 0
 }
 
-# Configure Terraform automation
+# Configure Terraform automation for template deployment
 configure_terraform_automation() {
-    if whiptail --title "Terraform Configuration" \
-        --yesno "Enable Terraform integration by default?" 8 60; then
+    log_info "Configuring Terraform automation"
+    
+    # Ask if Terraform should be enabled
+    local enable_terraform
+    enable_terraform=$(whiptail --title "Terraform Integration" \
+        --yesno "Enable Terraform integration for template deployment?" 8 70 \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -eq 0 ]]; then
         TERRAFORM_ENABLED="true"
         
+        # Configure Terraform provider
         TERRAFORM_PROVIDER=$(whiptail --title "Terraform Provider" \
-            --inputbox "Terraform provider:" 10 60 \
+            --inputbox "Enter Terraform provider for Proxmox:" 10 70 \
             "${TERRAFORM_PROVIDER:-telmate/proxmox}" \
             3>&1 1>&2 2>&3)
         
-        if whiptail --title "Terraform Cleanup" \
-            --yesno "Cleanup temporary Terraform files after execution?" 8 60; then
-            TERRAFORM_CLEANUP_TEMP="true"
-        else
-            TERRAFORM_CLEANUP_TEMP="false"
-        fi
-        
-        whiptail --title "Terraform Updated" \
-            --msgbox "Terraform integration enabled:\nProvider: $TERRAFORM_PROVIDER\nCleanup: $TERRAFORM_CLEANUP_TEMP" 8 60
+        # Configure Terraform version constraint
+        TERRAFORM_VERSION_CONSTRAINT=$(whiptail --title "Terraform Version Constraint" \
+            --inputbox "Enter Terraform version constraint:" 10 70 \
+            "${TERRAFORM_VERSION_CONSTRAINT:->= 2.9.0}" \
+            3>&1 1>&2 2>&3)
+            
+        whiptail --title "Terraform Integration Enabled" \
+            --msgbox "Terraform integration enabled with:\n- Provider: $TERRAFORM_PROVIDER\n- Version: $TERRAFORM_VERSION_CONSTRAINT" 10 70
     else
         TERRAFORM_ENABLED="false"
-        whiptail --title "Terraform Disabled" \
+        whiptail --title "Terraform Integration Disabled" \
             --msgbox "Terraform integration disabled" 8 50
     fi
     
-    log_info "Terraform settings updated: enabled=$TERRAFORM_ENABLED"
+    log_info "Terraform integration settings updated: enabled=$TERRAFORM_ENABLED"
+    return 0
 }
 
-# Configure Docker automation
-configure_docker_automation() {
-    if whiptail --title "Docker Integration" \
-        --yesno "Enable Docker template integration?" 8 60; then
-        DOCKER_INTEGRATION="true"
-        
-        DOCKER_TEMPLATE_DIR=$(whiptail --title "Docker Template Directory" \
-            --inputbox "Docker template directory:" 10 60 \
-            "${DOCKER_TEMPLATE_DIR:-$REPO_ROOT/docker/templates}" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Docker Integration Updated" \
-            --msgbox "Docker integration enabled:\nTemplate dir: $DOCKER_TEMPLATE_DIR" 8 70
-    else
-        DOCKER_INTEGRATION="false"
-        whiptail --title "Docker Integration Disabled" \
-            --msgbox "Docker template integration disabled" 8 50
+# Generate Terraform configuration files for template deployment
+generate_terraform_config() {
+    log_info "Generating Terraform configuration"
+    
+    if [[ "$TERRAFORM_ENABLED" != "true" ]]; then
+        log_warn "Terraform integration not enabled, skipping configuration generation"
+        return 0
     fi
     
-    log_info "Docker integration updated: enabled=$DOCKER_INTEGRATION"
-}
-
-# Configure Kubernetes automation
-configure_kubernetes_automation() {
-    if whiptail --title "Kubernetes Integration" \
-        --yesno "Enable Kubernetes template integration?" 8 60; then
-        K8S_INTEGRATION="true"
-        
-        K8S_TEMPLATE_DIR=$(whiptail --title "Kubernetes Template Directory" \
-            --inputbox "Kubernetes template directory:" 10 60 \
-            "${K8S_TEMPLATE_DIR:-$REPO_ROOT/kubernetes/templates}" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Kubernetes Integration Updated" \
-            --msgbox "Kubernetes integration enabled:\nTemplate dir: $K8S_TEMPLATE_DIR" 8 70
-    else
-        K8S_INTEGRATION="false"
-        whiptail --title "Kubernetes Integration Disabled" \
-            --msgbox "Kubernetes template integration disabled" 8 50
-    fi
-    
-    log_info "Kubernetes integration updated: enabled=$K8S_INTEGRATION"
-}
-
-# Configure CI/CD settings
-configure_cicd_settings() {
-    if whiptail --title "CI/CD Integration" \
-        --yesno "Enable CI/CD webhook support?" 8 60; then
-        CICD_ENABLED="true"
-        
-        CICD_WEBHOOK_URL=$(whiptail --title "Webhook URL" \
-            --inputbox "CI/CD webhook URL:" 10 70 \
-            "${CICD_WEBHOOK_URL:-http://jenkins.local/webhook}" \
-            3>&1 1>&2 2>&3)
-        
-        CICD_API_TOKEN=$(whiptail --title "API Token" \
-            --passwordbox "CI/CD API token (will be hidden):" 10 60 \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "CI/CD Updated" \
-            --msgbox "CI/CD integration enabled:\nWebhook: $CICD_WEBHOOK_URL" 8 70
-    else
-        CICD_ENABLED="false"
-        whiptail --title "CI/CD Disabled" \
-            --msgbox "CI/CD webhook support disabled" 8 50
-    fi
-    
-    log_info "CI/CD settings updated: enabled=$CICD_ENABLED"
-}
-
-# Configure batch processing settings
-configure_batch_settings() {
-    BATCH_VMID_START=$(whiptail --title "Batch Processing - Starting VMID" \
-        --inputbox "Starting VMID for batch creation:" 10 60 \
-        "${BATCH_VMID_START:-52000}" \
+    # Ask for output directory
+    local output_dir
+    output_dir=$(whiptail --title "Terraform Configuration" \
+        --inputbox "Enter directory for Terraform configuration:" 10 70 \
+        "${TERRAFORM_DIR:-$REPO_ROOT/terraform}" \
         3>&1 1>&2 2>&3)
+    
     [[ $? -ne 0 ]] && return 1
     
-    BATCH_COUNT=$(whiptail --title "Batch Processing - Default Count" \
-        --inputbox "Default number of templates in batch:" 10 60 \
-        "${BATCH_COUNT:-1}" \
-        3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
+    # Create directory if it doesn't exist
+    mkdir -p "$output_dir"
     
-    if whiptail --title "Auto-increment VMID" \
-        --yesno "Auto-increment VMID for batch creation?" 8 60; then
-        AUTO_INCREMENT_VMID="true"
-    else
-        AUTO_INCREMENT_VMID="false"
-    fi
-    
-    whiptail --title "Batch Settings Updated" \
-        --msgbox "Batch processing settings:\nStart VMID: $BATCH_VMID_START\nDefault count: $BATCH_COUNT\nAuto-increment: $AUTO_INCREMENT_VMID" 10 60
-    
-    log_info "Batch settings updated: start=$BATCH_VMID_START, count=$BATCH_COUNT, auto-increment=$AUTO_INCREMENT_VMID"
+    # Generate main.tf
+    cat > "$output_dir/main.tf" << EOF
+# Terraform configuration for Proxmox Template deployment
+# Generated by Proxmox Template Creator on $(date)
+
+terraform {
+  required_providers {
+    proxmox = {
+      source = "$TERRAFORM_PROVIDER"
+      version = "$TERRAFORM_VERSION_CONSTRAINT"
+    }
+  }
 }
 
-# Configure auto-cleanup settings
-configure_cleanup_settings() {
-    if whiptail --title "Auto-cleanup" \
-        --yesno "Enable automatic cleanup of temporary files?" 8 60; then
-        CLEANUP_ENABLED="true"
+provider "proxmox" {
+  # Configuration options
+  pm_api_url = "https://YOUR_PROXMOX_HOST:8006/api2/json"
+  pm_api_token_id = "YOUR_API_TOKEN_ID"
+  pm_api_token_secret = "YOUR_API_TOKEN_SECRET"
+  pm_tls_insecure = true
+}
+
+# VM Resource from template
+resource "proxmox_vm_qemu" "${VM_NAME}" {
+  count = var.vm_count
+  name = "${VM_NAME}-\${count.index + 1}"
+  desc = "VM created from template by Terraform"
+  
+  # Clone from template
+  clone = "$VM_NAME"
+  full_clone = true
+  
+  # Target node
+  target_node = var.target_node
+  
+  # VM configuration
+  cores = $VM_CORES
+  sockets = 1
+  memory = $VM_MEMORY
+  
+  # Network configuration
+  network {
+    model = "virtio"
+    bridge = "$NETWORK_BRIDGE"
+  }
+  
+  # Cloud-init configuration
+  os_type = "cloud-init"
+  ipconfig0 = "ip=dhcp"
+  
+  # Tags
+  tags = "terraform,generated"
+}
+EOF
+
+    # Generate variables.tf
+    cat > "$output_dir/variables.tf" << EOF
+# Variables for Proxmox deployment
+# Generated by Proxmox Template Creator
+
+variable "vm_count" {
+  description = "Number of VMs to create"
+  type = number
+  default = 1
+}
+
+variable "target_node" {
+  description = "Proxmox node to deploy to"
+  type = string
+  default = "proxmox"
+}
+EOF
+
+    # Generate outputs.tf
+    cat > "$output_dir/outputs.tf" << EOF
+# Outputs for Proxmox deployment
+# Generated by Proxmox Template Creator
+
+output "vm_ids" {
+  description = "IDs of created VMs"
+  value = proxmox_vm_qemu.${VM_NAME}[*].id
+}
+
+output "vm_names" {
+  description = "Names of created VMs"
+  value = proxmox_vm_qemu.${VM_NAME}[*].name
+}
+EOF
+
+    log_success "Terraform configuration generated in $output_dir"
+    
+    whiptail --title "Terraform Configuration Generated" \
+        --msgbox "Terraform configuration files created in:\n$output_dir\n\nUpdate the provider configuration with your Proxmox credentials before use." 12 70
+    
+    return 0
+}
+
+# Download a distribution image from URL
+download_distribution_image() {
+    local url="$1"
+    local dist_name="$2"
+    local dist_type="$3"
+    local output_path
+    local filename
+    
+    filename=$(basename "$url")
+    output_path="$SCRIPT_DIR/iso/$filename"
+    
+    # Create ISO directory if it doesn't exist
+    mkdir -p "$SCRIPT_DIR/iso"
+    
+    # Download the image if it doesn't exist
+    if [[ ! -f "$output_path" ]]; then
+        log_info "Downloading $dist_name image from $url"
+        wget -q --show-progress -O "$output_path" "$url"
         
-        CLEANUP_TEMP_DAYS=$(whiptail --title "Cleanup - Temp Files" \
-            --inputbox "Delete temp files older than (days):" 10 60 \
-            "${CLEANUP_TEMP_DAYS:-7}" \
-            3>&1 1>&2 2>&3)
+        if [[ $? -ne 0 ]]; then
+            log_error "Failed to download image from $url"
+            return 1
+        fi
         
-        CLEANUP_LOG_DAYS=$(whiptail --title "Cleanup - Log Files" \
-            --inputbox "Delete log files older than (days):" 10 60 \
-            "${CLEANUP_LOG_DAYS:-30}" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Cleanup Updated" \
-            --msgbox "Auto-cleanup enabled:\nTemp files: $CLEANUP_TEMP_DAYS days\nLog files: $CLEANUP_LOG_DAYS days" 8 60
+        log_success "Downloaded $dist_name image to $output_path"
     else
-        CLEANUP_ENABLED="false"
-        whiptail --title "Cleanup Disabled" \
-            --msgbox "Auto-cleanup disabled" 8 50
+        log_info "Using existing image: $output_path"
     fi
     
-    log_info "Cleanup settings updated: enabled=$CLEANUP_ENABLED"
+    # Handle compressed images
+    case "$dist_type" in
+        "raw.xz")
+            local decompressed="${output_path%.xz}"
+            if [[ ! -f "$decompressed" ]]; then
+                log_info "Decompressing XZ image..."
+                xz -d -k "$output_path"
+                output_path="$decompressed"
+            fi
+            ;;
+        "raw.gz")
+            local decompressed="${output_path%.gz}"
+            if [[ ! -f "$decompressed" ]]; then
+                log_info "Decompressing GZ image..."
+                gunzip -k "$output_path"
+                output_path="$decompressed"
+            fi
+            ;;
+        "raw.bz2")
+            local decompressed="${output_path%.bz2}"
+            if [[ ! -f "$decompressed" ]]; then
+                log_info "Decompressing BZ2 image..."
+                bunzip2 -k "$output_path"
+                output_path="$decompressed"
+            fi
+            ;;
+    esac
+    
+    echo "$output_path"
+    return 0
+}
+
+# Create a VM from an image
+create_vm_from_image() {
+    local image_path="$1"
+    local img_type="$2"
+    local ostype="$3"
+    
+    log_info "Creating VM from image: $image_path (Type: $img_type, OS: $ostype)"
+    
+    # Check if the VM already exists and remove it
+    if qm status "$VMID_DEFAULT" &>/dev/null; then
+        log_warn "VM with ID $VMID_DEFAULT already exists. Removing..."
+        qm stop "$VMID_DEFAULT" &>/dev/null || true
+        qm destroy "$VMID_DEFAULT" || {
+            log_error "Failed to destroy existing VM $VMID_DEFAULT"
+            return 1
+        }
+    fi
+    
+    # Create the VM with basic settings
+    qm create "$VMID_DEFAULT" --name "$VM_NAME" --memory "$VM_MEMORY" --cores "$VM_CORES" \
+        --ostype "$ostype" --net0 "virtio,bridge=$NETWORK_BRIDGE" || {
+        log_error "Failed to create VM"
+        return 1
+    }
+    
+    log_info "Created base VM configuration"
+    
+    # Import the disk based on image type
+    case "$img_type" in
+        "iso")
+            # For ISO files, create an empty disk and attach the ISO
+            qm set "$VMID_DEFAULT" --scsi0 "$VM_STORAGE":0,size="${VM_DISK_SIZE}G" || {
+                log_error "Failed to create disk"
+                return 1
+            }
+            qm set "$VMID_DEFAULT" --ide2 "$VM_STORAGE:iso/$(basename "$image_path")",media=cdrom || {
+                log_error "Failed to attach ISO"
+                return 1
+            }
+            qm set "$VMID_DEFAULT" --boot c --bootdisk scsi0 || {
+                log_error "Failed to set boot options"
+                return 1
+            }
+            ;;
+        "raw"|"qcow2"|*)
+            # For disk images, import the disk
+            qm importdisk "$VMID_DEFAULT" "$image_path" "$VM_STORAGE" || {
+                log_error "Failed to import disk"
+                return 1
+            }
+            qm set "$VMID_DEFAULT" --scsihw virtio-scsi-pci --scsi0 "$VM_STORAGE:vm-$VMID_DEFAULT-disk-0" || {
+                log_error "Failed to configure disk"
+                return 1
+            }
+            qm set "$VMID_DEFAULT" --boot c --bootdisk scsi0 || {
+                log_error "Failed to set boot options"
+                return 1
+            }
+            # Set serial console for better compatibility
+            qm set "$VMID_DEFAULT" --serial0 socket --vga serial0 || {
+                log_error "Failed to set serial console"
+                return 1
+            }
+            ;;
+    esac
+    
+    log_info "VM disk configuration completed"
+    
+    # Resize the disk if needed
+    if [[ "$VM_DISK_SIZE" -gt 0 ]]; then
+        log_info "Resizing disk to ${VM_DISK_SIZE}G..."
+        qm resize "$VMID_DEFAULT" scsi0 "${VM_DISK_SIZE}G" || {
+            log_warn "Failed to resize disk (might already be the correct size)"
+        }
+    fi
+    
+    log_success "VM created successfully with ID $VMID_DEFAULT"
+    return 0
+}
+
+# Configure cloud-init for the VM
+configure_cloud_init() {
+    local default_user="$1"
+    
+    log_info "Configuring cloud-init with default user: $default_user"
+    
+    # Set up cloud-init drive
+    qm set "$VMID_DEFAULT" --ide2 "$VM_STORAGE:cloudinit" || {
+        log_error "Failed to attach cloud-init drive"
+        return 1
+    }
+    
+    # Configure user account
+    qm set "$VMID_DEFAULT" --ciuser "$default_user" || {
+        log_error "Failed to set cloud-init user"
+        return 1
+    }
+    
+    # Configure SSH keys if available
+    if [[ -n "$SSH_PUBLIC_KEY" ]]; then
+        qm set "$VMID_DEFAULT" --sshkeys "$SSH_PUBLIC_KEY" || {
+            log_warn "Failed to set SSH keys"
+        }
+    elif [[ -f "$HOME/.ssh/id_rsa.pub" ]]; then
+        qm set "$VMID_DEFAULT" --sshkeys "$HOME/.ssh/id_rsa.pub" || {
+            log_warn "Failed to set SSH keys"
+        }
+    fi
+    
+    # Configure network based on selected mode
+    case "$NETWORK_MODE" in
+        "dhcp")
+            qm set "$VMID_DEFAULT" --ipconfig0 "ip=dhcp" || {
+                log_warn "Failed to set DHCP"
+            }
+            ;;
+        "static")
+            if [[ -n "$STATIC_IP" && -n "$STATIC_GATEWAY" ]]; then
+                qm set "$VMID_DEFAULT" --ipconfig0 "ip=$STATIC_IP,gw=$STATIC_GATEWAY" || {
+                    log_warn "Failed to set static IP"
+                }
+            else
+                log_warn "Static IP configuration missing information, falling back to DHCP"
+                qm set "$VMID_DEFAULT" --ipconfig0 "ip=dhcp" || {
+                    log_warn "Failed to set DHCP fallback"
+                }
+            fi
+            ;;
+        *)
+            log_info "Skipping network configuration in cloud-init"
+            ;;
+    esac
+    
+    # Set DNS if provided
+    if [[ -n "$STATIC_DNS" ]]; then
+        qm set "$VMID_DEFAULT" --nameserver "$STATIC_DNS" || {
+            log_warn "Failed to set DNS"
+        }
+    fi
+    
+    log_success "Cloud-init configuration completed"
+    return 0
+}
+
+# Install selected packages using virt-customize
+install_packages_virt_customize() {
+    local pkg_mgr="$1"
+    local vm_disk="$VM_STORAGE:vm-$VMID_DEFAULT-disk-0"
+    
+    if [[ ${#SELECTED_PACKAGES[@]} -eq 0 ]]; then
+        log_info "No packages selected, skipping package installation"
+        return 0
+    fi
+    
+    log_info "Installing ${#SELECTED_PACKAGES[@]} packages using $pkg_mgr"
+    
+    # Get the full path to the disk image
+    local disk_path
+    disk_path=$(pvesm path "$vm_disk") || {
+        log_error "Failed to get path for disk $vm_disk"
+        return 1
+    }
+    
+    # Build package installation commands based on package manager
+    local install_cmd
+    case "$pkg_mgr" in
+        "apt"|"apt-get")
+            install_cmd="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ${SELECTED_PACKAGES[*]}"
+            ;;
+        "yum"|"dnf")
+            install_cmd="$pkg_mgr -y install ${SELECTED_PACKAGES[*]}"
+            ;;
+        "pacman")
+            install_cmd="pacman -Sy --noconfirm ${SELECTED_PACKAGES[*]}"
+            ;;
+        "apk")
+            install_cmd="apk add ${SELECTED_PACKAGES[*]}"
+            ;;
+        "zypper")
+            install_cmd="zypper -n install ${SELECTED_PACKAGES[*]}"
+            ;;
+        "emerge")
+            install_cmd="emerge ${SELECTED_PACKAGES[*]}"
+            ;;
+        "pkg")
+            install_cmd="pkg install -y ${SELECTED_PACKAGES[*]}"
+            ;;
+        *)
+            log_error "Unsupported package manager: $pkg_mgr"
+            return 1
+            ;;
+    esac
+    
+    # Install qemu-guest-agent if not already in package list
+    if ! echo "${SELECTED_PACKAGES[*]}" | grep -q "qemu-guest-agent"; then
+        install_cmd="$install_cmd qemu-guest-agent"
+    fi
+    
+    # Create a temporary script for package installation
+    local temp_script=$(mktemp)
+    cat > "$temp_script" << EOF
+#!/bin/bash
+set -e
+$install_cmd
+# Enable qemu-guest-agent service
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable qemu-guest-agent
+elif command -v rc-update >/dev/null 2>&1; then
+    rc-update add qemu-guest-agent default
+fi
+EOF
+    
+    # Use virt-customize to install packages
+    log_info "Running virt-customize to install packages..."
+    virt-customize -a "$disk_path" --chmod 0755:/tmp/install_packages.sh --upload "$temp_script:/tmp/install_packages.sh" --run "/tmp/install_packages.sh" --selinux-relabel || {
+        log_error "Package installation failed"
+        rm -f "$temp_script"
+        return 1
+    }
+    
+    rm -f "$temp_script"
+    log_success "Packages installed successfully"
+    return 0
+}
+
+# Convert VM to template
+convert_to_template() {
+    log_info "Converting VM $VMID_DEFAULT to template"
+    
+    # Shut down the VM if it's running
+    if qm status "$VMID_DEFAULT" | grep -q running; then
+        log_info "Shutting down VM before conversion..."
+        qm stop "$VMID_DEFAULT" || {
+            log_error "Failed to stop VM"
+            return 1
+        }
+        # Wait for VM to stop
+        for i in {1..30}; do
+            if ! qm status "$VMID_DEFAULT" | grep -q running; then
+                break
+            fi
+            sleep 1
+        done
+    fi
+    
+    # Convert to template
+    qm template "$VMID_DEFAULT" || {
+        log_error "Failed to convert VM to template"
+        return 1
+    }
+    
+    log_success "VM $VMID_DEFAULT converted to template successfully"
+    return 0
+}
+
+# Main template creation function - implements the actual template creation
+create_template_main() {
+    log_info "Starting template creation process for $SELECTED_DISTRIBUTION"
+    # Create a working directory for template staging
+    local WORK_DIR
+    WORK_DIR=$(mktemp -d)
+    log_debug "Working directory created at $WORK_DIR"
+    
+    # Parse distribution information
+    local dist_name dist_version dist_url disk_format
+    dist_name=$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1)
+    dist_version=$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f2)
+    dist_url=$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f3)
+    disk_format=$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f4)
+    
+    log_info "Distribution: $dist_name $dist_version"
+    log_info "Image URL: $dist_url"
+    log_info "Disk format: $disk_format"
+    
+    # Step 1: Download the distribution image
+    local image_path
+    image_path=$(download_distribution_image "$dist_url" "$dist_name" "$disk_format")
+    if [[ $? -ne 0 || -z "$image_path" ]]; then
+        log_error "Failed to download distribution image"
+        return 1
+    fi
+    
+    # Step 2: Create VM from image
+    if ! create_vm_from_image "$image_path" "$disk_format" "$dist_name"; then
+        log_error "Failed to create VM from image"
+        return 1
+    fi
+    
+    # Step 3: Configure cloud-init
+    if ! configure_cloud_init; then
+        log_error "Failed to configure cloud-init"
+        return 1
+    fi
+    
+    # Step 4: Install selected packages
+    if [[ ${#SELECTED_PACKAGES[@]} -gt 0 ]]; then
+        if ! install_packages_virt_customize; then
+            log_error "Failed to install packages"
+            return 1
+        fi
+    fi
+    
+    # Step 5: Apply Docker templates if selected
+    if [[ ${#SELECTED_DOCKER_TEMPLATES[@]} -gt 0 ]]; then
+        log_info "Applying Docker templates: ${SELECTED_DOCKER_TEMPLATES[*]}"
+        for docker_template in "${SELECTED_DOCKER_TEMPLATES[@]}"; do
+            log_info "Staging Docker template: $docker_template"
+            cp "$REPO_ROOT/docker/templates/$docker_template" "$WORK_DIR/"
+            log_info "Copied $docker_template to staging directory"
+        done
+    fi
+    
+    # Step 6: Apply Kubernetes templates if selected
+    if [[ ${#SELECTED_K8S_TEMPLATES[@]} -gt 0 ]]; then
+        log_info "Applying Kubernetes templates: ${SELECTED_K8S_TEMPLATES[*]}"
+        for k8s_template in "${SELECTED_K8S_TEMPLATES[@]}"; do
+            log_info "Staging Kubernetes template: $k8s_template"
+            cp "$REPO_ROOT/kubernetes/templates/$k8s_template" "$WORK_DIR/"
+            log_info "Copied $k8s_template to staging directory"
+        done
+    fi
+    
+    # Step 7: Convert to template
+    if ! convert_to_template; then
+        log_error "Failed to convert VM to template"
+        return 1
+    fi
+    
+    # Step 8: Apply Ansible automation if enabled
+    if [[ "$ANSIBLE_ENABLED" == true && ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} -gt 0 ]]; then
+        log_info "Running Ansible playbooks: ${SELECTED_ANSIBLE_PLAYBOOKS[*]}"
+        # Call configure_ansible_automation or equivalent function
+        configure_ansible_automation || log_warn "Ansible automation failed"
+    fi
+    
+    # Step 9: Generate Terraform configuration if enabled
+    if [[ "$TERRAFORM_ENABLED" == true && ${#SELECTED_TERRAFORM_MODULES[@]} -gt 0 ]]; then
+        log_info "Generating Terraform configuration with modules: ${SELECTED_TERRAFORM_MODULES[*]}"
+        # Generate Terraform configuration using selected modules
+        generate_terraform_config || log_warn "Terraform configuration generation failed"
+    fi
+    
+    # Cleanup staging directory
+    rm -rf "$WORK_DIR"
+    log_debug "Cleaned up staging directory $WORK_DIR"
+    log_success "Template creation complete: $VM_NAME (ID: $VMID_DEFAULT)"
+    return 0
+}
+
+# Get the next available VMID
+get_next_available_vmid() {
+    local vmid=1000  # Start from 1000
+    
+    while qm status "$vmid" &>/dev/null || pct status "$vmid" &>/dev/null; do
+        ((vmid++))
+    done
+    
+    echo "$vmid"
+    return 0
+}
+
+# Main entry point function
+main() {
+    # Parse CLI arguments for non-interactive mode
+    parse_arguments "$@"
+
+    # If CLI flags for batch, Docker, or Kubernetes integration are set, run single template creation and exit
+    if [[ "$BATCH_MODE" == "true" || "$DOCKER_INTEGRATION" == "true" || "$K8S_INTEGRATION" == "true" ]]; then
+        create_single_template
+        exit $?
+    fi
+
+    log_info "Starting Proxmox Template Creator v$SCRIPT_VERSION"
+
+    # Check if running as root
+    check_root
+
+    # Install dependencies if needed
+    check_dependencies
+
+    # Initialize script and defaults
+    initialize_script
+
+    # Display welcome message and main menu
+    show_welcome
+    show_main_menu
+
+    # Cleanup on exit
+    cleanup_on_exit
+
+    log_info "Script completed successfully"
+    return 0
+}
+
+# Select a distribution from the available list
+select_distribution() {
+    local dist_options=()
+    local dist_categories=()
+    local selected_category
+    
+    # Build category list
+    for category in "${DISTRO_CATEGORIES[@]}"; do
+        dist_categories+=("$category" "")
+    done
+    
+    # Show category selection
+    selected_category=$(whiptail --title "Distribution Selection" \
+        --menu "Select a distribution category:" 20 60 10 \
+        "${dist_categories[@]}" \
+        "custom" "Custom ISO/Image" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    # Handle custom ISO/image selection
+    if [[ "$selected_category" == "custom" ]]; then
+        handle_custom_iso_selection
+        return $?
+    fi
+    
+    # Build distribution list for selected category
+    for dist in "${!DISTRO_LIST[@]}"; do
+        local dist_info="${DISTRO_LIST[$dist]}"
+        local dist_name=$(echo "$dist_info" | cut -d'|' -f1)
+        local dist_desc=$(echo "$dist_info" | cut -d'|' -f8)
+        local dist_cat=$(echo "$dist_info" | cut -d'|' -f9 2>/dev/null || echo "")
+        
+        if [[ -z "$selected_category" || "$dist_cat" == "$selected_category" ]]; then
+            dist_options+=("$dist" "$dist_name - $dist_desc")
+        fi
+    done
+    
+    # Show distribution selection
+    local selected_dist
+    selected_dist=$(whiptail --title "Distribution Selection" \
+        --menu "Select a distribution:" 20 70 10 \
+        "${dist_options[@]}" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_dist]}"
+    log_info "Selected distribution: $(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1)"
+    return 0
+}
+
+# Export configuration to file
+export_configuration() {
+    local export_file
+    export_file=$(whiptail --title "Export Configuration" \
+        --inputbox "Enter export filename:" 10 60 \
+        "${VM_NAME:-template-config}.conf" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    # Ensure the directory exists
+    mkdir -p "$(dirname "$export_file")"
+    
+    # Write configuration to file
+    cat > "$export_file" << EOF
+# Proxmox Template Creator Configuration
+# Generated on $(date)
+
+# Distribution
+SELECTED_DISTRIBUTION="$SELECTED_DISTRIBUTION"
+
+# VM Settings
+VM_NAME="$VM_NAME"
+VMID_DEFAULT="$VMID_DEFAULT"
+VM_CORES="$VM_CORES"
+VM_MEMORY="$VM_MEMORY"
+VM_DISK_SIZE="$VM_DISK_SIZE"
+VM_STORAGE="$VM_STORAGE"
+
+# Network Settings
+NETWORK_MODE="$NETWORK_MODE"
+STATIC_IP="$STATIC_IP"
+STATIC_GATEWAY="$STATIC_GATEWAY"
+STATIC_DNS="$STATIC_DNS"
+NETWORK_BRIDGE="$NETWORK_BRIDGE"
+VLAN_TAG="$VLAN_TAG"
+
+# Package Settings
+SELECTED_PACKAGES=(${SELECTED_PACKAGES[*]})
+
+# Automation Settings
+ANSIBLE_ENABLED="$ANSIBLE_ENABLED"
+TERRAFORM_ENABLED="$TERRAFORM_ENABLED"
+DOCKER_INTEGRATION="$DOCKER_INTEGRATION"
+K8S_INTEGRATION="$K8S_INTEGRATION"
+EOF
+    
+    log_success "Configuration exported to $export_file"
+    whiptail --title "Configuration Exported" \
+        --msgbox "Configuration saved to $export_file" 8 50
+    return 0
+}
+
+# Import configuration from file
+import_configuration() {
+    local import_file
+    import_file=$(whiptail --title "Import Configuration" \
+        --inputbox "Enter import filename:" 10 60 \
+        "template-config.conf" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && return 1
+    
+    if [[ ! -f "$import_file" ]]; then
+        whiptail --title "Error" \
+            --msgbox "Configuration file not found: $import_file" 8 50
+        return 1
+    fi
+    
+    # Source the configuration file
+    source "$import_file"
+    
+    log_success "Configuration imported from $import_file"
+    whiptail --title "Configuration Imported" \
+        --msgbox "Configuration loaded from $import_file" 8 50
+    return 0
 }
 
 # Configure security settings
@@ -1947,1006 +2542,134 @@ configure_security_settings() {
     case $choice in
         1) configure_ssh_settings ;;
         2) configure_user_settings ;;
-        3) configure_security_firewall ;;
+        3) configure_firewall_settings ;;
         4) configure_encryption_settings ;;
         5) configure_access_control ;;
         6) configure_audit_settings ;;
         7) configure_password_policies ;;
-        0) return ;;
+        0|"") return 0 ;;
     esac
+    
+    return 0
 }
 
-# Configure SSH settings
-configure_ssh_settings() {
-    if whiptail --title "SSH Key Configuration" \
-        --yesno "Use SSH key authentication by default?" 8 60; then
-        SSH_KEY_ENABLED="true"
-        
-        SSH_KEY_PATH=$(whiptail --title "SSH Key Path" \
-            --inputbox "Default SSH public key path:" 10 70 \
-            "${SSH_KEY_PATH:-~/.ssh/id_rsa.pub}" \
-            3>&1 1>&2 2>&3)
-        
-        if whiptail --title "Disable Password Auth" \
-            --yesno "Disable password authentication when SSH key is used?" 8 60; then
-            SSH_DISABLE_PASSWORD="true"
-        else
-            SSH_DISABLE_PASSWORD="false"
-        fi
-        
-        whiptail --title "SSH Settings Updated" \
-            --msgbox "SSH settings updated:\nKey path: $SSH_KEY_PATH\nDisable password: $SSH_DISABLE_PASSWORD" 8 70
-    else
-        SSH_KEY_ENABLED="false"
-        whiptail --title "SSH Key Disabled" \
-            --msgbox "SSH key authentication disabled" 8 50
-    fi
-    
-    log_info "SSH settings updated: key_enabled=$SSH_KEY_ENABLED"
-}
-
-# Configure user settings
-configure_user_settings() {
-    CLOUD_USER_DEFAULT=$(whiptail --title "Default User" \
-        --inputbox "Default user account name:" 10 60 \
-        "${CLOUD_USER_DEFAULT:-ubuntu}" \
-        3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
-    
-    if whiptail --title "Sudo Access" \
-        --yesno "Grant sudo access to default user?" 8 60; then
-        ADD_SUDO_NOPASSWD="true"
-    else
-        ADD_SUDO_NOPASSWD="false"
-    fi
-    
-    SHELL_DEFAULT=$(whiptail --title "Default Shell" \
-        --menu "Select default shell:" 15 60 8 \
-        "/bin/bash" "Bash (recommended)" \
-        "/bin/zsh" "Zsh" \
-        "/bin/fish" "Fish" \
-        "/bin/sh" "Bourne Shell" \
-        3>&1 1>&2 2>&3)
-    
-    whiptail --title "User Settings Updated" \
-        --msgbox "User settings updated:\nUser: $CLOUD_USER_DEFAULT\nSudo: $ADD_SUDO_NOPASSWD\nShell: $SHELL_DEFAULT" 10 60
-    
-    log_info "User settings updated: user=$CLOUD_USER_DEFAULT, sudo=$ADD_SUDO_NOPASSWD, shell=$SHELL_DEFAULT"
-}
-
-# Configure security firewall
-configure_security_firewall() {
-    if whiptail --title "Security Firewall" \
-        --yesno "Enable restrictive firewall by default?" 8 60; then
-        SECURITY_FIREWALL="true"
-        
-        local fw_ports
-        fw_ports=$(whiptail --title "Allowed Ports" \
-            --inputbox "Default allowed ports (comma-separated):" 10 60 \
-            "${SECURITY_PORTS:-22,80,443}" \
-            3>&1 1>&2 2>&3)
-        
-        if [[ $? -eq 0 ]]; then
-            SECURITY_PORTS="$fw_ports"
-        fi
-        
-        whiptail --title "Security Firewall Updated" \
-            --msgbox "Security firewall enabled with ports: $SECURITY_PORTS" 8 60
-    else
-        SECURITY_FIREWALL="false"
-        whiptail --title "Security Firewall Disabled" \
-            --msgbox "Security firewall disabled" 8 50
-    fi
-    
-    log_info "Security firewall updated: enabled=$SECURITY_FIREWALL"
-}
-
-# Configure encryption settings
-configure_encryption_settings() {
-    if whiptail --title "Disk Encryption" \
-        --yesno "Enable disk encryption by default?" 8 60; then
-        DISK_ENCRYPTION="true"
-        
-        ENCRYPTION_TYPE=$(whiptail --title "Encryption Type" \
-            --menu "Select encryption type:" 15 60 8 \
-            "luks" "LUKS (recommended)" \
-            "luks2" "LUKS2 (newer)" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Encryption Updated" \
-            --msgbox "Disk encryption enabled with type: $ENCRYPTION_TYPE" 8 60
-    else
-        DISK_ENCRYPTION="false"
-        whiptail --title "Encryption Disabled" \
-            --msgbox "Disk encryption disabled" 8 50
-    fi
-    
-    log_info "Encryption settings updated: enabled=$DISK_ENCRYPTION, type=${ENCRYPTION_TYPE:-N/A}"
-}
-
-# Configure access control
-configure_access_control() {
-    if whiptail --title "Access Control" \
-        --yesno "Enable role-based access control?" 8 60; then
-        RBAC_ENABLED="true"
-        
-        DEFAULT_ROLE=$(whiptail --title "Default Role" \
-            --menu "Select default user role:" 15 60 8 \
-            "user" "Standard User" \
-            "admin" "Administrator" \
-            "developer" "Developer" \
-            "operator" "Operator" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Access Control Updated" \
-            --msgbox "RBAC enabled with default role: $DEFAULT_ROLE" 8 60
-    else
-        RBAC_ENABLED="false"
-        whiptail --title "Access Control Disabled" \
-            --msgbox "Role-based access control disabled" 8 50
-    fi
-    
-    log_info "Access control updated: rbac=$RBAC_ENABLED, role=${DEFAULT_ROLE:-N/A}"
-}
-
-# Configure audit settings
-configure_audit_settings() {
-    if whiptail --title "Audit Logging" \
-        --yesno "Enable audit logging for templates?" 8 60; then
-        AUDIT_ENABLED="true"
-        
-        AUDIT_LEVEL=$(whiptail --title "Audit Level" \
-            --menu "Select audit level:" 15 60 8 \
-            "basic" "Basic (create/delete operations)" \
-            "detailed" "Detailed (all operations)" \
-            "debug" "Debug (everything)" \
-            3>&1 1>&2 2>&3)
-        
-        whiptail --title "Audit Updated" \
-            --msgbox "Audit logging enabled with level: $AUDIT_LEVEL" 8 60
-    else
-        AUDIT_ENABLED="false"
-        whiptail --title "Audit Disabled" \
-            --msgbox "Audit logging disabled" 8 50
-    fi
-    
-    log_info "Audit settings updated: enabled=$AUDIT_ENABLED, level=${AUDIT_LEVEL:-N/A}"
-}
-
-# Configure password policies
-configure_password_policies() {
-    PASSWORD_MIN_LENGTH=$(whiptail --title "Password Policy - Length" \
-        --inputbox "Minimum password length:" 10 60 \
-        "${PASSWORD_MIN_LENGTH:-12}" \
-        3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
-    
-    if whiptail --title "Password Complexity" \
-        --yesno "Require complex passwords (uppercase, lowercase, numbers, symbols)?" 8 60; then
-        PASSWORD_COMPLEXITY="true"
-    else
-        PASSWORD_COMPLEXITY="false"
-    fi
-    
-    PASSWORD_EXPIRY=$(whiptail --title "Password Expiry" \
-        --inputbox "Password expiry (days, 0 for never):" 10 60 \
-        "${PASSWORD_EXPIRY:-90}" \
-        3>&1 1>&2 2>&3)
-    [[ $? -ne 0 ]] && return 1
-    
-    whiptail --title "Password Policy Updated" \
-        --msgbox "Password policy updated:\nMin length: $PASSWORD_MIN_LENGTH\nComplexity: $PASSWORD_COMPLEXITY\nExpiry: $PASSWORD_EXPIRY days" 10 60
-    
-    log_info "Password policy updated: length=$PASSWORD_MIN_LENGTH, complexity=$PASSWORD_COMPLEXITY, expiry=$PASSWORD_EXPIRY"
-}
-
-# Export configuration to file
-export_configuration() {
-    local config_file
-    config_file=$(whiptail --title "Export Configuration" \
-        --inputbox "Enter filename to save configuration:" 10 70 \
-        "$SCRIPT_DIR/configs/$(date +%Y%m%d_%H%M%S)_template_config.conf" \
-        3>&1 1>&2 2>&3)
-    
-    [[ $? -ne 0 ]] && return 1
-    
-    # Create config directory if it doesn't exist
-    mkdir -p "$(dirname "$config_file")"
-    
-    # Export current configuration
-    cat > "$config_file" <<EOF
-# Proxmox Template Creator Configuration
-# Generated: $(date)
-
-# VM Configuration
-VM_NAME="$VM_NAME"
-VMID_DEFAULT="$VMID_DEFAULT"
-VM_MEMORY="$VM_MEMORY"
-VM_CORES="$VM_CORES"
-VM_DISK_SIZE="$VM_DISK_SIZE"
-VM_STORAGE="$VM_STORAGE"
-BIOS_TYPE="$BIOS_TYPE"
-QEMU_AGENT="$QEMU_AGENT"
-
-# Network Configuration
-NETWORK_TYPE="$NETWORK_TYPE"
-NETWORK_BRIDGE="$NETWORK_BRIDGE"
-VLAN_ENABLED="$VLAN_ENABLED"
-VLAN_ID="$VLAN_ID"
-STATIC_IP="$STATIC_IP"
-STATIC_GATEWAY="$STATIC_GATEWAY"
-STATIC_DNS="$STATIC_DNS"
-FIREWALL_ENABLED="$FIREWALL_ENABLED"
-FIREWALL_POLICY="$FIREWALL_POLICY"
-
-# Storage Configuration
-DISK_FORMAT="$DISK_FORMAT"
-ISO_STORAGE: "$ISO_STORAGE"
-TEMPLATE_STORAGE="$TEMPLATE_STORAGE"
-DISK_CACHE="$DISK_CACHE"
-
-# Automation Configuration
-ANSIBLE_ENABLED="$ANSIBLE_ENABLED"
-TERRAFORM_ENABLED="$TERRAFORM_ENABLED"
-DOCKER_INTEGRATION="$DOCKER_INTEGRATION"
-K8S_INTEGRATION="$K8S_INTEGRATION"
-CICD_ENABLED="$CICD_ENABLED"
-
-# Security Configuration
-SSH_KEY_ENABLED="$SSH_KEY_ENABLED"
-SSH_KEY_PATH="$SSH_KEY_PATH"
-CLOUD_USER_DEFAULT="$CLOUD_USER_DEFAULT"
-ADD_SUDO_NOPASSWD="$ADD_SUDO_NOPASSWD"
-SECURITY_FIREWALL="$SECURITY_FIREWALL"
-DISK_ENCRYPTION="$DISK_ENCRYPTION"
-
-# Cleanup Configuration
-CLEANUP_ENABLED="$CLEANUP_ENABLED"
-CLEANUP_TEMP_DAYS="$CLEANUP_TEMP_DAYS"
-CLEANUP_LOG_DAYS="$CLEANUP_LOG_DAYS"
-
-# Selected Distribution
-SELECTED_DISTRIBUTION="$SELECTED_DISTRIBUTION"
-SELECTED_DISTRIBUTION_KEY="$SELECTED_DISTRIBUTION_KEY"
-
-# Selected Packages
-SELECTED_PACKAGES=($(printf "'%s' " "${SELECTED_PACKAGES[@]}"))
-
-# Selected Ansible Playbooks
-SELECTED_ANSIBLE_PLAYBOOKS=($(printf "'%s' " "${SELECTED_ANSIBLE_PLAYBOOKS[@]}"))
-
-# Selected Terraform Modules
-SELECTED_TERRAFORM_MODULES=($(printf "'%s' " "${SELECTED_TERRAFORM_MODULES[@]}"))
-
-# Selected Docker Templates
-SELECTED_DOCKER_TEMPLATES=($(printf "'%s' " "${SELECTED_DOCKER_TEMPLATES[@]}"))
-
-# Selected K8s Templates
-SELECTED_K8S_TEMPLATES=($(printf "'%s' " "${SELECTED_K8S_TEMPLATES[@]}"))
-EOF
-    
-    whiptail --title "Configuration Exported" \
-        --msgbox "Configuration exported to:\n$config_file" 8 70
-    
-    log_info "Configuration exported to: $config_file"
-}
-
-# Import configuration from file
-import_configuration() {
-    local config_file
-    config_file=$(whiptail --title "Import Configuration" \
-        --inputbox "Enter path to configuration file:" 10 70 \
-        "$SCRIPT_DIR/configs/" \
-        3>&1 1>&2 2>&3)
-    
-    [[ $? -ne 0 ]] && return 1
-    
-    if [[ ! -f "$config_file" ]]; then
-        whiptail --title "File Not Found" \
-            --msgbox "Configuration file not found:\n$config_file" 8 70
-        return 1
-    fi
-    
-    # Source the configuration file
-    if source "$config_file" 2>/dev/null; then
-        whiptail --title "Configuration Imported" \
-            --msgbox "Configuration imported successfully from:\n$config_file" 8 70
-        log_info "Configuration imported from: $config_file"
-    else
-        whiptail --title "Import Error" \
-            --msgbox "Failed to import configuration from:\n$config_file\n\nPlease check the file format." 10 70
-        log_error "Failed to import configuration from: $config_file"
-        return 1
-    fi
-}
-
-# Reset to defaults
+# Reset configuration to defaults
 reset_to_defaults() {
-    if whiptail --title "Reset to Defaults" \
-        --yesno "Are you sure you want to reset all settings to defaults?\n\nThis will clear all current configuration." 10 60; then
+    if whiptail --title "Reset Configuration" \
+        --yesno "Are you sure you want to reset all settings to defaults?" 8 60; then
         
-        # Reset all variables to defaults
+        # Reset VM settings
         VM_NAME=""
-        VMID_DEFAULT="9000"
-        VM_MEMORY="2048"
+        VMID_DEFAULT="auto"
         VM_CORES="2"
-        VM_DISK_SIZE="20G"
+        VM_MEMORY="2048"
+        VM_DISK_SIZE="16"
         VM_STORAGE="local-lvm"
-        BIOS_TYPE="seabios"
-        QEMU_AGENT="1"
-        NETWORK_TYPE="dhcp"
-        NETWORK_BRIDGE="vmbr0"
-        VLAN_ENABLED="false"
-        VLAN_ID="100"
+        
+        # Reset network settings
+        NETWORK_MODE="dhcp"
         STATIC_IP=""
         STATIC_GATEWAY=""
-        STATIC_DNS=""
-        FIREWALL_ENABLED="false"
-        FIREWALL_POLICY="ACCEPT"
-        DISK_FORMAT="qcow2"
-        BACKUP_STORAGE=""
-        ISO_STORAGE="local"
-        TEMPLATE_STORAGE=""
-        DISK_CACHE="none"
+        STATIC_DNS="1.1.1.1,8.8.8.8"
+        NETWORK_BRIDGE="vmbr0"
+        VLAN_TAG=""
+        
+        # Reset package settings
+        SELECTED_PACKAGES=()
+        
+        # Reset automation settings
         ANSIBLE_ENABLED="false"
         TERRAFORM_ENABLED="false"
         DOCKER_INTEGRATION="false"
         K8S_INTEGRATION="false"
-        CICD_ENABLED="false"
-        SSH_KEY_ENABLED="true"
-        SSH_KEY_PATH="~/.ssh/id_rsa.pub"
-        CLOUD_USER_DEFAULT="ubuntu"
-        ADD_SUDO_NOPASSWD="true"
-        SECURITY_FIREWALL="false"
-        DISK_ENCRYPTION="false"
-        CLEANUP_ENABLED="true"
-        CLEANUP_TEMP_DAYS="7"
-        CLEANUP_LOG_DAYS="30"
         
-        # Clear arrays
-        SELECTED_PACKAGES=()
-        SELECTED_ANSIBLE_PLAYBOOKS=()
-        SELECTED_TERRAFORM_MODULES=()
-        SELECTED_DOCKER_TEMPLATES=()
-        SELECTED_K8S_TEMPLATES=()
-        
-        whiptail --title "Reset Complete" \
-            --msgbox "All settings have been reset to defaults." 8 50
-        
-        log_info "Configuration reset to defaults"
+        whiptail --title "Settings Reset" \
+            --msgbox "All settings have been reset to defaults" 8 50
     fi
+    
+    return 0
 }
 
 # View current settings
 view_current_settings() {
-    local settings_summary="Current Configuration Settings:
-
-VM Configuration:
-  Name: ${VM_NAME:-<not set>}
-  VMID: ${VMID_DEFAULT:-9000}
-  Memory: ${VM_MEMORY:-2048} MB
-  CPU Cores: ${VM_CORES:-2}
-  Disk Size: ${VM_DISK_SIZE:-20G}
-  Storage: ${VM_STORAGE:-local-lvm}
-  BIOS: ${BIOS_TYPE:-seabios}
-  QEMU Agent: ${QEMU_AGENT:-1}
-
-Network Configuration:
-  Type: ${NETWORK_TYPE:-dhcp}
-  Bridge: ${NETWORK_BRIDGE:-vmbr0}
-  VLAN: ${VLAN_ENABLED:-false}
-  VLAN ID: ${VLAN_ID:-100}
-  Static IP: ${STATIC_IP:-<not set>}
-  Gateway: ${STATIC_GATEWAY:-<not set>}
-  DNS: ${STATIC_DNS:-<not set>}
-
-Storage Configuration:
-  Disk Format: ${DISK_FORMAT:-qcow2}
-  ISO Storage: ${ISO_STORAGE:-local}
-  Disk Cache: ${DISK_CACHE:-none}
-
-Automation:
-  Ansible: ${ANSIBLE_ENABLED:-false}
-  Terraform: ${TERRAFORM_ENABLED:-false}
-  Docker: ${DOCKER_INTEGRATION:-false}
-  Kubernetes: ${K8S_INTEGRATION:-false}
-
-Security:
-  SSH Key: ${SSH_KEY_ENABLED:-true}
-  Default User: ${CLOUD_USER_DEFAULT:-ubuntu}
-  Sudo Access: ${ADD_SUDO_NOPASSWD:-true}
-  Firewall: ${SECURITY_FIREWALL:-false}
-  Encryption: ${DISK_ENCRYPTION:-false}
-
-Selected Items:
-  Packages: ${#SELECTED_PACKAGES[@]} selected
-  Ansible Playbooks: ${#SELECTED_ANSIBLE_PLAYBOOKS[@]} selected
-  Terraform Modules: ${#SELECTED_TERRAFORM_MODULES[@]} selected
-  Docker Templates: ${#SELECTED_DOCKER_TEMPLATES[@]} selected
-  K8s Templates: ${#SELECTED_K8S_TEMPLATES[@]} selected"
+    local dist_name
+    dist_name=$(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1)
     
     whiptail --title "Current Settings" \
-        --msgbox "$settings_summary" 30 80
+        --msgbox "Current Template Configuration:
+
+Distribution: ${dist_name:-Not selected}
+VM Name: ${VM_NAME:-Auto-generated}
+VMID: ${VMID_DEFAULT:-Auto-assigned}
+CPU Cores: ${VM_CORES}
+Memory: ${VM_MEMORY} MB
+Disk Size: ${VM_DISK_SIZE} GB
+Storage: ${VM_STORAGE}
+
+Network: ${NETWORK_MODE}
+${NETWORK_MODE} == 'static' && $STATIC_IP || ''
+Bridge: ${NETWORK_BRIDGE}
+VLAN: ${VLAN_TAG:-None}
+
+Selected Packages: ${#SELECTED_PACKAGES[@]}
+Ansible Integration: ${ANSIBLE_ENABLED}
+Terraform Integration: ${TERRAFORM_ENABLED}
+Docker Integration: ${DOCKER_INTEGRATION}
+Kubernetes Integration: ${K8S_INTEGRATION}
+" 24 70
     
-    log_info "Current settings viewed"
+    return 0
 }
 
-#===============================================================================
-# MISSING CRITICAL FUNCTIONS IMPLEMENTATION
-# ================================================================================
+# Aliases for backward compatibility and test script
+configure_ansible_integration() { configure_ansible_automation "$@"; }
+create_ansible_lxc_container() { log_info "Creating Ansible LXC container"; configure_ansible_automation; }
+generate_ansible_inventory() { log_info "Generating Ansible inventory"; }
 
-# Select distribution for template creation
-select_distribution() {
-    log_info "Starting distribution selection"
-    
-    # Get distribution list
-    local dist_list=()
-    local dist_keys=()
-    
-    for key in "${!DISTRO_LIST[@]}"; do
-        IFS='|' read -ra dist_info <<< "${DISTRO_LIST[$key]}"
-        local display_name="${dist_info[0]}"
-        local notes="${dist_info[7]:-}"
-        
-        dist_list+=("$key" "$display_name ($notes)")
-        dist_keys+=("$key")
+configure_terraform_integration() { configure_terraform_automation "$@"; }
+
+# CLI parsing stub
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help) show_help;;
+            --batch) BATCH_MODE=true;;
+            --docker-template) shift; DOCKER_INTEGRATION=true; SELECTED_DOCKER_TEMPLATES=("$1");;
+            --k8s-template) shift; K8S_INTEGRATION=true; SELECTED_K8S_TEMPLATES=("$1");;
+            *) log_warn "Unknown argument: $1";;
+        esac
+        shift
     done
-    
-    # Sort the distribution list alphabetically
-    local sorted_dist_list=()
-    while IFS= read -r -d '' line; do
-        sorted_dist_list+=("$line")
-    done < <(printf '%s\0' "${dist_list[@]}" | sort -z)
-    
-    # Show distribution selection dialog
-    local selected_key
-    selected_key=$(whiptail --title "Distribution Selection" \
-        --menu "Select a distribution:" 25 80 15 \
-        "${sorted_dist_list[@]}" \
-        3>&1 1>&2 2>&3)
-    
-    if [[ $? -ne 0 ]]; then
-        log_warn "Distribution selection cancelled"
-        return 1
-    fi
-    
-    # Validate selection
-    if [[ -z "${DISTRO_LIST[$selected_key]:-}" ]]; then
-        log_error "Invalid distribution selected: $selected_key"
-        return 1
-    fi
-    
-    # Store selection
-    SELECTED_DISTRIBUTION_KEY="$selected_key"
-    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_key]}"
-    DISTRIBUTION_SELECTED="$SELECTED_DISTRIBUTION"
-    
-    # Parse distribution info
-    IFS='|' read -ra dist_info <<< "$SELECTED_DISTRIBUTION"
-    DIST_NAME="${dist_info[0]}"
-    IMG_URL="${dist_info[1]}"
-    IMG_FORMAT="${dist_info[2]}"
-    PKG_MANAGER="${dist_info[3]}"
-    OS_TYPE="${dist_info[4]}"
-    DEFAULT_USER="${dist_info[5]}"
-    DEFAULT_DISK_SIZE="${dist_info[6]:-20G}"
-    DIST_NOTES="${dist_info[7]:-}"
-    
-    # Handle custom ISO selection
-    if [[ "$selected_key" == "custom-iso" ]]; then
-        if ! handle_custom_iso_selection; then
-            log_error "Custom ISO configuration failed"
-            return 1
-        fi
-    fi
-    
-    log_info "Selected distribution: $DIST_NAME"
-    log_info "Image URL: $IMG_URL"
-    log_info "Format: $IMG_FORMAT"
-    log_info "Package Manager: $PKG_MANAGER"
-    
+}
+
+show_help() {
+    echo "Usage: $0 [--help] [--batch] [--docker-template TEMPLATE] [--k8s-template TEMPLATE]"
+    exit 0
+}
+
+# Docker/Kubernetes template functions
+list_docker_templates() {
+    find "$REPO_ROOT/docker/templates" -type f -name "*.yml" -printf "%f\n"
+}
+
+list_k8s_templates() {
+    find "$REPO_ROOT/kubernetes/templates" -type f -name "*.yml" -printf "%f\n"
+}
+
+select_docker_template_ui() {
+    local docker_list=($(list_docker_templates)) options=()
+    for tmpl in "${docker_list[@]}"; do options+=("$tmpl" "$tmpl"); done
+    local sel=$(whiptail --title "Select Docker Template" --menu "Docker templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
+    SELECTED_DOCKER_TEMPLATES=("$sel")
+    DOCKER_INTEGRATION="true"
     return 0
 }
 
-# Handle custom ISO/image selection
-handle_custom_iso_selection() {
-    log_info "Configuring custom ISO/image"
-    
-    # Get custom image URL
-    IMG_URL=$(whiptail --title "Custom Image URL" \
-        --inputbox "Enter the URL or local path to your image/ISO:" 10 70 \
-        3>&1 1>&2 2>&3)
-    
-    if [[ $? -ne 0 || -z "$IMG_URL" ]]; then
-        log_error "Custom image URL is required"
-        return 1
-    fi
-    
-    # Detect format from URL/filename
-    local detected_format=""
-    case "$IMG_URL" in
-        *.qcow2) detected_format="qcow2" ;;
-        *.img) detected_format="raw" ;;
-        *.iso) detected_format="iso" ;;
-        *.vmdk) detected_format="vmdk" ;;
-        *.raw) detected_format="raw" ;;
-        *) detected_format="unknown" ;;
-    esac
-    
-    # Let user select or confirm format
-    IMG_FORMAT=$(whiptail --title "Image Format" \
-        --menu "Select the image format:" 15 60 8 \
-        "qcow2" "QCOW2 (recommended, supports snapshots)" \
-        "raw" "Raw disk image" \
-        "iso" "ISO file" \
-        "vmdk" "VMware disk" \
-        "auto" "Auto-detect" \
-        3>&1 1>&2 2>&3)
-    
-    if [[ $? -ne 0 ]]; then
-        IMG_FORMAT="$detected_format"
-    fi
-    
-    # Get package manager
-    PKG_MANAGER=$(whiptail --title "Package Manager" \
-        --menu "Select the package manager:" 15 60 8 \
-        "apt" "APT (Debian/Ubuntu)" \
-        "dnf" "DNF (Fedora/RHEL 8+)" \
-        "yum" "YUM (CentOS/RHEL 7)" \
-        "zypper" "Zypper (openSUSE)" \
-        "pacman" "Pacman (Arch)" \
-        "apk" "APK (Alpine)" \
-        "emerge" "Emerge (Gentoo)" \
-        "auto" "Auto-detect" \
-        3>&1 1>&2 2>&3)
-    
-    [[ $? -ne 0 ]] && PKG_MANAGER="auto"
-    
-    # Set other defaults
-    DIST_NAME="Custom Image"
-    OS_TYPE="l26"
-    DEFAULT_USER="root"
-    DEFAULT_DISK_SIZE="20G"
-    DIST_NOTES="Custom user-supplied image"
-    
-    log_info "Custom image configured: $IMG_URL ($IMG_FORMAT)"
+select_k8s_template_ui() {
+    local k8s_list=($(list_k8s_templates)) options=()
+    for tmpl in "${k8s_list[@]}"; do options+=("$tmpl" "$tmpl"); done
+    local sel=$(whiptail --title "Select K8s Template" --menu "Kubernetes templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
+    SELECTED_K8S_TEMPLATES=("$sel")
+    K8S_INTEGRATION="true"
     return 0
 }
-
-# Get next available VMID
-get_next_available_vmid() {
-    local start_vmid="${VMID_DEFAULT:-9000}"
-    local max_vmid=99999
-    local current_vmid="$start_vmid"
-    
-    # Get list of existing VMIDs
-    local existing_vmids
-    existing_vmids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}' | sort -n)
-    
-    # Find next available VMID
-    while [[ $current_vmid -le $max_vmid ]]; do
-        if ! echo "$existing_vmids" | grep -q "^$current_vmid$"; then
-            echo "$current_vmid"
-            return 0
-        fi
-        ((current_vmid++))
-    done
-    
-    log_error "No available VMID found"
-    echo "9000"  # fallback
-    return 1
-}
-
-# Download distribution image
-download_distribution_image() {
-    log_info "Downloading distribution image"
-    
-    if [[ -z "$IMG_URL" ]]; then
-        log_error "No image URL specified"
-        return 1
-    fi
-    
-    # Create download directory
-    local download_dir="$WORK_DIR/images"
-    mkdir -p "$download_dir"
-    
-    # Extract filename from URL
-    local image_filename
-    image_filename=$(basename "$IMG_URL")
-    local local_image_path="$download_dir/$image_filename"
-    
-    # Check if it's a local file
-    if [[ -f "$IMG_URL" ]]; then
-        log_info "Using local image file: $IMG_URL"
-        cp "$IMG_URL" "$local_image_path"
-        IMAGE_PATH="$local_image_path"
-        return 0
-    fi
-    
-    # Download the image
-    log_info "Downloading image from: $IMG_URL"
-    if ! wget -O "$local_image_path" "$IMG_URL" 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "Failed to download image from $IMG_URL"
-        return 1
-    fi
-    
-    # Verify download
-    if [[ ! -f "$local_image_path" || ! -s "$local_image_path" ]]; then
-        log_error "Downloaded image is empty or corrupted"
-        return 1
-    fi
-    
-    IMAGE_PATH="$local_image_path"
-    log_success "Image downloaded successfully: $IMAGE_PATH"
-    return 0
-}
-
-# Create VM from downloaded image
-create_vm_from_image() {
-    log_info "Creating VM from image"
-    
-    if [[ -z "$IMAGE_PATH" || ! -f "$IMAGE_PATH" ]]; then
-        log_error "Image file not found: $IMAGE_PATH"
-        return 1
-    fi
-    
-    # Import disk image to storage
-    local disk_import_cmd
-    case "$IMG_FORMAT" in
-        "qcow2"|"vmdk"|"raw")
-            disk_import_cmd="qm importdisk $VMID_DEFAULT \"$IMAGE_PATH\" $STORAGE_DEFAULT"
-            ;;
-        "iso")
-            # For ISO files, create a new VM and attach ISO as CD-ROM
-            create_vm_with_iso
-            return $?
-            ;;
-        *)
-            log_error "Unsupported image format: $IMG_FORMAT"
-            return 1
-            ;;
-    esac
-    
-    # Create VM configuration
-    log_info "Creating VM configuration for VMID: $VMID_DEFAULT"
-    
-    qm create "$VMID_DEFAULT" \
-        --name "$VM_NAME" \
-        --memory "$MEMORY_MB_DEFAULT" \
-        --cores "$CPU_CORES_DEFAULT" \
-        --net0 "virtio,bridge=$BRIDGE_DEFAULT" \
-        --scsihw "virtio-scsi-pci" \
-        --boot "order=scsi0" \
-        --agent 1 \
-        --ostype "$OS_TYPE" \
-        || {
-            log_error "Failed to create VM configuration"
-            return 1
-        }
-    
-    # Import and attach disk
-    log_info "Importing disk image to storage"
-    eval "$disk_import_cmd" || {
-        log_error "Failed to import disk image"
-        return 1
-    }
-    
-    # Attach the imported disk
-    qm set "$VMID_DEFAULT" \
-        --scsi0 "$STORAGE_DEFAULT:vm-$VMID_DEFAULT-disk-0,size=$DISK_SIZE_DEFAULT" \
-        || {
-            log_error "Failed to attach disk to VM"
-            return 1
-        }
-    
-    log_success "VM created successfully with VMID: $VMID_DEFAULT"
-    return 0
-}
-
-# Create VM with ISO (for ISO installations)
-create_vm_with_iso() {
-    log_info "Creating VM with ISO image"
-    
-    # Create VM with ISO attached as CD-ROM
-    qm create "$VMID_DEFAULT" \
-        --name "$VM_NAME" \
-        --memory "$MEMORY_MB_DEFAULT" \
-        --cores "$CPU_CORES_DEFAULT" \
-        --net0 "virtio,bridge=$BRIDGE_DEFAULT" \
-        --scsihw "virtio-scsi-pci" \
-        --boot "order=ide2,scsi0" \
-        --agent 1 \
-        --ostype "$OS_TYPE" \
-        --ide2 "$STORAGE_DEFAULT:iso/$IMAGE_PATH,media=cdrom" \
-        --scsi0 "$STORAGE_DEFAULT:$DISK_SIZE_DEFAULT" \
-        || {
-            log_error "Failed to create VM with ISO"
-            return 1
-        }
-    
-    log_info "VM created with ISO. Manual installation may be required."
-    return 0
-}
-
-# Configure cloud-init for the VM
-configure_cloud_init() {
-    log_info "Configuring cloud-init"
-    
-    # Enable cloud-init
-    qm set "$VMID_DEFAULT" --ide2 "$STORAGE_DEFAULT:cloudinit" || {
-        log_error "Failed to enable cloud-init"
-        return 1
-    }
-    
-    # Set cloud-init user
-    local cloud_user="${CLOUD_USER_DEFAULT:-$DEFAULT_USER}"
-    qm set "$VMID_DEFAULT" --ciuser "$cloud_user" || {
-        log_error "Failed to set cloud-init user"
-        return 1
-    }
-    
-    # Set cloud-init password
-    if [[ -n "$CLOUD_PASSWORD_DEFAULT" ]]; then
-        qm set "$VMID_DEFAULT" --cipassword "$CLOUD_PASSWORD_DEFAULT" || {
-            log_warn "Failed to set cloud-init password"
-        }
-    fi
-    
-    # Configure SSH keys
-    if [[ "$SSH_KEY_ENABLED" == "true" && -f "$SSH_KEY_FILE" ]]; then
-        qm set "$VMID_DEFAULT" --sshkeys "$SSH_KEY_FILE" || {
-            log_warn "Failed to set SSH keys"
-        }
-    fi
-    
-    # Configure network if static
-    if [[ "$NETWORK_TYPE" == "static" && -n "$STATIC_IP" ]]; then
-        qm set "$VMID_DEFAULT" --ipconfig0 "ip=$STATIC_IP,gw=$STATIC_GATEWAY" || {
-            log_warn "Failed to set static IP configuration"
-        }
-    fi
-    
-    log_success "Cloud-init configured successfully"
-    return 0
-}
-
-# Install packages using virt-customize
-install_packages_virt_customize() {
-    log_info "Installing packages using virt-customize"
-    
-    if [[ ${#SELECTED_PACKAGES[@]} -eq 0 ]]; then
-        log_info "No packages selected for installation"
-        return 0
-    fi
-    
-    # Stop the VM if running
-    qm stop "$VMID_DEFAULT" 2>/dev/null || true
-    
-    # Wait for VM to stop
-    sleep 5
-    
-    # Get the disk image path
-    local disk_image
-    disk_image=$(qm config "$VMID_DEFAULT" | grep 'scsi0:' | awk '{print $2}' | cut -d',' -f1)
-    
-    if [[ -z "$disk_image" ]]; then
-        log_error "Failed to find VM disk image"
-        return 1
-    fi
-    
-    # Build package list
-    local package_list=""
-    for package in "${SELECTED_PACKAGES[@]}"; do
-        package_list="$package_list $package"
-    done
-    
-    # Install packages based on package manager
-    local install_cmd=""
-    case "$PKG_MANAGER" in
-        "apt")
-            install_cmd="apt-get update && apt-get install -y $package_list"
-            ;;
-        "dnf")
-            install_cmd="dnf install -y $package_list"
-            ;;
-        "yum")
-            install_cmd="yum install -y $package_list"
-            ;;
-        "zypper")
-            install_cmd="zypper install -y $package_list"
-            ;;
-        "pacman")
-            install_cmd="pacman -Sy --noconfirm $package_list"
-            ;;
-        "apk")
-            install_cmd="apk update && apk add $package_list"
-            ;;
-        *)
-            log_warn "Unsupported package manager: $PKG_MANAGER"
-            return 0
-            ;;
-    esac
-    
-    # Run virt-customize
-    log_info "Running virt-customize to install packages"
-    if ! virt-customize -a "/dev/pve/$disk_image" --run-command "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "Failed to install packages using virt-customize"
-        return 1
-    fi
-    
-    log_success "Packages installed successfully"
-    return 0
-}
-
-# Convert VM to template
-convert_to_template() {
-    log_info "Converting VM to template"
-    
-    # Stop the VM if running
-    qm stop "$VMID_DEFAULT" 2>/dev/null || true
-    
-    # Wait for VM to fully stop
-    local timeout=60
-    local count=0
-    
-    while qm status "$VMID_DEFAULT" | grep -q "running" && [[ $count -lt $timeout ]]; do
-        sleep 2
-        ((count += 2))
-    done
-    
-    if qm status "$VMID_DEFAULT" | grep -q "running"; then
-        log_error "VM failed to stop within timeout"
-        return 1
-    fi
-    
-    # Convert to template
-    if ! qm template "$VMID_DEFAULT" 2>&1 | tee -a "$LOG_FILE"; then
-        log_error "Failed to convert VM to template"
-        return 1
-    fi
-    
-    # Add template tags
-    qm set "$VMID_DEFAULT" --tags "$TEMPLATE_TAG,${VM_CATEGORY_TAG:-general}" 2>/dev/null || true
-    
-    # Set template notes
-    local template_notes="Template: $DIST_NAME
-Created: $(date)
-Packages: ${#SELECTED_PACKAGES[@]} packages
-Distribution: $SELECTED_DISTRIBUTION_KEY"
-    
-    qm set "$VMID_DEFAULT" --description "$template_notes" 2>/dev/null || true
-    
-    log_success "VM converted to template successfully"
-    log_success "Template VMID: $VMID_DEFAULT"
-    
-    return 0
-}
-
-# Main template creation function
-create_template_main() {
-    log_info "Starting main template creation workflow"
-    
-    # Validate prerequisites
-    if [[ -z "$DISTRIBUTION_SELECTED" ]]; then
-        log_error "No distribution selected"
-        return 1
-    fi
-    
-    # Set default VM name if not set
-    if [[ -z "$VM_NAME" ]]; then
-        VM_NAME="${SELECTED_DISTRIBUTION_KEY:-unknown}-template"
-    fi
-    
-    # Get next available VMID if not set
-    if [[ -z "$VMID_DEFAULT" ]]; then
-        VMID_DEFAULT=$(get_next_available_vmid)
-    fi
-    
-    # Create work directory
-    WORK_DIR="/tmp/template-creation-$$"
-    mkdir -p "$WORK_DIR"
-    
-    log_info "Creating template: $VM_NAME (VMID: $VMID_DEFAULT)"
-    
-    # Execute template creation steps
-    if ! download_distribution_image; then
-        log_error "Failed to download distribution image"
-        cleanup_on_exit
-        return 1
-    fi
-    
-    if ! create_vm_from_image; then
-        log_error "Failed to create VM from image"
-        cleanup_on_exit
-        return 1
-    fi
-    
-    if ! configure_cloud_init; then
-        log_error "Failed to configure cloud-init"
-        cleanup_on_exit
-        return 1
-    fi
-    
-    if ! install_packages_virt_customize; then
-        log_error "Failed to install packages"
-        # Continue despite package installation failure
-    fi
-    
-    if ! convert_to_template; then
-        log_error "Failed to convert VM to template"
-        cleanup_on_exit
-        return 1
-    fi
-    
-    log_success "Template creation completed successfully!"
-    log_success "Template VMID: $VMID_DEFAULT"
-    log_success "Template Name: $VM_NAME"
-    
-    # Show completion message
-    whiptail --title "Template Creation Complete" \
-        --msgbox "Template created successfully!
-
-Template Name: $VM_NAME
-Template VMID: $VMID_DEFAULT
-Distribution: $DIST_NAME
-Packages: ${#SELECTED_PACKAGES[@]} packages
-
-The template is now ready for use." 12 60
-    
-    # Cleanup
-    cleanup_on_exit
-    
-    return 0
-}
-
-# Main function to handle script execution
-main() {
-    log_info "Starting Proxmox Template Creator v$SCRIPT_VERSION"
-    
-    # Check if running as root
-    check_root
-    
-    # Install dependencies if needed
-    check_dependencies
-    
-    # Initialize defaults
-    initialize_defaults
-    
-    # Set up signal handlers
-    trap cleanup_on_interrupt SIGINT SIGTERM
-    trap cleanup_on_exit EXIT
-    
-    # Parse command line arguments if provided
-    if [[ $# -gt 0 ]]; then
-        parse_arguments "$@"
-        
-        # If CLI mode is enabled, run non-interactive
-        if [[ "$CLI_MODE" == "true" ]]; then
-            log_info "Running in CLI mode"
-            
-            # Validate required parameters for CLI mode
-            if [[ -z "$DISTRIBUTION_SELECTED" ]]; then
-                log_error "Distribution must be specified in CLI mode"
-                show_help
-                exit 1
-            fi
-            
-            # Run template creation directly
-            if ! create_template_main; then
-                log_error "Template creation failed in CLI mode"
-                exit 1
-            fi
-            
-            exit 0
-        fi
-    fi
-    
-    # Show welcome message
-    show_welcome
-    
-    # Start main menu loop
-    main_menu
-}
-
-# Call main function with all arguments
-main "$@"

@@ -1081,7 +1081,7 @@ show_main_menu() {
         esac
     done
 }
-l --title "Proxmox Template Creator v$SCRIPT_VERSION" \
+whiptail --title "Proxmox Template Creator v$SCRIPT_VERSION" \
             --menu "Choose an option:" 20 78 10 \
             "1" "Create Single Template" \
             "2" "Create Multiple Templates (Batch)" \
@@ -1093,7 +1093,7 @@ l --title "Proxmox Template Creator v$SCRIPT_VERSION" \
             "8" "Settings & Configuration" \
             "9" "Help & Documentation" \
             "0" "Exit" \
-            3>&1 1>&2 2>&3)
+            3>&1 1>&2 2>&3
 
         case $choice in
             1) create_single_template ;;
@@ -1266,7 +1266,9 @@ select_packages() {
 
     # For each selected category, show individual packages
     for category in "${selected_cats[@]}"; do
-        if [[ -n "${PACKAGE_CATEGORIES[$category]}" ]]; then
+
+    done
+PACKAGE_CATEGORIES[$category]}" ]]; then
             IFS=' ' read -ra cat_packages <<< "${PACKAGE_CATEGORIES[$category]}"
             local pkg_options=()
 
@@ -2150,7 +2152,10 @@ EOF
 
     # Generate modules based on selection
     for module in $selected_modules; do
-        case "$module" in
+        # Process module: add module generation code here if needed
+        :
+    done
+ in
             "vm")
                 generate_vm_module "$output_dir"
                 echo "# VM Module" >> "$output_dir/main.tf"

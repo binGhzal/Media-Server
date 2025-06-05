@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 parse_arguments() {
 set -e
     while [[ $# -gt 0 ]]; do

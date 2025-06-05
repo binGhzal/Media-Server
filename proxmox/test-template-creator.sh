@@ -190,7 +190,7 @@ echo ""
 # Test CLI enhancements
 echo "Test 12: Checking CLI enhancements..."
 if grep -q "\-\-docker-template" "$SCRIPT_DIR/create-template.sh" && \
-   grep -q "\-\-k8s-template" "$SCRIPT_DIR/create-template.sh" ]; then
+   grep -q "\-\-k8s-template" "$SCRIPT_DIR/create-template.sh"; then
     echo "✅ Docker/K8s CLI flags found"
 else
     echo "❌ Docker/K8s CLI flags missing"
@@ -530,7 +530,7 @@ test_enhanced_terraform() {
 
     # Check for module structure support
     if grep -q "modules/" "$SCRIPT_DIR/create-template.sh" && \
-       grep -q "environments/" "$SCRIPT_DIR/create-template.sh" ]; then
+           grep -q "environments/" "$SCRIPT_DIR/create-template.sh"; then
         echo "✅ Terraform module structure support found"
     else
         echo "❌ Terraform module structure support missing"

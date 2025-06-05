@@ -190,7 +190,7 @@ echo ""
 # Test CLI enhancements
 echo "Test 12: Checking CLI enhancements..."
 if grep -q "\-\-docker-template" "$SCRIPT_DIR/create-template.sh" && \
-   grep -q "\-\-k8s-template" "$SCRIPT_DIR/create-template.sh"; then
+   grep -q "\-\-k8s-template" "$SCRIPT_DIR/create-template.sh" ]; then
     echo "✅ Docker/K8s CLI flags found"
 else
     echo "❌ Docker/K8s CLI flags missing"
@@ -357,6 +357,303 @@ if command -v bash >/dev/null 2>&1; then
 else
     echo "   ⚠️  Bash not available for dry-run tests"
 fi
+echo ""
+
+# Test CLI argument parsing
+echo "Test 13: Testing CLI argument parsing..."
+test_cli_parsing() {
+    local test_script=$(mktemp)
+    cat > "$test_script" << 'EOF'
+#!/bin/bash
+# Minimal test for CLI parsing
+source /dev/stdin
+
+# Test parse_arguments function exists
+if declare -f parse_arguments >/dev/null 2>&1; then
+    echo "parse_arguments function found"
+    # Test dry run flag
+    if parse_arguments --dry-run 2>/dev/null; then
+        echo "dry-run flag supported"
+    fi
+    # Test batch mode
+    if parse_arguments --batch 2>/dev/null; then
+        echo "batch mode supported"
+    fi
+    # Test Docker integration
+    if parse_arguments --docker-template 2>/dev/null; then
+        echo "docker-template flag supported"  
+    fi
+    # Test K8s integration
+    if parse_arguments --k8s-template 2>/dev/null; then
+        echo "k8s-template flag supported"
+    fi
+else
+    echo "parse_arguments function not found"
+    exit 1
+fi
+EOF
+    
+    # Extract just the function definitions to test
+    awk '/^parse_arguments\(\) \{/,/^}$/' "$SCRIPT_DIR/create-template.sh" | bash "$test_script" 2>/dev/null || {
+        echo "❌ CLI parsing tests failed"
+        rm -f "$test_script"
+        return 1
+    }
+    
+    rm -f "$test_script"
+    echo "✅ CLI argument parsing tests passed"
+}
+
+test_cli_parsing
+echo ""
+
+# Test dry-run workflow validation
+echo "Test 14: Testing dry-run workflow..."
+test_dry_run() {
+    # Check if dry-run mode is properly implemented
+    if grep -q "DRY_RUN.*true" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "log_info.*dry.run" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Dry-run mode implementation found"
+    else
+        echo "❌ Dry-run mode not properly implemented"
+        return 1
+    fi
+    
+    # Check for validation functions
+    if grep -q "validate_.*" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Validation functions found"
+    else
+        echo "❌ Validation functions missing"
+        return 1
+    fi
+}
+
+test_dry_run
+echo ""
+
+# Test Docker template provisioning
+echo "Test 15: Testing Docker provisioning logic..."
+test_docker_provisioning() {
+    # Check if provision_docker_templates function exists and is complete
+    if grep -q "provision_docker_templates() {" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ provision_docker_templates function found"
+        
+        # Check for key Docker provisioning steps
+        local docker_checks=(
+            "docker.*install"
+            "docker-compose"
+            "lxc.*create"
+            "template.*copy"
+        )
+        
+        local missing_checks=()
+        for check in "${docker_checks[@]}"; do
+            if grep -q "$check" "$SCRIPT_DIR/create-template.sh"; then
+                echo "   ✅ $check logic found"
+            else
+                echo "   ❌ $check logic missing"
+                missing_checks+=("$check")
+            fi
+        done
+        
+        if [ ${#missing_checks[@]} -eq 0 ]; then
+            echo "✅ Docker provisioning implementation complete"
+        else
+            echo "❌ Docker provisioning incomplete: ${missing_checks[*]}"
+            return 1
+        fi
+    else
+        echo "❌ provision_docker_templates function not found"
+        return 1
+    fi
+}
+
+test_docker_provisioning
+echo ""
+
+# Test Kubernetes template provisioning  
+echo "Test 16: Testing Kubernetes provisioning logic..."
+test_k8s_provisioning() {
+    # Check if provision_k8s_templates function exists and is complete
+    if grep -q "provision_k8s_templates() {" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ provision_k8s_templates function found"
+        
+        # Check for key K8s provisioning steps
+        local k8s_checks=(
+            "kubectl"
+            "helm"
+            "kubeconfig"
+            "kubectl.*apply"
+        )
+        
+        local missing_checks=()
+        for check in "${k8s_checks[@]}"; do
+            if grep -q "$check" "$SCRIPT_DIR/create-template.sh"; then
+                echo "   ✅ $check logic found"
+            else
+                echo "   ❌ $check logic missing"  
+                missing_checks+=("$check")
+            fi
+        done
+        
+        if [ ${#missing_checks[@]} -eq 0 ]; then
+            echo "✅ Kubernetes provisioning implementation complete"
+        else
+            echo "❌ Kubernetes provisioning incomplete: ${missing_checks[*]}"
+            return 1
+        fi
+    else
+        echo "❌ provision_k8s_templates function not found"
+        return 1
+    fi
+}
+
+test_k8s_provisioning
+echo ""
+
+# Test enhanced Terraform configuration
+echo "Test 17: Testing enhanced Terraform configuration..."
+test_enhanced_terraform() {
+    # Check for enhanced Terraform functions
+    local terraform_functions=(
+        "collect_terraform_variables"
+        "generate_vm_module"
+        "generate_network_module"
+        "generate_terraform_variables"
+        "generate_terraform_outputs"
+        "generate_terraform_makefile"
+    )
+    
+    local missing_functions=()
+    for func in "${terraform_functions[@]}"; do
+        if grep -q "${func}() {" "$SCRIPT_DIR/create-template.sh"; then
+            echo "   ✅ $func found"
+        else
+            echo "   ❌ $func missing"
+            missing_functions+=("$func")
+        fi
+    done
+    
+    if [ ${#missing_functions[@]} -eq 0 ]; then
+        echo "✅ Enhanced Terraform configuration complete"
+    else
+        echo "❌ Enhanced Terraform incomplete: ${missing_functions[*]}"
+        return 1
+    fi
+    
+    # Check for module structure support
+    if grep -q "modules/" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "environments/" "$SCRIPT_DIR/create-template.sh" ]; then
+        echo "✅ Terraform module structure support found"
+    else
+        echo "❌ Terraform module structure support missing"
+        return 1
+    fi
+}
+
+test_enhanced_terraform
+echo ""
+
+# Test integration workflow
+echo "Test 18: Testing integration workflow..."
+test_integration_workflow() {
+    # Check if main workflow properly integrates Docker/K8s/Terraform
+    if grep -q "provision_docker_templates" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "provision_k8s_templates" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "generate_terraform_config" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Integration workflow functions found"
+        
+        # Check if they're called in create_template_main
+        if grep -A 20 "create_template_main" "$SCRIPT_DIR/create-template.sh" | grep -q "provision_docker_templates\|provision_k8s_templates\|generate_terraform_config"; then
+            echo "✅ Integration functions called in main workflow"
+        else
+            echo "❌ Integration functions not called in main workflow"
+            return 1
+        fi
+    else
+        echo "❌ Integration workflow incomplete"
+        return 1
+    fi
+}
+
+test_integration_workflow
+echo ""
+
+# Test error handling and logging
+echo "Test 19: Testing error handling and logging..."
+test_error_handling() {
+    # Check for comprehensive error handling
+    if grep -q "log_error" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "log_warn" "$SCRIPT_DIR/create-template.sh" && \
+       grep -q "log_success" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Logging functions found"
+    else
+        echo "❌ Logging functions missing"
+        return 1
+    fi
+    
+    # Check for error cleanup
+    if grep -q "cleanup.*error\|error.*cleanup" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Error cleanup logic found"
+    else
+        echo "❌ Error cleanup logic missing"
+        return 1
+    fi
+}
+
+test_error_handling
+echo ""
+
+# Test configuration validation
+echo "Test 20: Testing configuration validation..."
+test_config_validation() {
+    # Check for validation functions
+    local validation_checks=(
+        "validate.*config"
+        "check.*dependencies"
+        "verify.*"
+    )
+    
+    local found_validations=0
+    for check in "${validation_checks[@]}"; do
+        if grep -q "$check" "$SCRIPT_DIR/create-template.sh"; then
+            echo "   ✅ $check validation found"
+            ((found_validations++))
+        fi
+    done
+    
+    if [ $found_validations -gt 0 ]; then
+        echo "✅ Configuration validation implemented"
+    else
+        echo "❌ Configuration validation missing"
+        return 1
+    fi
+}
+
+test_config_validation
+echo ""
+
+# Test performance and resource management
+echo "Test 21: Testing performance and resource management..."
+test_performance() {
+    # Check for resource cleanup
+    if grep -q "cleanup\|destroy.*container\|pct.*destroy" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Resource cleanup logic found"
+    else
+        echo "❌ Resource cleanup logic missing"
+        return 1
+    fi
+    
+    # Check for parallel processing considerations
+    if grep -q "parallel\|background\|wait" "$SCRIPT_DIR/create-template.sh"; then
+        echo "✅ Parallel processing considerations found"
+    else
+        echo "❌ Parallel processing considerations missing"
+        return 1
+    fi
+}
+
+test_performance
 echo ""
 
 # Summary

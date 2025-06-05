@@ -97,9 +97,7 @@ chmod +x create-template.sh
 - **Batch Processing**: Multiple template creation
 - **Template Queues**: Automated template pipelines
 
-## Getting Started
-
-### Prerequisites
+## Quick Start
 
 1. **Download the Repository:**
 
@@ -118,7 +116,7 @@ chmod +x create-template.sh
 
 ## CLI Reference
 
-### Basic Usage Commands
+### Basic Usage
 
 ```bash
 # Interactive mode (default)
@@ -132,7 +130,7 @@ chmod +x create-template.sh
 ./create-template.sh --list-distributions
 ```
 
-### Template Creation Commands
+### Template Creation
 
 ```bash
 # Create specific distribution template
@@ -145,7 +143,7 @@ chmod +x create-template.sh
 ./create-template.sh --distribution custom-iso --iso-url http://example.com/my.iso
 ```
 
-### Container Workload Commands
+### Container Workloads
 
 ```bash
 # Docker templates
@@ -158,7 +156,7 @@ chmod +x create-template.sh
 ./create-template.sh --distribution ubuntu-22.04 --docker-template nginx --k8s-template webapp
 ```
 
-### Automation Integration Commands
+### Automation Integration
 
 ```bash
 # With Ansible
@@ -171,7 +169,7 @@ chmod +x create-template.sh
 ./create-template.sh --ansible --terraform --batch
 ```
 
-### Advanced Option Commands
+### Advanced Options
 
 ```bash
 # Dry run mode
@@ -186,7 +184,7 @@ chmod +x create-template.sh
 
 ## Configuration Files
 
-### Template Configuration File Format
+### Template Configuration
 
 ```ini
 # ubuntu-dev.conf
@@ -199,7 +197,7 @@ DOCKER_TEMPLATES="nginx,postgres"
 ANSIBLE_PLAYBOOKS="install-docker,system-hardening"
 ```
 
-### Batch Processing Configuration
+### Batch Processing
 
 ```ini
 # batch-templates.conf
@@ -216,7 +214,7 @@ k8s_templates=webapp,monitoring
 
 ## Terraform Modules
 
-### Available Infrastructure Modules
+### Available Modules
 
 #### Core Infrastructure
 
@@ -233,7 +231,7 @@ k8s_templates=webapp,monitoring
 - `container-registry.tf`: Private Docker registry
 - `monitoring-stack.tf`: Prometheus/Grafana monitoring
 
-### Module Usage Examples
+### Module Usage
 
 ```bash
 cd terraform
@@ -251,7 +249,7 @@ terraform apply -var="k8s_master_count=1" -var="k8s_worker_count=3"
 terraform apply -var-file="monitoring.tfvars"
 ```
 
-### Example Variable Configuration
+### Example Variables
 
 ```hcl
 # docker.tfvars
@@ -272,7 +270,7 @@ docker_containers = [
 
 ## Ansible Playbooks
 
-### Available Playbook Library
+### Available Playbooks
 
 - `update-all-packages.yml`: System updates
 - `install-docker.yml`: Docker installation
@@ -284,7 +282,7 @@ docker_containers = [
 - `configure-backups.yml`: Backup configuration
 - `install-security-tools.yml`: Security tools
 
-### Playbook Usage Examples
+### Playbook Usage
 
 ```bash
 cd ansible
@@ -298,7 +296,7 @@ ansible-playbook -i inventory playbooks/templates/update-all-packages.yml playbo
 
 ## Template Library
 
-### Docker Templates Available
+### Docker Templates
 
 Located in `docker/templates/`:
 
@@ -307,7 +305,7 @@ Located in `docker/templates/`:
 - `monitoring-tools.yml`: Monitoring containers
 - `development-env.yml`: Development environment
 
-### Kubernetes Templates Available
+### Kubernetes Templates
 
 Located in `kubernetes/templates/`:
 
@@ -350,6 +348,59 @@ Located in `kubernetes/templates/`:
 - **Dashboard Creation**: Custom Grafana dashboards
 - **Log Aggregation**: Centralized log management
 
+## Troubleshooting
+
+### Common Issues
+
+#### Template Creation Fails
+
+```bash
+# Check Proxmox permissions
+pveum user list
+
+# Verify storage access
+pvesm status
+
+# Check network configuration
+ip addr show
+```
+
+#### Container Deployment Issues
+
+```bash
+# Check Docker service
+systemctl status docker
+
+# Verify container registry access
+docker login registry.example.com
+
+# Check Kubernetes cluster status
+kubectl cluster-info
+```
+
+#### Ansible/Terraform Integration
+
+```bash
+# Verify Ansible connectivity
+ansible all -m ping -i inventory
+
+# Check Terraform state
+terraform state list
+
+# Validate configuration
+terraform validate
+```
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+./create-template.sh --debug --log-file /tmp/debug.log
+
+# Check detailed logs
+tail -f /tmp/debug.log
+```
+
 ## How-To Guides
 
 ### How to Create a Complete Development Environment
@@ -374,9 +425,8 @@ This guide shows how to create a comprehensive development environment with IDE,
 ```
 
 Example `development-stack.yml`:
-
 ```yaml
-version: "3.8"
+version: '3.8'
 services:
   vscode-server:
     image: codercom/code-server:latest
@@ -446,7 +496,6 @@ terraform apply -var="k8s_worker_count=3" terraform/kubernetes-cluster.tf
 ```
 
 Example monitoring stack (`monitoring-stack.yaml`):
-
 ```yaml
 apiVersion: v1
 kind: Namespace
@@ -469,21 +518,21 @@ spec:
         app: prometheus
     spec:
       containers:
-        - name: prometheus
-          image: prom/prometheus:latest
-          ports:
-            - containerPort: 9090
-          volumeMounts:
-            - name: config
-              mountPath: /etc/prometheus
-            - name: storage
-              mountPath: /prometheus
-      volumes:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+        volumeMounts:
         - name: config
-          configMap:
-            name: prometheus-config
+          mountPath: /etc/prometheus
         - name: storage
-          emptyDir: {}
+          mountPath: /prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: storage
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -494,8 +543,8 @@ spec:
   selector:
     app: prometheus
   ports:
-    - port: 9090
-      targetPort: 9090
+  - port: 9090
+    targetPort: 9090
   type: ClusterIP
 ```
 
@@ -523,7 +572,6 @@ ansible-playbook -i inventory playbooks/configure-grafana-dashboards.yml
 ```
 
 Example `monitoring-stack.tfvars`:
-
 ```hcl
 # Monitoring Stack Configuration
 monitoring_vm_count = 1
@@ -535,7 +583,7 @@ monitoring_disk_size = "100G"
 prometheus_retention_days = 30
 prometheus_storage_size = "50G"
 
-# Grafana configuration
+# Grafana configuration  
 grafana_admin_password = "secure-admin-password"
 grafana_plugins = [
   "grafana-piechart-panel",
@@ -592,7 +640,7 @@ cd terraform
 terraform workspace new dev
 terraform apply -var-file="dev.tfvars"
 
-terraform workspace new staging
+terraform workspace new staging  
 terraform apply -var-file="staging.tfvars"
 
 terraform workspace new prod
@@ -601,7 +649,7 @@ terraform apply -var-file="prod.tfvars"
 # Step 3: Configure environment-specific settings
 cd ../ansible
 ansible-playbook -i inventory/dev playbooks/configure-dev-environment.yml
-ansible-playbook -i inventory/staging playbooks/configure-staging-environment.yml
+ansible-playbook -i inventory/staging playbooks/configure-staging-environment.yml  
 ansible-playbook -i inventory/prod playbooks/configure-prod-environment.yml
 ```
 
@@ -630,7 +678,6 @@ ansible-playbook -i inventory playbooks/configure-docker-registry-access.yml
 ```
 
 Example CI/CD pipeline (`.github/workflows/deploy.yml`):
-
 ```yaml
 name: Deploy Infrastructure
 
@@ -644,53 +691,53 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate Proxmox scripts
-        run: |
-          cd proxmox
-          ./test-template-creator.sh
-
-      - name: Validate Terraform
-        run: |
-          cd terraform
-          terraform init
-          terraform validate
-          terraform plan
-
-      - name: Validate Ansible
-        run: |
-          cd ansible
-          ansible-playbook --syntax-check playbooks/*.yml
+    - uses: actions/checkout@v4
+    
+    - name: Validate Proxmox scripts
+      run: |
+        cd proxmox
+        ./test-template-creator.sh
+    
+    - name: Validate Terraform
+      run: |
+        cd terraform
+        terraform init
+        terraform validate
+        terraform plan
+    
+    - name: Validate Ansible
+      run: |
+        cd ansible
+        ansible-playbook --syntax-check playbooks/*.yml
 
   deploy-dev:
     needs: validate
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to dev environment
-        run: |
-          cd terraform
-          terraform workspace select dev
-          terraform apply -auto-approve -var-file="dev.tfvars"
-
-      - name: Configure with Ansible
-        run: |
-          cd ansible
-          ansible-playbook -i inventory/dev playbooks/site.yml
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to dev environment
+      run: |
+        cd terraform
+        terraform workspace select dev
+        terraform apply -auto-approve -var-file="dev.tfvars"
+    
+    - name: Configure with Ansible
+      run: |
+        cd ansible
+        ansible-playbook -i inventory/dev playbooks/site.yml
 
   deploy-staging:
     needs: deploy-dev
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to staging
-        run: |
-          cd terraform
-          terraform workspace select staging
-          terraform apply -auto-approve -var-file="staging.tfvars"
+    - name: Deploy to staging
+      run: |
+        cd terraform
+        terraform workspace select staging
+        terraform apply -auto-approve -var-file="staging.tfvars"
 ```
 
 ### How to Backup and Restore Templates
@@ -740,7 +787,7 @@ journalctl -u pve-container@CONTAINER_ID
 docker compose -f template.yml config
 docker compose -f template.yml up --dry-run
 
-# Check Kubernetes connectivity
+# Check Kubernetes connectivity  
 kubectl cluster-info
 kubectl get nodes
 kubectl get all --all-namespaces
@@ -770,7 +817,7 @@ This guide covers scaling strategies for growing workloads.
 # Horizontal scaling - more VMs
 terraform apply -var="vm_count=10" -var="load_balancer_enabled=true"
 
-# Vertical scaling - bigger VMs
+# Vertical scaling - bigger VMs  
 terraform apply -var="vm_cpu_cores=8" -var="vm_memory_mb=16384"
 
 # Auto-scaling with monitoring
@@ -780,7 +827,7 @@ ansible-playbook -i inventory playbooks/configure-auto-scaling.yml
 
 ## Best Practices
 
-### Security Best Practices
+### Security
 
 1. **Use SSH Keys**: Always configure SSH key authentication
 2. **Regular Updates**: Keep templates updated with latest security patches
@@ -788,7 +835,7 @@ ansible-playbook -i inventory playbooks/configure-auto-scaling.yml
 4. **User Management**: Use dedicated service accounts
 5. **Secret Management**: Use tools like HashiCorp Vault for secrets
 
-### Performance Best Practices
+### Performance
 
 1. **Resource Planning**: Right-size CPU and memory allocations
 2. **Storage Optimization**: Use appropriate storage types (SSD vs HDD)
@@ -796,7 +843,7 @@ ansible-playbook -i inventory playbooks/configure-auto-scaling.yml
 4. **Monitoring**: Implement comprehensive monitoring from day 1
 5. **Backup Strategy**: Regular backups with tested restore procedures
 
-### Automation Best Practices
+### Automation
 
 1. **Infrastructure as Code**: Use Terraform for all infrastructure
 2. **Configuration Management**: Use Ansible for post-deployment configuration
@@ -804,7 +851,7 @@ ansible-playbook -i inventory playbooks/configure-auto-scaling.yml
 4. **Testing**: Implement automated testing for all components
 5. **Documentation**: Keep documentation updated with infrastructure changes
 
-### Cost Optimization Best Practices
+### Cost Optimization
 
 1. **Resource Monitoring**: Track resource utilization
 2. **Automated Scaling**: Scale resources based on demand
@@ -812,20 +859,18 @@ ansible-playbook -i inventory playbooks/configure-auto-scaling.yml
 4. **Storage Management**: Implement proper storage lifecycle policies
 5. **Environment Management**: Use separate environments appropriately
 
-## Troubleshooting Reference
+## Troubleshooting
 
 ### Common Issues and Solutions
 
 #### Issue: Template Creation Fails
 
 **Symptoms:**
-
 - Error during image download
 - VM creation failure
 - Package installation errors
 
 **Solutions:**
-
 ```bash
 # Check internet connectivity
 curl -I http://google.com
@@ -846,13 +891,11 @@ tail -f /var/log/pve/tasks/current
 #### Issue: Container Deployment Fails
 
 **Symptoms:**
-
 - Docker compose errors
 - Container startup failures
 - Network connectivity issues
 
 **Solutions:**
-
 ```bash
 # Check Docker daemon
 systemctl status docker
@@ -871,13 +914,11 @@ docker logs CONTAINER_NAME
 #### Issue: Kubernetes Cluster Problems
 
 **Symptoms:**
-
 - Nodes not joining cluster
 - Pod scheduling failures
 - Network policy issues
 
 **Solutions:**
-
 ```bash
 # Check cluster status
 kubectl cluster-info
@@ -895,13 +936,11 @@ journalctl -u kubelet
 #### Issue: Ansible Playbook Failures
 
 **Symptoms:**
-
 - SSH connection failures
 - Task execution errors
 - Inventory problems
 
 **Solutions:**
-
 ```bash
 # Test connectivity
 ansible all -i inventory -m ping
@@ -916,23 +955,23 @@ ansible-playbook --syntax-check playbook.yml
 ansible-playbook -vvv playbook.yml
 ```
 
-### Performance Optimization Reference
+### Performance Optimization
 
-#### VM Performance Optimization
+#### VM Performance
 
 1. **CPU Allocation**: Use `host` CPU type for best performance
 2. **Memory Ballooning**: Disable if not needed
 3. **Disk I/O**: Use `virtio-scsi` with `iothread`
 4. **Network**: Use `virtio` network adapter
 
-#### Storage Performance Optimization
+#### Storage Performance
 
 1. **Use SSD Storage**: For database and high I/O workloads
 2. **RAID Configuration**: Use appropriate RAID levels
 3. **Cache Settings**: Configure proper cache modes
 4. **Backup Storage**: Use separate storage for backups
 
-#### Network Performance Optimization
+#### Network Performance
 
 1. **Bridge Configuration**: Use Linux bridges for performance
 2. **VLAN Optimization**: Minimize VLAN overhead
@@ -941,7 +980,7 @@ ansible-playbook -vvv playbook.yml
 
 ## Advanced Topics
 
-### Custom Distributions Support
+### Custom Distributions
 
 Add support for custom distributions by extending the script:
 
@@ -962,7 +1001,7 @@ esac
 
 ### Integration with External Systems
 
-#### LDAP Integration Configuration
+#### LDAP Integration
 
 ```yaml
 # Configure LDAP authentication
@@ -975,7 +1014,7 @@ esac
     ldap_base_dn: "{{ ldap_base_dn }}"
 ```
 
-#### Monitoring Integration Configuration
+#### Monitoring Integration
 
 ```yaml
 # Configure external monitoring
@@ -989,7 +1028,7 @@ esac
 
 ### Scaling Considerations
 
-#### Multi-Node Proxmox Clusters Configuration
+#### Multi-Node Proxmox Clusters
 
 ```bash
 # Configure cluster storage
@@ -1002,25 +1041,25 @@ ha-manager add vm:100 --state started --group production
 ha-manager set vm:100 --state started --max_restart 3
 ```
 
-#### Load Balancing Configuration
+#### Load Balancing
 
 ```yaml
 # HAProxy configuration for load balancing
 frontend web_frontend
-bind *:80
-bind *:443 ssl crt /etc/ssl/certs/
-default_backend web_servers
+  bind *:80
+  bind *:443 ssl crt /etc/ssl/certs/
+  default_backend web_servers
 
 backend web_servers
-balance roundrobin
-server web1 192.168.1.10:80 check
-server web2 192.168.1.11:80 check
-server web3 192.168.1.12:80 check
+  balance roundrobin
+  server web1 192.168.1.10:80 check
+  server web2 192.168.1.11:80 check
+  server web3 192.168.1.12:80 check
 ```
 
 ## Support and Resources
 
-### Documentation Links
+### Documentation
 
 - [Proxmox VE Documentation](https://pve.proxmox.com/pve-docs/)
 - [Docker Documentation](https://docs.docker.com/)
@@ -1028,13 +1067,13 @@ server web3 192.168.1.12:80 check
 - [Terraform Documentation](https://registry.terraform.io/providers/Telmate/proxmox/)
 - [Ansible Documentation](https://docs.ansible.com/)
 
-### Community Resources
+### Community
 
 - [Proxmox Community Forum](https://forum.proxmox.com/)
 - [r/Proxmox](https://reddit.com/r/Proxmox)
 - [Proxmox Discord](https://discord.gg/proxmox)
 
-### Professional Support Options
+### Professional Support
 
 - Proxmox Support Subscriptions
 - Custom consultation services

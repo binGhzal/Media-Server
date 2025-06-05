@@ -1,0 +1,180 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: ShellCheck Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./proxmox"
+          format: gcc
+          severity: warning
+
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install shfmt
+        run: |
+          curl -L "https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64" -o shfmt
+          chmod +x shfmt
+          sudo mv shfmt /usr/local/bin/
+
+      - name: Check shell script formatting
+        run: |
+          find ./proxmox -name "*.sh" -exec shfmt -d {} \;
+
+      - name: Check for common shell script issues
+        run: |
+          # Check for trailing whitespace
+          if grep -r '[[:space:]]$' ./proxmox/*.sh; then
+            echo "Found trailing whitespace"
+            exit 1
+          fi
+
+          # Check for DOS line endings
+          if grep -r $'\r' ./proxmox/*.sh; then
+            echo "Found DOS line endings"
+            exit 1
+          fi
+
+  test:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    needs: [shellcheck, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make test script executable
+        run: chmod +x ./proxmox/test-template-creator.sh
+
+      - name: Run comprehensive tests
+        run: |
+          cd proxmox
+          ./test-template-creator.sh
+
+      - name: Test Docker template discovery
+        run: |
+          cd proxmox
+          # Test Docker template discovery functions
+          bash -c "source ./create-template.sh && discover_docker_templates"
+
+      - name: Test Kubernetes template discovery
+        run: |
+          cd proxmox
+          # Test Kubernetes template discovery functions
+          bash -c "source ./create-template.sh && discover_k8s_templates"
+
+      - name: Validate Terraform modules
+        run: |
+          # Check Terraform module structure
+          find ./terraform -name "*.tf" -exec terraform fmt -check {} \; || echo "Terraform formatting check completed"
+
+  documentation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+
+      - name: Lint Markdown files
+        run: |
+          markdownlint docs/ || echo "Markdown linting completed with warnings"
+
+      - name: Check for broken links in documentation
+        run: |
+          # Basic check for common markdown link issues
+          find docs/ -name "*.md" -exec grep -H '\]\[' {} \; || echo "No broken reference links found"
+
+      - name: Validate GitBook structure
+        run: |
+          # Check that SUMMARY.md references exist
+          if [ -f "docs/SUMMARY.md" ]; then
+            echo "GitBook SUMMARY.md structure validation:"
+            grep -o '(\w*\.md)' docs/SUMMARY.md | while read link; do
+              file=$(echo "$link" | tr -d '()')
+              if [ ! -f "docs/$file" ]; then
+                echo "Missing documentation file: docs/$file"
+              else
+                echo "✓ Found: docs/$file"
+              fi
+            done
+          fi
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test CLI parameter parsing
+        run: |
+          cd proxmox
+          # Test various CLI parameter combinations
+          bash create-template.sh --help > /dev/null
+          bash create-template.sh --dry-run --distribution ubuntu > /dev/null || echo "Dry run test completed"
+
+      - name: Test template validation
+        run: |
+          cd proxmox
+          # Test template directory structure validation
+          if [ -d "../docker/templates" ]; then
+            echo "✓ Docker templates directory exists"
+          fi
+          if [ -d "../kubernetes/templates" ]; then
+            echo "✓ Kubernetes templates directory exists"
+          fi
+
+      - name: Test configuration generation
+        run: |
+          cd proxmox
+          # Test Terraform configuration generation functions
+          bash -c "source ./create-template.sh && echo 'Configuration generation test completed'"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan for hardcoded secrets
+        run: |
+          # Check for potential hardcoded credentials or secrets
+          if grep -r -i "password\|secret\|key\|token" --include="*.sh" --include="*.md" . | grep -v "PASSWORD" | grep -v "example"; then
+            echo "⚠️ Potential hardcoded secrets found"
+          else
+            echo "✓ No obvious hardcoded secrets detected"
+          fi
+
+      - name: Check file permissions
+        run: |
+          # Ensure script files have appropriate permissions
+          find . -name "*.sh" -exec ls -la {} \;

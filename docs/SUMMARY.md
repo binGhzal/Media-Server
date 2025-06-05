@@ -5,6 +5,12 @@
 - [Introduction](README.md)
 - [Proxmox Template Creator Guide](ProxmoxTemplateCreatorGuide.md)
 - [Feature Documentation](FEATURE_DOCUMENTATION.md)
+- [Proxmox Template Creation](proxmox-template-creation.md)
+
+## Integration Guides
+
+- [Ansible Integration](ansible.md)
+- [Terraform Integration](terraform.md)
 
 ## Implementation Details
 

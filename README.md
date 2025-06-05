@@ -1,5 +1,8 @@
 # Homelab Infrastructure
 
+Access the wiki by clocking this button:
+[![Hosted on GitBook](https://gitbook.com/images/badges/hosted-on-gitbook.png)](https://bizarreindustries.gitbook.io/homelab)
+
 ## Introduction
 
 This repository contains the configuration files and scripts for setting up a comprehensive homelab environment. The infrastructure supports various applications and services including virtualization, container orchestration, monitoring, automation, and development tools.

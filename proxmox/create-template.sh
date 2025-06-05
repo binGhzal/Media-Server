@@ -63,7 +63,6 @@ check_dependencies() {
         if ! command -v "$dep" &> /dev/null; then
             missing+=("$dep")
         fi
-    done
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo "Error: Missing required dependencies: ${missing[*]}"
@@ -1109,7 +1108,6 @@ whiptail --title "Proxmox Template Creator v$SCRIPT_VERSION" \
             *) log_warn "Invalid selection. Please try again." ;;
         esac
     done
-}
 
 # Create a single template with interactive configuration
 create_single_template() {
@@ -1264,33 +1262,35 @@ select_packages() {
         selected_cats+=("$cat")
     done
 
-    # For each selected category, show individual packages
-    for category in "${selected_cats[@]}"; do
-
-    done
-PACKAGE_CATEGORIES[$category]}" ]]; then
-            IFS=' ' read -ra cat_packages <<< "${PACKAGE_CATEGORIES[$category]}"
-            local pkg_options=()
-
-            for pkg in "${cat_packages[@]}"; do
-                pkg_options+=("$pkg" "Package" OFF)
-            done
-
-            local selected_pkgs
-            selected_pkgs=$(whiptail --title "Package Selection - $category" \
-                --checklist "Select packages from $category:" 20 80 10 \
-                "${pkg_options[@]}" \
-                3>&1 1>&2 2>&3)
-
-            if [[ $? -eq 0 ]]; then
-                for pkg in $selected_pkgs; do
-                    pkg="${pkg//\"/}"  # Remove quotes
-                    SELECTED_PACKAGES+=("$pkg")
-                    ((selected_count++))
-                done
-            fi
+# For each selected category, show individual packages
+for category in "${selected_cats[@]}"; do
+    # Build package options for this category
+    local pkg_options=()
+    for ((i=0; i<${#AVAILABLE_PACKAGES[@]}; i+=5)); do
+        local pkg_name="${AVAILABLE_PACKAGES[i]}"
+        local pkg_desc="${AVAILABLE_PACKAGES[i+1]}"
+        local pkg_cat="${AVAILABLE_PACKAGES[i+3]}"
+        if [[ "$pkg_cat" == "$category" ]]; then
+            pkg_options+=("$pkg_name" "$pkg_desc" OFF)
         fi
     done
+
+    if [[ ${#pkg_options[@]} -gt 0 ]]; then
+        local selected_pkgs
+        selected_pkgs=$(whiptail --title "Package Selection - $category" \
+            --checklist "Select packages from $category:" 20 80 10 \
+            "${pkg_options[@]}" \
+            3>&1 1>&2 2>&3)
+
+        if [[ $? -eq 0 ]]; then
+            for pkg in $selected_pkgs; do
+                pkg="${pkg//\"/}"  # Remove quotes
+                SELECTED_PACKAGES+=("$pkg")
+                ((selected_count++))
+            done
+        fi
+    fi
+done
 
     if [[ $selected_count -eq 0 ]]; then
         whiptail --title "No Packages Selected" \
@@ -4059,5 +4059,4 @@ select_k8s_template_ui() {
     SELECTED_K8S_TEMPLATES=("$sel")
     K8S_INTEGRATION="true"
     return 0
-}
 }

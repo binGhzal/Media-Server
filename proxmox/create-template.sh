@@ -2304,21 +2304,13 @@ create_template_main() {
     # Step 5: Apply Docker templates if selected
     if [[ ${#SELECTED_DOCKER_TEMPLATES[@]} -gt 0 ]]; then
         log_info "Applying Docker templates: ${SELECTED_DOCKER_TEMPLATES[*]}"
-        for docker_template in "${SELECTED_DOCKER_TEMPLATES[@]}"; do
-            log_info "Staging Docker template: $docker_template"
-            cp "$REPO_ROOT/docker/templates/$docker_template" "$WORK_DIR/"
-            log_info "Copied $docker_template to staging directory"
-        done
+        provision_docker_templates || log_warn "Docker template provisioning failed"
     fi
     
     # Step 6: Apply Kubernetes templates if selected
     if [[ ${#SELECTED_K8S_TEMPLATES[@]} -gt 0 ]]; then
         log_info "Applying Kubernetes templates: ${SELECTED_K8S_TEMPLATES[*]}"
-        for k8s_template in "${SELECTED_K8S_TEMPLATES[@]}"; do
-            log_info "Staging Kubernetes template: $k8s_template"
-            cp "$REPO_ROOT/kubernetes/templates/$k8s_template" "$WORK_DIR/"
-            log_info "Copied $k8s_template to staging directory"
-        done
+        provision_k8s_templates || log_warn "Kubernetes template provisioning failed"
     fi
     
     # Step 7: Convert to template
@@ -2345,6 +2337,38 @@ create_template_main() {
     rm -rf "$WORK_DIR"
     log_debug "Cleaned up staging directory $WORK_DIR"
     log_success "Template creation complete: $VM_NAME (ID: $VMID_DEFAULT)"
+    return 0
+}
+
+# Provision Docker templates
+provision_docker_templates() {
+    log_info "Provisioning Docker templates"
+    
+    for template in "${SELECTED_DOCKER_TEMPLATES[@]}"; do
+        log_info "Executing Docker Compose for template: $template"
+        pct exec "$TEMP_LXC_ID" -- docker-compose -f "/srv/templates/$template" up -d || {
+            log_error "Failed to provision Docker template: $template"
+            return 1
+        }
+    done
+    
+    log_success "Docker templates provisioned successfully"
+    return 0
+}
+
+# Provision Kubernetes templates
+provision_k8s_templates() {
+    log_info "Provisioning Kubernetes templates"
+    
+    for template in "${SELECTED_K8S_TEMPLATES[@]}"; do
+        log_info "Applying Kubernetes manifest for template: $template"
+        pct exec "$TEMP_LXC_ID" -- kubectl apply -f "/srv/templates/$template" || {
+            log_error "Failed to provision Kubernetes template: $template"
+            return 1
+        }
+    done
+    
+    log_success "Kubernetes templates provisioned successfully"
     return 0
 }
 

@@ -7,85 +7,85 @@ set -e
                 show_help
                 ;;
             --batch)
-                BATCH_MODE=true
+                export BATCH_MODE=true
                 ;;
             --dry-run)
-                DRY_RUN=true
+                export DRY_RUN=true
                 log_info "Dry run mode enabled - no actual changes will be made"
                 ;;
             --docker-template)
                 shift
-                DOCKER_INTEGRATION=true
-                SELECTED_DOCKER_TEMPLATES=("$1")
+                export DOCKER_INTEGRATION=true
+                export SELECTED_DOCKER_TEMPLATES=("$1")
                 ;;
             --k8s-template)
                 shift
-                K8S_INTEGRATION=true
-                SELECTED_K8S_TEMPLATES=("$1")
+                export K8S_INTEGRATION=true
+                export SELECTED_K8S_TEMPLATES=("$1")
                 ;;
             --config)
                 shift
-                CONFIG_FILE="$1"
+                export CONFIG_FILE="$1"
                 ;;
             --vmid)
                 shift
-                VMID_DEFAULT="$1"
+                export VMID_DEFAULT="$1"
                 ;;
             --distro)
                 shift
-                SELECTED_DISTRIBUTION="$1"
+                export SELECTED_DISTRIBUTION="$1"
                 ;;
             --vm-name)
                 shift
-                VM_NAME="$1"
+                export VM_NAME="$1"
                 ;;
             --cores)
                 shift
-                VM_CORES="$1"
+                export VM_CORES="$1"
                 ;;
             --memory)
                 shift
-                VM_MEMORY="$1"
+                export VM_MEMORY="$1"
                 ;;
             --disk-size)
                 shift
-                VM_DISK_SIZE="$1"
+                export VM_DISK_SIZE="$1"
                 ;;
             --storage)
                 shift
-                VM_STORAGE="$1"
+                export VM_STORAGE="$1"
                 ;;
             --network-bridge)
                 shift
-                NETWORK_BRIDGE="$1"
+                export NETWORK_BRIDGE="$1"
                 ;;
             --static-ip)
                 shift
-                STATIC_IP="$1"
+                export STATIC_IP="$1"
                 ;;
             --gateway)
                 shift
-                STATIC_GATEWAY="$1"
+                export STATIC_GATEWAY="$1"
                 ;;
             --dns)
                 shift
-                STATIC_DNS="$1"
+                export STATIC_DNS="$1"
                 ;;
             --enable-ansible)
-                ANSIBLE_ENABLED=true
+                export ANSIBLE_ENABLED=true
                 ;;
             --enable-terraform)
-                TERRAFORM_ENABLED=true
+                export TERRAFORM_ENABLED=true
                 ;;
             --enable-docker)
-                DOCKER_INTEGRATION=true
+                export DOCKER_INTEGRATION=true
                 ;;
             --enable-k8s)
-                K8S_INTEGRATION=true
+                export K8S_INTEGRATION=true
                 ;;
             --log-level)
                 shift
-                LOG_LEVEL="$1"
+                export LOG_LEVEL="$1"
                 ;;
             --version)
                 echo "Proxmox Template Creator v$SCRIPT_VERSION"

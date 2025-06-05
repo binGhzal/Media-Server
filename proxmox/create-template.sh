@@ -346,148 +346,148 @@ GEN_PASS=$(openssl rand -base64 16) # Secure random password generation
 WORK_DIR="/tmp/proxmox-template-$$" # Unique temporary directory
 
 # Cloud-init defaults
-CLOUD_PASSWORD_DEFAULT="$GEN_PASS"
-CLOUD_USER_DEFAULT="ubuntu" # Changed from root for security
-LOCAL_LANG="en_US.UTF-8" # More universal default
-SET_X11="no" # Disabled by default for server templates
-X11_LAYOUT="us" # US layout as default
-X11_MODEL="pc105"
-ADD_SUDO_NOPASSWD="true" # Enable for convenience
-SSH_KEY_PATH="" # Path to SSH public key file
+export CLOUD_PASSWORD_DEFAULT="$GEN_PASS"
+export CLOUD_USER_DEFAULT="ubuntu" # Changed from root for security
+export LOCAL_LANG="en_US.UTF-8" # More universal default
+export SET_X11="no" # Disabled by default for server templates
+export X11_LAYOUT="us" # US layout as default
+export X11_MODEL="pc105"
+export ADD_SUDO_NOPASSWD="true" # Enable for convenience
+export SSH_KEY_PATH="" # Path to SSH public key file
 
 # VM ID Management
-VMID_DEFAULT="9000" # Starting from 9000 for templates
-VMID_INCREMENT="1" # Increment value for batch creation
-VMID_MAX="999999999" # Maximum VMID allowed by Proxmox
+export VMID_DEFAULT="9000" # Starting from 9000 for templates
+export VMID_INCREMENT="1" # Increment value for batch creation
+export VMID_MAX="999999999" # Maximum VMID allowed by Proxmox
 
 # Template Identification and Tagging
-TEMPLATE_TAG="template" # Default tag for all templates
-VM_CATEGORY_TAG="" # Category tag (web, db, dev, k8s, etc.)
-TEMPLATE_NOTES="" # Template description/notes
+export TEMPLATE_TAG="template" # Default tag for all templates
+export VM_CATEGORY_TAG="" # Category tag (web, db, dev, k8s, etc.)
+export TEMPLATE_NOTES="" # Template description/notes
 
 # Network Configuration
-NETWORK_MODE="dhcp" # Options: dhcp, static, none
-STATIC_IP="" # Static IP address (CIDR format: 192.168.1.100/24)
-STATIC_GATEWAY="" # Gateway IP
-STATIC_DNS="1.1.1.1,8.8.8.8" # Cloudflare and Google DNS
-NETWORK_BRIDGE="vmbr0" # Default network bridge
-VLAN_TAG="" # VLAN tag (optional)
-NETWORK_MODEL="virtio" # Network card model
+export NETWORK_MODE="dhcp" # Options: dhcp, static, none
+export STATIC_IP="" # Static IP address (CIDR format: 192.168.1.100/24)
+export STATIC_GATEWAY="" # Gateway IP
+export STATIC_DNS="1.1.1.1,8.8.8.8" # Cloudflare and Google DNS
+export NETWORK_BRIDGE="vmbr0" # Default network bridge
+export VLAN_TAG="" # VLAN tag (optional)
+export NETWORK_MODEL="virtio" # Network card model
 
 # Storage and Hardware
-STORAGE_POOL="local-lvm" # Default storage pool
-KEEP_DEFAULT_DISK_SIZE="true" # Use image default unless overridden
-DISK_SIZE_OVERRIDE="" # Override in GB (e.g., "20")
-DISK_FORMAT="qcow2" # Disk format
-DISK_CACHE="none" # Disk cache mode
-DISK_IO_THREAD="true" # Enable I/O threads for better performance
+export STORAGE_POOL="local-lvm" # Default storage pool
+export KEEP_DEFAULT_DISK_SIZE="true" # Use image default unless overridden
+export DISK_SIZE_OVERRIDE="" # Override in GB (e.g., "20")
+export DISK_FORMAT="qcow2" # Disk format
+export DISK_CACHE="none" # Disk cache mode
+export DISK_IO_THREAD="true" # Enable I/O threads for better performance
 
 # CPU Configuration
-CPU_CORES="2" # Default CPU cores
-CPU_SOCKETS="1" # CPU sockets
-CPU_TYPE="host" # CPU type (host for best performance)
-CPU_FLAGS="" # Additional CPU flags
+export CPU_CORES="2" # Default CPU cores
+export CPU_SOCKETS="1" # CPU sockets
+export CPU_TYPE="host" # CPU type (host for best performance)
+export CPU_FLAGS="" # Additional CPU flags
 
 # Memory Configuration
-MEMORY_SIZE="2048" # RAM in MB
-MEMORY_BALLOON="1024" # Minimum balloon size
-MEMORY_SHARES="1000" # Memory shares for prioritization
+export MEMORY_SIZE="2048" # RAM in MB
+export MEMORY_BALLOON="1024" # Minimum balloon size
+export MEMORY_SHARES="1000" # Memory shares for prioritization
 
 # Advanced VM Settings
-BIOS_TYPE="ovmf" # UEFI by default (ovmf), legacy: seabios
-MACHINE_TYPE="q35" # Modern machine type
-OS_TYPE="l26" # Linux 2.6+ kernel
-QEMU_AGENT="true" # Enable QEMU guest agent
-BOOT_ORDER="order=scsi0" # Boot from primary disk
-SERIAL_CONSOLE="true" # Enable serial console
-VGA_TYPE="std" # VGA adapter type
-PROTECTION="false" # VM protection against accidental deletion
+export BIOS_TYPE="ovmf" # UEFI by default (ovmf), legacy: seabios
+export MACHINE_TYPE="q35" # Modern machine type
+export OS_TYPE="l26" # Linux 2.6+ kernel
+export QEMU_AGENT="true" # Enable QEMU guest agent
+export BOOT_ORDER="order=scsi0" # Boot from primary disk
+export SERIAL_CONSOLE="true" # Enable serial console
+export VGA_TYPE="std" # VGA adapter type
+export PROTECTION="false" # VM protection against accidental deletion
 
 # Batch Processing and Queue Management
-BATCH_MODE="false" # Enable batch processing
-BATCH_COUNT="1" # Number of templates to create
-BATCH_CONFIG_FILE="" # Configuration file for batch processing
-TEMPLATE_QUEUE=() # Array to store template configurations
-AUTO_START_AFTER_CREATION="false" # Start template after creation (for testing)
+export BATCH_MODE="false" # Enable batch processing
+export BATCH_COUNT="1" # Number of templates to create
+export BATCH_CONFIG_FILE="" # Configuration file for batch processing
+export TEMPLATE_QUEUE=() # Array to store template configurations
+export AUTO_START_AFTER_CREATION="false" # Start template after creation (for testing)
 
 # Custom Image Support
-CUSTOM_IMAGE_URL="" # URL for custom image/ISO
-CUSTOM_IMAGE_TYPE="auto" # auto-detect, qcow2, raw, iso
-CUSTOM_IMAGE_CHECKSUM="" # Optional checksum verification
-CUSTOM_PACKAGE_MANAGER="auto" # auto-detect, apt, dnf, zypper, pacman
+export CUSTOM_IMAGE_URL="" # URL for custom image/ISO
+export CUSTOM_IMAGE_TYPE="auto" # auto-detect, qcow2, raw, iso
+export CUSTOM_IMAGE_CHECKSUM="" # Optional checksum verification
+export CUSTOM_PACKAGE_MANAGER="auto" # auto-detect, apt, dnf, zypper, pacman
 
 # Integration Configurations
-ANSIBLE_ENABLED="false" # Enable Ansible integration
-ANSIBLE_LXC_TEMPLATE="ubuntu" # LXC template for Ansible container
-ANSIBLE_LXC_CORES="1" # CPU cores for Ansible LXC
-ANSIBLE_LXC_MEMORY="1024" # Memory for Ansible LXC (MB)
-ANSIBLE_LXC_STORAGE="local-lvm" # Storage for Ansible LXC
-ANSIBLE_CLEANUP_AFTER="true" # Remove Ansible LXC after completion
+export ANSIBLE_ENABLED="false" # Enable Ansible integration
+export ANSIBLE_LXC_TEMPLATE="ubuntu" # LXC template for Ansible container
+export ANSIBLE_LXC_CORES="1" # CPU cores for Ansible LXC
+export ANSIBLE_LXC_MEMORY="1024" # Memory for Ansible LXC (MB)
+export ANSIBLE_LXC_STORAGE="local-lvm" # Storage for Ansible LXC
+export ANSIBLE_CLEANUP_AFTER="true" # Remove Ansible LXC after completion
 
-TERRAFORM_ENABLED="false" # Generate Terraform configurations
-TERRAFORM_PROVIDER="telmate/proxmox" # Terraform provider
-TERRAFORM_VERSION_CONSTRAINT=">= 2.9.0" # Provider version constraint
+export TERRAFORM_ENABLED="false" # Generate Terraform configurations
+export TERRAFORM_PROVIDER="telmate/proxmox" # Terraform provider
+export TERRAFORM_VERSION_CONSTRAINT=">= 2.9.0" # Provider version constraint
 
 # Inventory and Documentation
-INVENTORY_ENABLED="true" # Generate Proxmox inventory
-INVENTORY_FORMAT="yaml" # yaml or ini format
-GENERATE_DOCS="true" # Generate template documentation
-DOCUMENTATION_FORMAT="markdown" # markdown or html
+export INVENTORY_ENABLED="true" # Generate Proxmox inventory
+export INVENTORY_FORMAT="yaml" # yaml or ini format
+export GENERATE_DOCS="true" # Generate template documentation
+export DOCUMENTATION_FORMAT="markdown" # markdown or html
 
 # Post-Installation Configurations
-POST_INSTALL_REBOOT="false" # Reboot after package installation
-POST_INSTALL_UPDATE="true" # Update packages after installation
-POST_INSTALL_CLEANUP="true" # Clean package cache after installation
-INSTALL_SECURITY_UPDATES="true" # Install security updates
-CONFIGURE_FIREWALL="false" # Configure basic firewall rules
-SETUP_SSH_HARDENING="false" # Apply SSH security hardening
+export POST_INSTALL_REBOOT="false" # Reboot after package installation
+export POST_INSTALL_UPDATE="true" # Update packages after installation
+export POST_INSTALL_CLEANUP="true" # Clean package cache after installation
+export INSTALL_SECURITY_UPDATES="true" # Install security updates
+export CONFIGURE_FIREWALL="false" # Configure basic firewall rules
+export SETUP_SSH_HARDENING="false" # Apply SSH security hardening
 
 # Monitoring and Health Checks
-ENABLE_MONITORING_PACKAGES="false" # Install monitoring packages by default
-HEALTH_CHECK_ENABLED="true" # Perform health checks after creation
-HEALTH_CHECK_TIMEOUT="300" # Health check timeout in seconds
+export ENABLE_MONITORING_PACKAGES="false" # Install monitoring packages by default
+export HEALTH_CHECK_ENABLED="true" # Perform health checks after creation
+export HEALTH_CHECK_TIMEOUT="300" # Health check timeout in seconds
 
 # Error Handling and Recovery
-ERROR_RECOVERY_ENABLED="true" # Enable automatic error recovery
-MAX_RETRY_ATTEMPTS="3" # Maximum retry attempts for failed operations
-CLEANUP_ON_FAILURE="true" # Clean up resources on failure
-PRESERVE_LOGS_ON_FAILURE="true" # Keep logs when operations fail
+export ERROR_RECOVERY_ENABLED="true" # Enable automatic error recovery
+export MAX_RETRY_ATTEMPTS="3" # Maximum retry attempts for failed operations
+export CLEANUP_ON_FAILURE="true" # Clean up resources on failure
+export PRESERVE_LOGS_ON_FAILURE="true" # Keep logs when operations fail
 
 # Performance and Optimization
-PARALLEL_DOWNLOADS="true" # Enable parallel image downloads
-COMPRESSION_ENABLED="true" # Compress template disk after creation
-OPTIMIZE_FOR_SIZE="false" # Optimize template for minimum size
-OPTIMIZE_FOR_PERFORMANCE="true" # Optimize template for performance
+export PARALLEL_DOWNLOADS="true" # Enable parallel image downloads
+export COMPRESSION_ENABLED="true" # Compress template disk after creation
+export OPTIMIZE_FOR_SIZE="false" # Optimize template for minimum size
+export OPTIMIZE_FOR_PERFORMANCE="true" # Optimize template for performance
 
 # Security Settings
-DISABLE_PASSWORD_AUTH="true" # Disable password authentication (SSH key only)
-RANDOMIZE_ROOT_PASSWORD="true" # Set random root password
-INSTALL_SECURITY_PACKAGES="false" # Install security packages by default
-ENABLE_AUDIT_LOGGING="false" # Enable audit logging
-SECURE_BOOT_ENABLED="false" # Enable secure boot (requires OVMF)
+export DISABLE_PASSWORD_AUTH="true" # Disable password authentication (SSH key only)
+export RANDOMIZE_ROOT_PASSWORD="true" # Set random root password
+export INSTALL_SECURITY_PACKAGES="false" # Install security packages by default
+export ENABLE_AUDIT_LOGGING="false" # Enable audit logging
+export SECURE_BOOT_ENABLED="false" # Enable secure boot (requires OVMF)
 
 # Development and Testing
-DEBUG_MODE="false" # Enable debug output
-TEST_MODE="false" # Enable test mode (don't actually create VMs)
-VERBOSE_OUTPUT="false" # Enable verbose output
-DRY_RUN="false" # Show what would be done without executing
+export DEBUG_MODE="false" # Enable debug output
+export TEST_MODE="false" # Enable test mode (don't actually create VMs)
+export VERBOSE_OUTPUT="false" # Enable verbose output
+export DRY_RUN="false" # Show what would be done without executing
 
 # Temporary Resource Management
-TEMP_LXC_ID="" # Temporary LXC container ID
-TEMP_DIR="" # Temporary directory for downloads
-CLEANUP_ENABLED="true" # Enable automatic cleanup
+export TEMP_LXC_ID="" # Temporary LXC container ID
+export TEMP_DIR="" # Temporary directory for downloads
+export CLEANUP_ENABLED="true" # Enable automatic cleanup
 
 # Advanced Features
-CLOUD_INIT_SNIPPETS="true" # Use cloud-init snippets
-CUSTOM_CLOUD_INIT_CONFIG="" # Path to custom cloud-init config
-TPM_ENABLED="false" # Enable TPM 2.0 support
-UEFI_SECURE_BOOT="false" # Enable UEFI Secure Boot
-NESTED_VIRTUALIZATION="false" # Enable nested virtualization
+export CLOUD_INIT_SNIPPETS="true" # Use cloud-init snippets
+export CUSTOM_CLOUD_INIT_CONFIG="" # Path to custom cloud-init config
+export TPM_ENABLED="false" # Enable TPM 2.0 support
+export UEFI_SECURE_BOOT="false" # Enable UEFI Secure Boot
+export NESTED_VIRTUALIZATION="false" # Enable nested virtualization
 
 # CLI and Configuration Management
-CONFIG_FILE="" # Configuration file for CLI mode
-LOG_LEVEL="info" # Logging level (debug, info, warn, error)
-POSITIONAL_ARGS=() # Array to store positional arguments
+export CONFIG_FILE="" # Configuration file for CLI mode
+export LOG_LEVEL="info" # Logging level (debug, info, warn, error)
+export POSITIONAL_ARGS=() # Array to store positional arguments
 
 # Welcome message for UI mode
 show_welcome() {
@@ -517,17 +517,17 @@ Press OK to begin..." 24 75
 }
 
 # Required packages for the script
-REQUIRED_PKG=("libguestfs-tools" "wget" "whiptail" "jq" "curl")
+export REQUIRED_PKG=("libguestfs-tools" "wget" "whiptail" "jq" "curl")
 
 #===============================================================================
 # SCRIPT LOGIC AND FUNCTION DEFINITIONS
 #===============================================================================
 
 # Script version and metadata
-SCRIPT_VERSION="5.0"
-SCRIPT_NAME="Proxmox Template Creator Ultra Enhanced"
-SCRIPT_AUTHOR="Homelab Infrastructure Team"
-SCRIPT_DATE="2025-06-04"
+export SCRIPT_VERSION="5.0"
+export SCRIPT_NAME="Proxmox Template Creator Ultra Enhanced"
+export SCRIPT_AUTHOR="Homelab Infrastructure Team"
+export SCRIPT_DATE="2025-06-04"
 
 # Essential dependency check
 # Enhanced dependency check with auto-installation
@@ -572,48 +572,48 @@ check_root() {
 #===============================================================================
 # ENHANCED GLOBAL VARIABLES AND DEFAULTS
 #===============================================================================
-SET_X11="yes" # "yes" or "no" required
-VMID_DEFAULT="52000" # VM ID
-X11_LAYOUT="gb"
-X11_MODEL="pc105"
-ADD_SUDO_NOPASSWD="false" # Add sudo NOPASSWD for cloud user
-NETWORK_MODE="dhcp" # dhcp or static
-STATIC_IP="" # Static IP address
-STATIC_GATEWAY="" # Static gateway
-STATIC_NETMASK="" # Static netmask
-STATIC_DNS="8.8.8.8,8.8.4.4" # Static DNS servers
-CUSTOM_ISO_URL="" # Custom ISO download URL
-CUSTOM_ISO_TYPE="" # Custom ISO type (qcow2, img, iso)
-CUSTOM_PKG_MANAGER="" # Custom package manager
-KEEP_DEFAULT_DISK_SIZE="true" # Use image default size unless overridden
-DISK_SIZE_OVERRIDE="" # Override disk size in GB
-BATCH_MODE="false" # Multiple template creation
-BATCH_COUNT="1" # Number of templates to create
-BATCH_VMID_START="52000" # Starting VMID for batch creation
-AUTO_INCREMENT_VMID="true" # Auto-increment VMID for batch creation
-TEMPLATE_QUEUE=() # Array to store multiple template configurations
-ANSIBLE_ENABLED="false" # Enable Ansible post-configuration
-LXC_ANSIBLE_CONTAINER="ansible-runner" # LXC container for Ansible
-ANSIBLE_PLAYBOOK_PATH="/etc/ansible/playbooks" # Path to Ansible playbooks
-TERRAFORM_ENABLED="false" # Generate Terraform configurations
-INVENTORY_ENABLED="true" # Generate Proxmox inventory files
+export SET_X11="yes" # "yes" or "no" required
+export VMID_DEFAULT="52000" # VM ID
+export X11_LAYOUT="gb"
+export X11_MODEL="pc105"
+export ADD_SUDO_NOPASSWD="false" # Add sudo NOPASSWD for cloud user
+export NETWORK_MODE="dhcp" # dhcp or static
+export STATIC_IP="" # Static IP address
+export STATIC_GATEWAY="" # Static gateway
+export STATIC_NETMASK="" # Static netmask
+export STATIC_DNS="8.8.8.8,8.8.4.4" # Static DNS servers
+export CUSTOM_ISO_URL="" # Custom ISO download URL
+export CUSTOM_ISO_TYPE="" # Custom ISO type (qcow2, img, iso)
+export CUSTOM_PKG_MANAGER="" # Custom package manager
+export KEEP_DEFAULT_DISK_SIZE="true" # Use image default size unless overridden
+export DISK_SIZE_OVERRIDE="" # Override disk size in GB
+export BATCH_MODE="false" # Multiple template creation
+export BATCH_COUNT="1" # Number of templates to create
+export BATCH_VMID_START="52000" # Starting VMID for batch creation
+export AUTO_INCREMENT_VMID="true" # Auto-increment VMID for batch creation
+export TEMPLATE_QUEUE=() # Array to store multiple template configurations
+export ANSIBLE_ENABLED="false" # Enable Ansible post-configuration
+export LXC_ANSIBLE_CONTAINER="ansible-runner" # LXC container for Ansible
+export ANSIBLE_PLAYBOOK_PATH="/etc/ansible/playbooks" # Path to Ansible playbooks
+export TERRAFORM_ENABLED="false" # Generate Terraform configurations
+export INVENTORY_ENABLED="true" # Generate Proxmox inventory files
 
 # Docker Integration Variables
-DOCKER_INTEGRATION="false" # Enable Docker template integration
-DOCKER_TEMPLATES_PATH="/srv/docker-templates" # Path to Docker templates
-SELECTED_DOCKER_TEMPLATES=() # Array of selected Docker templates
-DOCKER_LXC_CONTAINER="docker-runner" # LXC container for Docker
-DOCKER_KEEP_CONTAINER="false" # Keep Docker container after provisioning
+export DOCKER_INTEGRATION="false" # Enable Docker template integration
+export DOCKER_TEMPLATES_PATH="/srv/docker-templates" # Path to Docker templates
+export SELECTED_DOCKER_TEMPLATES=() # Array of selected Docker templates
+export DOCKER_LXC_CONTAINER="docker-runner" # LXC container for Docker
+export DOCKER_KEEP_CONTAINER="false" # Keep Docker container after provisioning
 
 # Kubernetes Integration Variables
-K8S_INTEGRATION="false" # Enable Kubernetes template integration
-K8S_TEMPLATES_PATH="/srv/k8s-templates" # Path to Kubernetes templates
-SELECTED_K8S_TEMPLATES=() # Array of selected Kubernetes templates
-K8S_LXC_CONTAINER="k8s-runner" # LXC container for Kubernetes
-K8S_KUBECONFIG_PATH="" # Path to kubeconfig file
-K8S_WAIT_FOR_READY="true" # Wait for resources to be ready
-K8S_SAVE_CLUSTER_INFO="true" # Save cluster information
-K8S_KEEP_CONTAINER="false" # Keep K8s container after provisioning
+export K8S_INTEGRATION="false" # Enable Kubernetes template integration
+export K8S_TEMPLATES_PATH="/srv/k8s-templates" # Path to Kubernetes templates
+export SELECTED_K8S_TEMPLATES=() # Array of selected Kubernetes templates
+export K8S_LXC_CONTAINER="k8s-runner" # LXC container for Kubernetes
+export K8S_KUBECONFIG_PATH="" # Path to kubeconfig file
+export K8S_WAIT_FOR_READY="true" # Wait for resources to be ready
+export K8S_SAVE_CLUSTER_INFO="true" # Save cluster information
+export K8S_KEEP_CONTAINER="false" # Keep K8s container after provisioning
 
 #===============================================================================
 # COMPREHENSIVE DISTRIBUTION CONFIGURATIONS (50+ DISTROS)
@@ -959,7 +959,7 @@ PACKAGE_CATEGORIES=(
 )
 
 # Additional packages that can be installed
-ADDITIONAL_PACKAGES=(
+export ADDITIONAL_PACKAGES=(
     "redis-server" "In-memory data store" off
     "nodejs" "JavaScript runtime" off
     "npm" "Node.js package manager" off
@@ -998,38 +998,39 @@ ADDITIONAL_PACKAGES=(
 )
 
 ### Virt-Customize variables
-VIRT_PKGS="qemu-guest-agent,cloud-utils,cloud-guest-utils"
-EXTRA_VIRT_PKGS="tree,libguestfs-tools,kpartx,testdisk,fail2ban,ufw,nmap,msmtp,htop,net-tools,iputils-ping,rsync,git,openssh-server,ca-certificates,python3-apt,python3-pip,python3-venv,python3-setuptools,tmux,unzip,build-essential,gnupg,software-properties-common,apt-transport-https,net-tools,iputils-ping,rsync,cron,cron-apt,ntpdate"
+export VIRT_PKGS="qemu-guest-agent,cloud-utils,cloud-guest-utils"
+export EXTRA_VIRT_PKGS="tree,libguestfs-tools,kpartx,testdisk,fail2ban,ufw,nmap,msmtp,htop,net-tools,iputils-ping,rsync,git,openssh-server,ca-certificates,python3-apt,python3-pip,python3-venv,python3-setuptools,tmux,unzip,build-essential,gnupg,software-properties-common,apt-transport-https,net-tools,iputils-ping,rsync,cron,cron-apt,ntpdate"
 ### VM variables
-AGENT_ENABLE="1" # Change to 0 if you don't want the guest agent
-BALLOON="768" # Minimum balooning size
-BIOS="ovmf" # Choose between ovmf or seabios
-CORES="2"
-DISK_SIZE="15G"
-DISK_STOR="proxmox" # Name of disk storage within Proxmox
-FSTRIM="1"
-MACHINE="q35" # Type of machine. Q35 or i440fx
-MEM="2048" # Max RAM
-NET_BRIDGE="vmbr1" # Network bridge name
-NET_MODE="dhcp" # Network mode: dhcp or static
-NET_IP="" # Static IP address (if NET_MODE=static)
-NET_GW="" # Gateway IP (if NET_MODE=static)
-NET_MASK="24" # Network mask (if NET_MODE=static)
-TAG="template"
+export AGENT_ENABLE="1" # Change to 0 if you don't want the guest agent
+export BALLOON="768" # Minimum balooning size
+export BIOS="ovmf" # Choose between ovmf or seabios
+export CORES="2"
+export DISK_SIZE="15G"
+export DISK_STOR="proxmox" # Name of disk storage within Proxmox
+export FSTRIM="1"
+export MACHINE="q35" # Type of machine. Q35 or i440fx
+export MEM="2048" # Max RAM
+export NET_BRIDGE="vmbr1" # Network bridge name
+export NET_MODE="dhcp" # Network mode: dhcp or static
+export NET_IP="" # Static IP address (if NET_MODE=static)
+export NET_GW="" # Gateway IP (if NET_MODE=static)
+export NET_MASK="24" # Network mask (if NET_MODE=static)
+export TAG="template"
 
 # VM Tagging and Identification
-VM_TAG_TEMPLATE="template" # Tag for templates
-VM_TAG_CATEGORY="" # Tag for VM category (web, db, dev, etc.)
-VM_DESCRIPTION="" # VM description
+export VM_TAG_TEMPLATE="template" # Tag for templates
+export VM_TAG_CATEGORY="" # Tag for VM category (web, db, dev, etc.)
+export VM_DESCRIPTION="" # VM description
 
-OS_TYPE="l26" # OS type (Linux 6x - 2.6 Kernel)
+export OS_TYPE="l26" # OS type (Linux 6x - 2.6 Kernel)
 # SSH Keys. Unset the variable if you don't want to use this. Use the public key.
-SSH_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFLnUCnFyoONBwVMs1Gj4EqERx+Pc81dyhF6IuF26WM proxvms"
-TZ="Europe/London"
-VLAN="50" # Set if you have VLAN requirements
-ZFS="false" # Set to true if you have a ZFS datastore
+export SSH_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOFLnUCnFyoONBwVMs1Gj4EqERx+Pc81dyhF6IuF26WM proxvms"
+export TZ="Europe/London"
+export VLAN="50" # Set if you have VLAN requirements
+export ZFS="false" # Set to true if you have a ZFS datastore
 
 # Notes variable
+export NOTES
 NOTES=$(cat << 'EOF'
 When modifying this template, make sure you run this at the end
 
@@ -1418,6 +1419,7 @@ load_configuration_file() {
     log_info "Loading configuration from: $config_file"
 
     # Source the configuration file
+    # shellcheck source=/dev/null
     if source "$config_file" 2>/dev/null; then
         whiptail --title "Configuration Loaded" \
             --msgbox "Configuration loaded successfully from:\n$config_file\n\nYou can now proceed with template creation." 10 70
@@ -1523,7 +1525,8 @@ configure_vm_defaults() {
     fi
 
     # Storage
-    local storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1}' | tr '\n' ' ')
+    local storage_list
+    storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1}' | tr '\n' ' ')
     local storage_options=()
     for storage in $storage_list; do
         storage_options+=("$storage" "Storage: $storage")
@@ -1588,7 +1591,8 @@ configure_network_settings() {
 # Configure network bridge
 configure_network_bridge() {
     # List available bridges
-    local bridge_list=$(ip link show type bridge | grep -o 'vmbr[0-9]*' | tr '\n' ' ')
+    local bridge_list
+    bridge_list=$(ip link show type bridge | grep -o 'vmbr[0-9]*' | tr '\n' ' ')
     local bridge_options=()
     for bridge in $bridge_list; do
         bridge_options+=("$bridge" "Bridge: $bridge")
@@ -1623,7 +1627,7 @@ configure_vlan_settings() {
                 --msgbox "VLAN enabled with ID: $VLAN_ID" 8 50
         fi
     else
-        VLAN_ENABLED="false"
+        export VLAN_ENABLED="false"
         whiptail --title "VLAN Disabled" \
             --msgbox "VLAN tagging disabled" 8 50
     fi
@@ -1963,7 +1967,7 @@ configure_ansible_automation() {
 
     # Ask if Ansible should be enabled
     local enable_ansible
-    enable_ansible=$(whiptail --title "Ansible Integration" \
+    export enable_ansible=$(whiptail --title "Ansible Integration" \
         --yesno "Enable Ansible post-deployment automation?" 8 70 \
         3>&1 1>&2 2>&3)
 
@@ -1999,7 +2003,7 @@ configure_terraform_automation() {
 
     # Ask if Terraform should be enabled
     local enable_terraform
-    enable_terraform=$(whiptail --title "Terraform Integration" \
+    export enable_terraform=$(whiptail --title "Terraform Integration" \
         --yesno "Enable Terraform integration for template deployment?" 8 70 \
         3>&1 1>&2 2>&3)
 
@@ -2958,7 +2962,7 @@ create_vm_from_image() {
     case "$img_type" in
         "iso")
             # For ISO files, create an empty disk and attach the ISO
-            qm set "$VMID_DEFAULT" --scsi0 "$VM_STORAGE":0,size="${VM_DISK_SIZE}G" || {
+            qm set "$VMID_DEFAULT" --scsi0 "${VM_STORAGE}:0,size=${VM_DISK_SIZE}G" || {
                 log_error "Failed to create disk"
                 return 1
             }
@@ -3254,7 +3258,7 @@ create_template_main() {
     fi
 
     # Step 3: Configure cloud-init
-    if ! configure_cloud_init; then
+    if ! configure_cloud_init "$CLOUD_USER_DEFAULT"; then
         log_error "Failed to configure cloud-init"
         return 1
     fi
@@ -3749,7 +3753,13 @@ import_configuration() {
     fi
 
     # Source the configuration file
-    source "$import_file"
+    # shellcheck source=/dev/null
+    if [[ -f "$import_file" ]]; then
+        source "$import_file"
+    else
+        log_error "Configuration file not found: $import_file"
+        return 1
+    fi
 
     log_success "Configuration imported from $import_file"
     whiptail --title "Configuration Imported" \
@@ -4042,7 +4052,8 @@ list_k8s_templates() {
 }
 
 select_docker_template_ui() {
-    local docker_list=($(list_docker_templates)) options=()
+    mapfile -t docker_list < <(list_docker_templates)
+    local options=()
     for tmpl in "${docker_list[@]}"; do options+=("$tmpl" "$tmpl"); done
     local sel=$(whiptail --title "Select Docker Template" --menu "Docker templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
     SELECTED_DOCKER_TEMPLATES=("$sel")

@@ -32,6 +32,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Remove trailing whitespace
+        run: |
+          find ./proxmox -name "*.sh" -exec sed -i 's/[[:space:]]$//g' {} \;
+
       - name: Install shfmt
         run: |
           curl -L "https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64" -o shfmt

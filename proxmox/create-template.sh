@@ -330,6 +330,11 @@ TPM_ENABLED="false" # Enable TPM 2.0 support
 UEFI_SECURE_BOOT="false" # Enable UEFI Secure Boot
 NESTED_VIRTUALIZATION="false" # Enable nested virtualization
 
+# CLI and Configuration Management
+CONFIG_FILE="" # Configuration file for CLI mode
+LOG_LEVEL="info" # Logging level (debug, info, warn, error)
+POSITIONAL_ARGS=() # Array to store positional arguments
+
 # Welcome message for UI mode
 show_welcome() {
     whiptail --title "Welcome to Proxmox Template Creator v$SCRIPT_VERSION" --msgbox \
@@ -2672,6 +2677,13 @@ download_distribution_image() {
     # Create ISO directory if it doesn't exist
     mkdir -p "$SCRIPT_DIR/iso"
     
+    # Check for dry-run mode
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would download $dist_name image from $url to $output_path"
+        echo "$output_path"
+        return 0
+    fi
+    
     # Download the image if it doesn't exist
     if [[ ! -f "$output_path" ]]; then
         log_info "Downloading $dist_name image from $url"
@@ -3618,22 +3630,173 @@ generate_ansible_inventory() { log_info "Generating Ansible inventory"; }
 
 configure_terraform_integration() { configure_terraform_automation "$@"; }
 
-# CLI parsing stub
+# CLI parsing function
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --help) show_help;;
-            --batch) BATCH_MODE=true;;
-            --docker-template) shift; DOCKER_INTEGRATION=true; SELECTED_DOCKER_TEMPLATES=("$1");;
-            --k8s-template) shift; K8S_INTEGRATION=true; SELECTED_K8S_TEMPLATES=("$1");;
-            *) log_warn "Unknown argument: $1";;
+            --help)
+                show_help
+                ;;
+            --batch)
+                BATCH_MODE=true
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                log_info "Dry run mode enabled - no actual changes will be made"
+                ;;
+            --docker-template)
+                shift
+                DOCKER_INTEGRATION=true
+                SELECTED_DOCKER_TEMPLATES=("$1")
+                ;;
+            --k8s-template)
+                shift
+                K8S_INTEGRATION=true
+                SELECTED_K8S_TEMPLATES=("$1")
+                ;;
+            --config)
+                shift
+                CONFIG_FILE="$1"
+                ;;
+            --vmid)
+                shift
+                VMID_DEFAULT="$1"
+                ;;
+            --distro)
+                shift
+                SELECTED_DISTRIBUTION="$1"
+                ;;
+            --vm-name)
+                shift
+                VM_NAME="$1"
+                ;;
+            --cores)
+                shift
+                VM_CORES="$1"
+                ;;
+            --memory)
+                shift
+                VM_MEMORY="$1"
+                ;;
+            --disk-size)
+                shift
+                VM_DISK_SIZE="$1"
+                ;;
+            --storage)
+                shift
+                VM_STORAGE="$1"
+                ;;
+            --network-bridge)
+                shift
+                NETWORK_BRIDGE="$1"
+                ;;
+            --static-ip)
+                shift
+                STATIC_IP="$1"
+                ;;
+            --gateway)
+                shift
+                STATIC_GATEWAY="$1"
+                ;;
+            --dns)
+                shift
+                STATIC_DNS="$1"
+                ;;
+            --enable-ansible)
+                ANSIBLE_ENABLED=true
+                ;;
+            --enable-terraform)
+                TERRAFORM_ENABLED=true
+                ;;
+            --enable-docker)
+                DOCKER_INTEGRATION=true
+                ;;
+            --enable-k8s)
+                K8S_INTEGRATION=true
+                ;;
+            --log-level)
+                shift
+                LOG_LEVEL="$1"
+                ;;
+            --version)
+                echo "Proxmox Template Creator v$SCRIPT_VERSION"
+                exit 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                log_warn "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                # Positional argument
+                POSITIONAL_ARGS+=("$1")
+                ;;
         esac
         shift
     done
 }
 
 show_help() {
-    echo "Usage: $0 [--help] [--batch] [--docker-template TEMPLATE] [--k8s-template TEMPLATE]"
+    cat << 'EOF'
+Proxmox Template Creator v$SCRIPT_VERSION
+
+USAGE:
+    ./create-template.sh [OPTIONS]
+
+OPTIONS:
+    General:
+        --help                    Show this help message
+        --version                 Show version information
+        --batch                   Run in batch mode (non-interactive)
+        --dry-run                 Simulate actions without making changes
+        --config FILE             Load configuration from file
+        --log-level LEVEL         Set logging level (debug, info, warn, error)
+
+    VM Configuration:
+        --vmid ID                 Set VM ID (default: auto-assigned)
+        --distro DISTRIBUTION     Select distribution to use
+        --vm-name NAME            Set VM name
+        --cores COUNT             Set number of CPU cores
+        --memory SIZE             Set memory size (in MB)
+        --disk-size SIZE          Set disk size (e.g., 10G, 20480M)
+        --storage STORAGE         Set storage location
+
+    Network Configuration:
+        --network-bridge BRIDGE   Set network bridge (default: vmbr0)
+        --static-ip IP            Set static IP address
+        --gateway IP              Set gateway IP address
+        --dns IP                  Set DNS server IP address
+
+    Integration Options:
+        --docker-template TMPL    Enable Docker with specified template
+        --k8s-template TMPL       Enable Kubernetes with specified template
+        --enable-ansible          Enable Ansible integration
+        --enable-terraform        Enable Terraform integration
+        --enable-docker           Enable Docker integration
+        --enable-k8s              Enable Kubernetes integration
+
+EXAMPLES:
+    # Interactive mode (default)
+    ./create-template.sh
+
+    # Create Ubuntu template with specific settings
+    ./create-template.sh --distro ubuntu-22.04 --vm-name ubuntu-template --cores 2 --memory 2048
+
+    # Batch mode with Docker integration
+    ./create-template.sh --batch --enable-docker --docker-template web-stack
+
+    # Dry run with Kubernetes template
+    ./create-template.sh --dry-run --k8s-template monitoring-stack
+
+    # Load from configuration file
+    ./create-template.sh --config examples/ubuntu-22.04-dev.conf
+
+For more information, see the documentation in the docs/ directory.
+EOF
     exit 0
 }
 

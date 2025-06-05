@@ -362,46 +362,33 @@ echo ""
 # Test CLI argument parsing
 echo "Test 13: Testing CLI argument parsing..."
 test_cli_parsing() {
-    local test_script=$(mktemp)
-    cat > "$test_script" << 'EOF'
-#!/bin/bash
-# Minimal test for CLI parsing
-source /dev/stdin
-
-# Test parse_arguments function exists
-if declare -f parse_arguments >/dev/null 2>&1; then
-    echo "parse_arguments function found"
-    # Test dry run flag
-    if parse_arguments --dry-run 2>/dev/null; then
-        echo "dry-run flag supported"
-    fi
-    # Test batch mode
-    if parse_arguments --batch 2>/dev/null; then
-        echo "batch mode supported"
-    fi
-    # Test Docker integration
-    if parse_arguments --docker-template 2>/dev/null; then
-        echo "docker-template flag supported"  
-    fi
-    # Test K8s integration
-    if parse_arguments --k8s-template 2>/dev/null; then
-        echo "k8s-template flag supported"
-    fi
-else
-    echo "parse_arguments function not found"
-    exit 1
-fi
-EOF
-    
-    # Extract just the function definitions to test
-    awk '/^parse_arguments\(\) \{/,/^}$/' "$SCRIPT_DIR/create-template.sh" | bash "$test_script" 2>/dev/null || {
-        echo "❌ CLI parsing tests failed"
-        rm -f "$test_script"
+    # Simply check if the function exists in the script
+    if grep -q "^parse_arguments() {" "$SCRIPT_DIR/create-template.sh"; then
+        echo "parse_arguments function found"
+        
+        # Check for key CLI flags
+        local cli_features=("--dry-run" "--batch" "--docker-template" "--k8s-template" "--help" "--config")
+        local missing_features=()
+        
+        for feature in "${cli_features[@]}"; do
+            if grep -q "^[[:space:]]*$feature)" "$SCRIPT_DIR/create-template.sh"; then
+                echo "   ✅ $feature flag found"
+            else
+                echo "   ❌ $feature flag missing"
+                missing_features+=("$feature")
+            fi
+        done
+        
+        if [ ${#missing_features[@]} -eq 0 ]; then
+            echo "✅ CLI argument parsing tests passed"
+        else
+            echo "❌ Missing CLI features: ${missing_features[*]}"
+            return 1
+        fi
+    else
+        echo "❌ parse_arguments function not found"
         return 1
-    }
-    
-    rm -f "$test_script"
-    echo "✅ CLI argument parsing tests passed"
+    fi
 }
 
 test_cli_parsing

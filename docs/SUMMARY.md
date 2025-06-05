@@ -3,7 +3,6 @@
 ## Getting Started
 
 - [Introduction](README.md)
-- [Proxmox Template Creator Guide](ProxmoxTemplateCreatorGuide.md)
 - [Feature Documentation](FEATURE_DOCUMENTATION.md)
 - [Proxmox Template Creation](proxmox-template-creation.md)
 

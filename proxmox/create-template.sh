@@ -63,6 +63,7 @@ check_dependencies() {
         if ! command -v "$dep" &> /dev/null; then
             missing+=("$dep")
         fi
+    done
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo "Error: Missing required dependencies: ${missing[*]}"
@@ -1107,7 +1108,7 @@ whiptail --title "Proxmox Template Creator v$SCRIPT_VERSION" \
             0) exit_script ;;
             *) log_warn "Invalid selection. Please try again." ;;
         esac
-    done
+
 
 # Create a single template with interactive configuration
 create_single_template() {
@@ -2150,52 +2151,49 @@ locals {
 }
 EOF
 
-    # Generate modules based on selection
-    for module in $selected_modules; do
-        # Process module: add module generation code here if needed
-        :
-    done
- in
-            "vm")
-                generate_vm_module "$output_dir"
-                echo "# VM Module" >> "$output_dir/main.tf"
-                echo "module \"vm\" {" >> "$output_dir/main.tf"
-                echo "  source = \"./modules/vm\"" >> "$output_dir/main.tf"
-                echo "  " >> "$output_dir/main.tf"
-                echo "  # VM Configuration" >> "$output_dir/main.tf"
-                echo "  vm_configs = local.vm_configs" >> "$output_dir/main.tf"
-                echo "  target_node = var.target_node" >> "$output_dir/main.tf"
-                echo "  template_name = var.template_name" >> "$output_dir/main.tf"
-                echo "  ssh_public_key = tls_private_key.vm_ssh_key.public_key_openssh" >> "$output_dir/main.tf"
-                echo "  common_tags = local.common_tags" >> "$output_dir/main.tf"
-                echo "}" >> "$output_dir/main.tf"
-                echo "" >> "$output_dir/main.tf"
-                ;;
-            "network")
-                generate_network_module "$output_dir"
-                echo "# Network Module" >> "$output_dir/main.tf"
-                echo "module \"network\" {" >> "$output_dir/main.tf"
-                echo "  source = \"./modules/network\"" >> "$output_dir/main.tf"
-                echo "  " >> "$output_dir/main.tf"
-                echo "  network_config = var.network_config" >> "$output_dir/main.tf"
-                echo "  bridge_name = var.network_bridge" >> "$output_dir/main.tf"
-                echo "}" >> "$output_dir/main.tf"
-                echo "" >> "$output_dir/main.tf"
-                ;;
-            "storage")
-                generate_storage_module "$output_dir"
-                ;;
-            "monitoring")
-                generate_monitoring_module "$output_dir"
-                ;;
-            "backup")
-                generate_backup_module "$output_dir"
-                ;;
-            "security")
-                generate_security_module "$output_dir"
-                ;;
-        esac
-    done
+# Generate modules based on selection
+for module in $selected_modules; do
+    case $module in
+        "vm")
+            generate_vm_module "$output_dir"
+            echo "# VM Module" >> "$output_dir/main.tf"
+            echo "module \"vm\" {" >> "$output_dir/main.tf"
+            echo "  source = \"./modules/vm\"" >> "$output_dir/main.tf"
+            echo "  " >> "$output_dir/main.tf"
+            echo "  # VM Configuration" >> "$output_dir/main.tf"
+            echo "  vm_configs = local.vm_configs" >> "$output_dir/main.tf"
+            echo "  target_node = var.target_node" >> "$output_dir/main.tf"
+            echo "  template_name = var.template_name" >> "$output_dir/main.tf"
+            echo "  ssh_public_key = tls_private_key.vm_ssh_key.public_key_openssh" >> "$output_dir/main.tf"
+            echo "  common_tags = local.common_tags" >> "$output_dir/main.tf"
+            echo "}" >> "$output_dir/main.tf"
+            echo "" >> "$output_dir/main.tf"
+            ;;
+        "network")
+            generate_network_module "$output_dir"
+            echo "# Network Module" >> "$output_dir/main.tf"
+            echo "module \"network\" {" >> "$output_dir/main.tf"
+            echo "  source = \"./modules/network\"" >> "$output_dir/main.tf"
+            echo "  " >> "$output_dir/main.tf"
+            echo "  network_config = var.network_config" >> "$output_dir/main.tf"
+            echo "  bridge_name = var.network_bridge" >> "$output_dir/main.tf"
+            echo "}" >> "$output_dir/main.tf"
+            echo "" >> "$output_dir/main.tf"
+            ;;
+        "storage")
+            generate_storage_module "$output_dir"
+            ;;
+        "monitoring")
+            generate_monitoring_module "$output_dir"
+            ;;
+        "backup")
+            generate_backup_module "$output_dir"
+            ;;
+        "security")
+            generate_security_module "$output_dir"
+            ;;
+    esac
+done
 
     # Generate comprehensive variables.tf
     generate_terraform_variables "$output_dir" "${tf_vars[@]}"

@@ -34,7 +34,7 @@ The Proxmox Template Creator includes comprehensive Terraform integration that p
 
 When Terraform integration is enabled, the following structure is created:
 
-```
+```directory
 terraform/
 ├── main.tf                    # Main configuration with module calls
 ├── variables.tf               # Variable definitions with validation
@@ -295,6 +295,7 @@ jobs:
    ```
 
 3. **Module dependencies**
+
    ```bash
    # Refresh module sources
    terraform get -update

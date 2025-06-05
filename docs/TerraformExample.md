@@ -39,19 +39,19 @@ The provided Terraform examples demonstrate:
 
 The Terraform examples use the following variables:
 
-| Variable             | Description                   | Default                          |
-| -------------------- | ----------------------------- | -------------------------------- |
-| `proxmox_url`        | Proxmox API endpoint URL      | https://localhost:8006/api2/json |
-| `proxmox_node`       | Target Proxmox node           | pve                              |
-| `template_name`      | Source template name to clone | template-ubuntu-2204             |
-| `vm_name`            | Name for the new VM           | terraform-vm                     |
-| `vm_cpu_cores`       | Number of CPU cores           | 2                                |
-| `vm_memory_mb`       | Memory allocation in MB       | 2048                             |
-| `vm_disk_gb`         | Disk size in GB               | 32                               |
-| `vm_network_bridge`  | Network bridge to use         | vmbr0                            |
-| `vm_ip_address`      | Static IP address (if used)   | dhcp                             |
-| `vm_gateway`         | Network gateway               | none                             |
-| `vm_ssh_public_keys` | SSH public keys to add        | none                             |
+| Variable             | Description                   | Default                            |
+| -------------------- | ----------------------------- | ---------------------------------- |
+| `proxmox_url`        | Proxmox API endpoint URL      | <https://localhost:8006/api2/json> |
+| `proxmox_node`       | Target Proxmox node           | pve                                |
+| `template_name`      | Source template name to clone | template-ubuntu-2204               |
+| `vm_name`            | Name for the new VM           | terraform-vm                       |
+| `vm_cpu_cores`       | Number of CPU cores           | 2                                  |
+| `vm_memory_mb`       | Memory allocation in MB       | 2048                               |
+| `vm_disk_gb`         | Disk size in GB               | 32                                 |
+| `vm_network_bridge`  | Network bridge to use         | vmbr0                              |
+| `vm_ip_address`      | Static IP address (if used)   | dhcp                               |
+| `vm_gateway`         | Network gateway               | none                               |
+| `vm_ssh_public_keys` | SSH public keys to add        | none                               |
 
 ## Integration with Template Creator
 

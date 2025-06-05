@@ -111,9 +111,9 @@ Last updated: June 2025
 - [x] CI/CD pipeline with multiple validation stages
 - [x] Security scanning and best practices
 
-## Future Enhancements
+## Planned Future Enhancements
 
-### Planned Features
+### Feature Roadmap
 
 - [ ] Web-based management interface
 - [ ] API integration for external automation
@@ -144,7 +144,7 @@ The Proxmox Template Creator project now includes:
 
 The project is ready for production use with full automation capabilities for Proxmox template creation, Docker/Kubernetes provisioning, and infrastructure-as-code integration.
 
-### Terraform Integration
+### Terraform Module Development
 
 - [x] Basic framework for module selection
 - [ ] Container workload modules

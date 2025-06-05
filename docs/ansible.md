@@ -48,7 +48,7 @@ The following example playbooks are included:
 
 ## Directory Structure
 
-```
+```directory
 ansible/
 ├── README.md
 ├── playbooks/

@@ -101,20 +101,730 @@ chmod +x create-template.sh
 
 ### Prerequisites
 
+Before you begin, ensure you have:
+
+- **Proxmox VE Host**: Version 7.x or 8.x
+- **Root Access**: The script must be run as root
+- **Network Connectivity**: Internet access for downloading images
+- **Storage Space**: At least 50GB free for templates
+- **Memory**: Minimum 4GB RAM available
+
+### Quick Installation
+
 1. **Download the Repository:**
 
    ```bash
+   # Option 1: Using git (recommended)
+   git clone https://github.com/binghzal/homelab.git
+   cd homelab/proxmox
+
+   # Option 2: Using wget
    wget https://github.com/binghzal/homelab/archive/main.zip
    unzip main.zip
    cd homelab-main/proxmox
    ```
 
-2. **Run the Script (as root):**
+2. **Prepare the Environment:**
 
    ```bash
+   # Make script executable
    chmod +x create-template.sh
-   ./create-template.sh
+
+   # Verify Proxmox environment
+   pvesm status  # Check storage
+   pct list      # Verify container support
    ```
+
+3. **Run Your First Template:**
+
+   ```bash
+   # Interactive mode (beginner-friendly)
+   ./create-template.sh
+
+   # Quick start with Ubuntu
+   ./create-template.sh --distribution ubuntu-22.04 --template-name my-first-template
+   ```
+
+## Step-by-Step Guides
+
+### Guide 1: Creating Your First VM Template
+
+**Goal**: Create a basic Ubuntu 22.04 template with development tools
+
+**Time Required**: 10-15 minutes
+
+#### Step 1: Choose Your Distribution
+
+```bash
+# List all available distributions
+./create-template.sh --list-distributions
+
+# Or start interactive mode and select from menu
+./create-template.sh
+# Choose: "1) Create Single Template"
+# Choose: "Ubuntu 22.04 LTS"
+```
+
+#### Step 2: Configure Basic Settings
+
+```bash
+# CLI approach
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name ubuntu-dev \
+  --cpu-cores 2 \
+  --memory 4096 \
+  --disk-size 20G
+```
+
+Or in interactive mode:
+
+1. Select "Configure VM Settings"
+2. Set CPU cores: `2`
+3. Set Memory: `4096 MB`
+4. Set Disk size: `20G`
+
+#### Step 3: Select Package Categories
+
+```bash
+# CLI: Select development and security packages
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --packages "development,security,network"
+```
+
+Interactive mode:
+
+1. Choose "Select Packages"
+2. Select: `[x] Development Tools`
+3. Select: `[x] Network & Security`
+4. Select: `[x] Essential System Tools`
+
+#### Step 4: Execute Template Creation
+
+```bash
+# Preview with dry-run first
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name ubuntu-dev \
+  --packages "development,security" \
+  --dry-run
+
+# Create the actual template
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name ubuntu-dev \
+  --packages "development,security"
+```
+
+#### Step 5: Verify Template Creation
+
+```bash
+# Check if template was created
+qm list | grep ubuntu-dev
+
+# View template details
+qm config <TEMPLATE_ID>
+
+# Clone template to test
+qm clone <TEMPLATE_ID> 100 --name test-vm
+qm start 100
+```
+
+### Guide 2: Setting Up Docker Container Workloads
+
+**Goal**: Create a template with Docker and deploy a web application stack
+
+**Time Required**: 20-25 minutes
+
+#### Step 1: Create Docker-Enabled Template
+
+```bash
+# Create Ubuntu template with Docker support
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name docker-host \
+  --packages "docker,development" \
+  --docker-template web-server
+```
+
+#### Step 2: Choose Docker Template
+
+Interactive mode:
+
+1. Start script: `./create-template.sh`
+2. Choose "Docker Template Integration"
+3. Select available templates:
+   - `web-server` (Nginx + PHP + MySQL)
+   - `development` (VS Code Server + Tools)
+   - `monitoring` (Prometheus + Grafana)
+
+#### Step 3: Configure Container Settings
+
+```bash
+# Advanced Docker configuration
+./create-template.sh \
+  --docker-template web-server \
+  --docker-registry "registry.example.com" \
+  --docker-compose-file "/path/to/docker-compose.yml"
+```
+
+#### Step 4: Deploy and Test
+
+```bash
+# Clone template and start VM
+qm clone <TEMPLATE_ID> 101 --name web-server-vm
+qm start 101
+
+# SSH into VM and verify Docker
+ssh user@<VM_IP>
+docker ps
+docker-compose ps
+
+# Access web application
+curl http://<VM_IP>
+```
+
+### Guide 3: Kubernetes Cluster Deployment
+
+**Goal**: Deploy a complete Kubernetes cluster with monitoring
+
+**Time Required**: 30-40 minutes
+
+#### Step 1: Create Control Plane Template
+
+```bash
+# Create Kubernetes control plane
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name k8s-control-plane \
+  --k8s-template control-plane \
+  --cpu-cores 2 \
+  --memory 4096
+```
+
+#### Step 2: Create Worker Node Template
+
+```bash
+# Create Kubernetes worker nodes
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name k8s-worker \
+  --k8s-template worker-node \
+  --cpu-cores 2 \
+  --memory 2048
+```
+
+#### Step 3: Deploy Cluster Nodes
+
+```bash
+# Clone and start control plane
+qm clone <CONTROL_TEMPLATE_ID> 110 --name k8s-master
+qm start 110
+
+# Clone and start worker nodes
+qm clone <WORKER_TEMPLATE_ID> 111 --name k8s-worker-1
+qm clone <WORKER_TEMPLATE_ID> 112 --name k8s-worker-2
+qm start 111
+qm start 112
+```
+
+#### Step 4: Initialize Cluster
+
+```bash
+# SSH to control plane
+ssh user@<MASTER_IP>
+
+# Initialize cluster
+sudo kubeadm init --pod-network-cidr=10.244.0.0/16
+
+# Setup kubectl for user
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Install CNI (Flannel)
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+```
+
+#### Step 5: Join Worker Nodes
+
+```bash
+# Get join command from master
+kubeadm token create --print-join-command
+
+# SSH to each worker and run join command
+ssh user@<WORKER_IP>
+sudo kubeadm join <MASTER_IP>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+#### Step 6: Deploy Monitoring Stack
+
+```bash
+# Use K8s template for monitoring
+./create-template.sh \
+  --k8s-template monitoring-stack \
+  --template-name k8s-monitoring
+
+# Or deploy directly to existing cluster
+kubectl create namespace monitoring
+kubectl apply -f kubernetes/templates/monitoring-stack.yml
+```
+
+### Guide 4: Ansible Automation Integration
+
+**Goal**: Automate template configuration with Ansible
+
+**Time Required**: 15-20 minutes
+
+#### Step 1: Enable Ansible Integration
+
+```bash
+# Create template with Ansible support
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name ansible-managed \
+  --ansible \
+  --ansible-playbook security-hardening,docker-install
+```
+
+#### Step 2: Configure Ansible Playbooks
+
+Interactive mode:
+
+1. Choose "Configure Ansible Automation"
+2. Select playbooks to apply:
+   - `[x] security-hardening`
+   - `[x] docker-install`
+   - `[x] monitoring-setup`
+
+#### Step 3: Customize Ansible Variables
+
+```bash
+# Edit Ansible variables for your environment
+cat > /tmp/ansible-vars.yml << EOF
+# Security settings
+ssh_port: 2222
+allowed_users: ["admin", "developer"]
+install_fail2ban: true
+
+# Docker settings
+docker_version: "24.0"
+docker_compose_version: "2.21.0"
+
+# Monitoring settings
+prometheus_retention: "30d"
+grafana_admin_password: "secure_password"
+EOF
+```
+
+#### Step 4: Apply Ansible Configuration
+
+```bash
+# Run with custom variables
+./create-template.sh \
+  --ansible \
+  --ansible-vars /tmp/ansible-vars.yml \
+  --template-name hardened-template
+```
+
+### Guide 5: Terraform Infrastructure as Code
+
+**Goal**: Manage infrastructure with Terraform
+
+**Time Required**: 25-30 minutes
+
+#### Step 1: Enable Terraform Integration
+
+```bash
+# Create template with Terraform support
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --terraform \
+  --terraform-module docker-containers,monitoring-stack
+```
+
+#### Step 2: Review Generated Terraform Code
+
+```bash
+# Check generated Terraform files
+ls -la terraform/
+cat terraform/main.tf
+cat terraform/variables.tf
+cat terraform/modules/docker-containers/main.tf
+```
+
+#### Step 3: Customize Infrastructure
+
+```bash
+# Edit terraform variables
+cat > terraform/terraform.tfvars << EOF
+# VM Configuration
+vm_count = 3
+vm_memory = 4096
+vm_cores = 2
+
+# Network Configuration
+vm_network_bridge = "vmbr0"
+vm_network_vlan = 100
+
+# Storage Configuration
+vm_storage_pool = "local-lvm"
+vm_disk_size = "20G"
+
+# Container Configuration
+docker_templates = ["web-server", "database", "monitoring"]
+enable_monitoring = true
+enable_backup = true
+EOF
+```
+
+#### Step 4: Deploy Infrastructure
+
+```bash
+# Initialize Terraform
+cd terraform
+terraform init
+
+# Plan deployment
+terraform plan
+
+# Apply infrastructure
+terraform apply
+```
+
+#### Step 5: Manage Infrastructure
+
+```bash
+# View current state
+terraform show
+
+# Update infrastructure
+terraform plan
+terraform apply
+
+# Destroy when needed
+terraform destroy
+```
+
+### Guide 6: Batch Processing and Automation
+
+**Goal**: Create multiple templates automatically
+
+**Time Required**: Variable (depends on number of templates)
+
+#### Step 1: Create Configuration Files
+
+```bash
+# Create configs directory
+mkdir -p configs
+
+# Ubuntu development template
+cat > configs/ubuntu-dev.conf << EOF
+DISTRIBUTION="ubuntu-22.04"
+TEMPLATE_NAME="ubuntu-dev"
+CPU_CORES="2"
+MEMORY_MB="4096"
+DISK_SIZE="20G"
+PACKAGES="development,docker,security"
+DOCKER_TEMPLATES="development"
+EOF
+
+# CentOS web server template
+cat > configs/centos-web.conf << EOF
+DISTRIBUTION="centos-stream-9"
+TEMPLATE_NAME="centos-web"
+CPU_CORES="2"
+MEMORY_MB="2048"
+DISK_SIZE="15G"
+PACKAGES="web-server,security"
+DOCKER_TEMPLATES="web-server"
+EOF
+
+# Debian database template
+cat > configs/debian-db.conf << EOF
+DISTRIBUTION="debian-12"
+TEMPLATE_NAME="debian-db"
+CPU_CORES="4"
+MEMORY_MB="8192"
+DISK_SIZE="50G"
+PACKAGES="database,security"
+DOCKER_TEMPLATES="database"
+EOF
+```
+
+#### Step 2: Run Batch Processing
+
+```bash
+# Process all configurations
+for config in configs/*.conf; do
+    echo "Processing $config..."
+    ./create-template.sh --batch --config "$config"
+done
+
+# Or use built-in queue processing
+./create-template.sh --batch --config-dir configs/
+```
+
+#### Step 3: Monitor Progress
+
+```bash
+# Check creation status
+tail -f /var/log/template-creator.log
+
+# Verify created templates
+qm list | grep -E "ubuntu-dev|centos-web|debian-db"
+```
+
+### Guide 7: Advanced Customization
+
+**Goal**: Create highly customized templates with specific requirements
+
+#### Custom Package Installation
+
+```bash
+# Create custom package list
+cat > /tmp/custom-packages.txt << EOF
+# Development tools
+build-essential
+git
+vim
+tmux
+htop
+
+# Python environment
+python3
+python3-pip
+python3-venv
+python3-dev
+
+# Node.js environment
+nodejs
+npm
+yarn
+
+# Database tools
+postgresql-client
+mysql-client
+redis-tools
+
+# Container tools
+docker.io
+docker-compose
+kubectl
+helm
+EOF
+
+# Use custom package list
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --custom-packages /tmp/custom-packages.txt
+```
+
+#### Custom Post-Installation Scripts
+
+```bash
+# Create post-install script
+cat > /tmp/post-install.sh << 'EOF'
+#!/bin/bash
+set -euo pipefail
+
+# Configure development environment
+echo "Configuring development environment..."
+
+# Install code editor
+curl -fsSL https://code-server.dev/install.sh | sh
+systemctl enable --now code-server@$USER
+
+# Configure git
+git config --global user.name "Template User"
+git config --global user.email "user@example.com"
+
+# Setup zsh with oh-my-zsh
+apt-get update && apt-get install -y zsh
+sh -c "$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+chsh -s $(which zsh)
+
+# Configure firewall
+ufw --force enable
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow ssh
+ufw allow 8080  # code-server
+
+echo "Post-installation configuration complete!"
+EOF
+
+chmod +x /tmp/post-install.sh
+
+# Use custom post-install script
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --post-install-script /tmp/post-install.sh
+```
+
+#### Custom Cloud-Init Configuration
+
+```bash
+# Create custom cloud-init config
+cat > /tmp/cloud-init-custom.yml << EOF
+#cloud-config
+users:
+  - name: developer
+    groups: sudo,docker
+    shell: /bin/zsh
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAA... # Your SSH key here
+
+packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - docker.io
+
+runcmd:
+  - systemctl enable docker
+  - usermod -aG docker developer
+  - curl -L "https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+
+timezone: UTC
+
+locale: en_US.UTF-8
+EOF
+
+# Use custom cloud-init
+./create-template.sh \
+  --distribution ubuntu-22.04 \
+  --cloud-init-config /tmp/cloud-init-custom.yml
+```
+
+## Troubleshooting Common Issues
+
+### Template Creation Fails
+
+**Issue**: Template creation process stops with errors
+
+**Solutions**:
+
+```bash
+# Check logs for details
+tail -f /var/log/template-creator.log
+
+# Verify Proxmox storage
+pvesm status
+df -h
+
+# Check network connectivity
+ping 8.8.8.8
+curl -I http://releases.ubuntu.com
+
+# Retry with debug mode
+./create-template.sh --debug --distribution ubuntu-22.04
+```
+
+### Docker Container Issues
+
+**Issue**: Docker containers fail to start or access services
+
+**Solutions**:
+
+```bash
+# SSH into VM and check Docker
+ssh user@<VM_IP>
+
+# Check Docker service
+systemctl status docker
+
+# Check container logs
+docker logs <container_name>
+
+# Verify network connectivity
+docker network ls
+docker network inspect bridge
+
+# Check firewall rules
+ufw status
+iptables -L
+```
+
+### Kubernetes Cluster Problems
+
+**Issue**: Kubernetes nodes fail to join cluster
+
+**Solutions**:
+
+```bash
+# On control plane - check cluster status
+kubectl get nodes
+kubectl get pods --all-namespaces
+
+# Regenerate join token
+kubeadm token create --print-join-command
+
+# On worker nodes - reset and rejoin
+sudo kubeadm reset
+sudo kubeadm join <NEW_TOKEN_COMMAND>
+
+# Check network plugin
+kubectl get pods -n kube-system | grep -E 'flannel|calico|weave'
+```
+
+### Performance Issues
+
+**Issue**: Template creation is slow or VMs are underperforming
+
+**Solutions**:
+
+```bash
+# Check storage performance
+pvesm status
+iostat 1 5
+
+# Monitor resource usage during creation
+htop
+iotop
+
+# Adjust VM resources
+./create-template.sh \
+  --cpu-cores 4 \
+  --memory 8192 \
+  --disk-size 40G
+
+# Use faster storage
+./create-template.sh \
+  --storage local-ssd \  # Use SSD storage if available
+  --distribution ubuntu-22.04
+```
+
+### Network Configuration Issues
+
+**Issue**: VMs cannot communicate or access internet
+
+**Solutions**:
+
+```bash
+# Check Proxmox network configuration
+cat /etc/network/interfaces
+
+# Verify bridge configuration
+ip addr show vmbr0
+brctl show
+
+# Check VLAN configuration (if using VLANs)
+./create-template.sh \
+  --network-bridge vmbr0 \
+  --network-vlan 100 \
+  --distribution ubuntu-22.04
+
+# Test connectivity from VM
+ping <GATEWAY_IP>
+ping 8.8.8.8
+nslookup google.com
+```
 
 ## CLI Reference
 

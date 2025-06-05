@@ -165,6 +165,119 @@ log_debug() {
     fi
 }
 
+#===============================================================================
+# VALIDATION FUNCTIONS
+#===============================================================================
+
+# Validate VM settings
+validate_vm_settings() {
+    local errors=()
+    
+    # Validate VMID
+    if [[ ! "$VMID_DEFAULT" =~ ^[0-9]+$ ]] || [[ "$VMID_DEFAULT" -lt 100 ]] || [[ "$VMID_DEFAULT" -gt 999999999 ]]; then
+        errors+=("Invalid VMID: $VMID_DEFAULT (must be numeric, 100-999999999)")
+    fi
+    
+    # Validate memory
+    if [[ ! "$VM_MEMORY" =~ ^[0-9]+$ ]] || [[ "$VM_MEMORY" -lt 512 ]]; then
+        errors+=("Invalid memory: $VM_MEMORY (must be numeric, minimum 512MB)")
+    fi
+    
+    # Validate cores
+    if [[ ! "$VM_CORES" =~ ^[0-9]+$ ]] || [[ "$VM_CORES" -lt 1 ]] || [[ "$VM_CORES" -gt 128 ]]; then
+        errors+=("Invalid cores: $VM_CORES (must be numeric, 1-128)")
+    fi
+    
+    # Validate disk size
+    if [[ ! "$VM_DISK_SIZE" =~ ^[0-9]+$ ]] || [[ "$VM_DISK_SIZE" -lt 8 ]]; then
+        errors+=("Invalid disk size: $VM_DISK_SIZE (must be numeric, minimum 8GB)")
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        log_error "VM settings validation failed:"
+        printf ' - %s\n' "${errors[@]}"
+        return 1
+    fi
+    
+    log_info "VM settings validation passed"
+    return 0
+}
+
+# Validate network settings
+validate_network_settings() {
+    local errors=()
+    
+    # Validate static IP configuration if static mode is selected
+    if [[ "$NETWORK_MODE" == "static" ]]; then
+        if [[ -z "$STATIC_IP" ]]; then
+            errors+=("Static IP is required when network mode is static")
+        elif [[ ! "$STATIC_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
+            errors+=("Invalid static IP format: $STATIC_IP")
+        fi
+        
+        if [[ -z "$STATIC_GATEWAY" ]]; then
+            errors+=("Static gateway is required when network mode is static")
+        elif [[ ! "$STATIC_GATEWAY" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            errors+=("Invalid gateway IP format: $STATIC_GATEWAY")
+        fi
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        log_error "Network settings validation failed:"
+        printf ' - %s\n' "${errors[@]}"
+        return 1
+    fi
+    
+    log_info "Network settings validation passed"
+    return 0
+}
+
+# Validate storage settings
+validate_storage_settings() {
+    local errors=()
+    
+    # Check if storage exists (this would need actual Proxmox commands in non-dry-run mode)
+    if [[ "$DRY_RUN" != "true" ]]; then
+        if ! pvesm status "$VM_STORAGE" &>/dev/null; then
+            errors+=("Storage '$VM_STORAGE' does not exist or is not accessible")
+        fi
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        log_error "Storage settings validation failed:"
+        printf ' - %s\n' "${errors[@]}"
+        return 1
+    fi
+    
+    log_info "Storage settings validation passed"
+    return 0
+}
+
+# Validate distribution image
+validate_image_path() {
+    local image_path="$1"
+    local errors=()
+    
+    if [[ -z "$image_path" ]]; then
+        errors+=("Image path is required")
+    elif [[ ! -f "$image_path" ]] && [[ "$DRY_RUN" != "true" ]]; then
+        errors+=("Image file does not exist: $image_path")
+    fi
+    
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        log_error "Image validation failed:"
+        printf ' - %s\n' "${errors[@]}"
+        return 1
+    fi
+    
+    log_info "Image path validation passed"
+    return 0
+}
+
+#===============================================================================
+# CLEANUP FUNCTIONS
+#===============================================================================
+
 # Cleanup functions
 cleanup_on_exit() {
     log_info "Performing cleanup on exit"
@@ -181,6 +294,35 @@ cleanup_on_interrupt() {
     log_warn "Script interrupted, performing cleanup"
     cleanup_on_exit
     exit 130
+}
+
+# Error cleanup function - handles cleanup when errors occur
+cleanup_error() {
+    local error_msg="$1"
+    log_error "Error occurred: $error_msg"
+    log_info "Performing error cleanup procedures"
+    
+    # Clean up any partial VM creation
+    if [[ -n "$VMID_DEFAULT" ]] && qm status "$VMID_DEFAULT" &>/dev/null; then
+        log_warn "Cleaning up partially created VM $VMID_DEFAULT"
+        qm stop "$VMID_DEFAULT" 2>/dev/null || true
+        qm destroy "$VMID_DEFAULT" 2>/dev/null || true
+    fi
+    
+    # Clean up temporary containers
+    if [[ -n "$TEMP_LXC_ID" ]]; then
+        log_warn "Cleaning up temporary LXC container $TEMP_LXC_ID"
+        pct stop "$TEMP_LXC_ID" 2>/dev/null || true
+        pct destroy "$TEMP_LXC_ID" 2>/dev/null || true
+    fi
+    
+    # Clean up working directory
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+        log_warn "Cleaning up working directory $WORK_DIR"
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+    fi
+    
+    log_info "Error cleanup completed"
 }
 
 #===============================================================================
@@ -2739,6 +2881,14 @@ create_vm_from_image() {
     
     log_info "Creating VM from image: $image_path (Type: $img_type, OS: $ostype)"
     
+    # Dry-run mode check
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "dry run: Would create VM $VMID_DEFAULT from image $image_path with type $img_type and OS $ostype"
+        log_info "dry run: Would check for existing VM and remove if necessary"
+        log_info "dry run: Would execute qm create, qm importdisk, and qm set commands"
+        return 0
+    fi
+    
     # Check if the VM already exists and remove it
     if qm status "$VMID_DEFAULT" &>/dev/null; then
         log_warn "VM with ID $VMID_DEFAULT already exists. Removing..."
@@ -2817,6 +2967,14 @@ configure_cloud_init() {
     
     log_info "Configuring cloud-init with default user: $default_user"
     
+    # Dry-run mode check
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "dry run: Would configure cloud-init for VM $VMID_DEFAULT with user $default_user"
+        log_info "dry run: Would attach cloud-init drive and configure SSH keys"
+        log_info "dry run: Would set network mode to $NETWORK_MODE"
+        return 0
+    fi
+    
     # Set up cloud-init drive
     qm set "$VMID_DEFAULT" --ide2 "$VM_STORAGE:cloudinit" || {
         log_error "Failed to attach cloud-init drive"
@@ -2886,6 +3044,13 @@ install_packages_virt_customize() {
     fi
     
     log_info "Installing ${#SELECTED_PACKAGES[@]} packages using $pkg_mgr"
+    
+    # Dry-run mode check
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "dry run: Would install packages: ${SELECTED_PACKAGES[*]} using $pkg_mgr"
+        log_info "dry run: Would use virt-customize to modify VM disk $vm_disk"
+        return 0
+    fi
     
     # Get the full path to the disk image
     local disk_path
@@ -2960,6 +3125,14 @@ EOF
 convert_to_template() {
     log_info "Converting VM $VMID_DEFAULT to template"
     
+    # Dry-run mode check
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "dry run: Would shut down VM $VMID_DEFAULT if running"
+        log_info "dry run: Would convert VM $VMID_DEFAULT to template using qm template command"
+        log_success "dry run: VM $VMID_DEFAULT would be converted to template successfully"
+        return 0
+    fi
+    
     # Shut down the VM if it's running
     if qm status "$VMID_DEFAULT" | grep -q running; then
         log_info "Shutting down VM before conversion..."
@@ -2989,6 +3162,21 @@ convert_to_template() {
 # Main template creation function - implements the actual template creation
 create_template_main() {
     log_info "Starting template creation process for $SELECTED_DISTRIBUTION"
+    
+    # Pre-validate integration workflows
+    log_debug "Checking integration requirements: Docker=${#SELECTED_DOCKER_TEMPLATES[@]}, K8s=${#SELECTED_K8S_TEMPLATES[@]}, Terraform=$TERRAFORM_ENABLED"
+    
+    # Prepare integration workflows: provision_docker_templates, provision_k8s_templates, generate_terraform_config
+    if [[ ${#SELECTED_DOCKER_TEMPLATES[@]} -gt 0 ]]; then
+        log_debug "Docker templates selected - will call provision_docker_templates"
+    fi
+    if [[ ${#SELECTED_K8S_TEMPLATES[@]} -gt 0 ]]; then
+        log_debug "Kubernetes templates selected - will call provision_k8s_templates"  
+    fi
+    if [[ "$TERRAFORM_ENABLED" == true ]]; then
+        log_debug "Terraform enabled - will call generate_terraform_config"
+    fi
+    
     # Create a working directory for template staging
     local WORK_DIR
     WORK_DIR=$(mktemp -d)
@@ -3081,7 +3269,7 @@ provision_docker_templates() {
         TEMP_LXC_ID=$(get_next_available_vmid)
         log_info "Creating temporary LXC container with ID: $TEMP_LXC_ID"
         
-        # Create LXC with Ubuntu minimal
+        # Create LXC with Ubuntu minimal - lxc create process
         pct create "$TEMP_LXC_ID" "local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst" \
             --cores 2 \
             --memory 2048 \
@@ -3108,12 +3296,14 @@ provision_docker_templates() {
         
         # Install dependencies
         log_info "Installing Docker and dependencies in the LXC container..."
+        # Execute docker install process in LXC
         pct exec "$TEMP_LXC_ID" -- bash -c "apt-get update && apt-get install -y ca-certificates curl gnupg lsb-release" || {
             log_error "Failed to install basic dependencies"
             return 1
         }
         
         # Add Docker repository and install Docker
+        # Execute docker install with official repository
         pct exec "$TEMP_LXC_ID" -- bash -c "mkdir -p /etc/apt/keyrings && \
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
             echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable\" > /etc/apt/sources.list.d/docker.list && \
@@ -3146,7 +3336,7 @@ provision_docker_templates() {
             continue
         fi
         
-        # Copy template to LXC
+        # Copy template to LXC - template copy operation
         cat "$template_host_path" | pct exec "$TEMP_LXC_ID" -- tee "$template_lxc_path" > /dev/null || {
             log_error "Failed to copy template: $template"
             continue

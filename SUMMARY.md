@@ -1,0 +1,18 @@
+# Table of contents
+
+* [Homelab Infrastructure](README.md)
+* [Project overview](CONTRIBUTING.md)
+* [Security Policy](SECURITY.md)
+* [Ansible Playbooks for Proxmox Template Creator](ansible/README.md)
+* [Homelab Infrastructure](docs/README.md)
+  * [Ansible Playbooks for Proxmox Template Creator](docs/AnsiblePlaybooks.md)
+  * [Contributing to the Proxmox Template Creator](docs/CONTRIBUTING.md)
+  * [Proxmox Template Creator - Complete Feature Documentation](docs/FEATURE_DOCUMENTATION.md)
+  * [Proxmox Template Creator - Progress Tracker](docs/PROGRESS_TRACKER.md)
+  * [Proxmox Template Creator](docs/ProxmoxTemplateCreatorGuide.md)
+  * [Security Policy](docs/SECURITY.md)
+  * [Summary](docs/SUMMARY.md)
+  * [Terraform Proxmox Example](docs/TerraformExample.md)
+* [proxmox](proxmox/README.md)
+  * [Proxmox Template Creator](proxmox/README-create-template.md)
+* [Terraform Proxmox Example](terraform/README.md)

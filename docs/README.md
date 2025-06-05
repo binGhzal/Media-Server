@@ -8,7 +8,7 @@ This repository contains the configuration files and scripts for setting up a co
 
 > **For all advanced usage, supported distributions, package categories, CLI/batch/automation, Ansible & Terraform integration, and troubleshooting, see:**
 >
-> [Proxmox Template Creator Guide](../proxmox/README-create-template.md)
+> [Proxmox Template Creator Guide](ProxmoxTemplateCreatorGuide.md)
 >
 > This is the authoritative and most up-to-date documentation for the Proxmox Template Creator script, including all features, options, and examples.
 

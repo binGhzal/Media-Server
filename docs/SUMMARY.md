@@ -1,11 +1,19 @@
 # Summary
 
+## Getting Started
+
 - [Introduction](README.md)
+- [Proxmox Template Creator Guide](ProxmoxTemplateCreatorGuide.md)
 - [Feature Documentation](FEATURE_DOCUMENTATION.md)
+
+## Implementation Details
+
+- [Ansible Playbooks](AnsiblePlaybooks.md)
+- [Terraform Example](TerraformExample.md)
 - [Progress Tracker](PROGRESS_TRACKER.md)
-- [Proxmox Template Creator Guide](../proxmox/README-create-template.md)
-- [Ansible Playbooks](../ansible/README.md)
-- [Terraform Example](../terraform/README.md)
-- [Contributing](../CONTRIBUTING.md)
-- [Security Policy](../SECURITY.md)
-- [License](../LICENSE)
+
+## Project Information
+
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [License](LICENSE)

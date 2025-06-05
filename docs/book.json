@@ -1,0 +1,27 @@
+{
+	"title": "Proxmox Template Creator Documentation",
+	"description": "A comprehensive guide to the Proxmox Template Creator for homelab infrastructure",
+	"author": "binGhzal",
+	"language": "en",
+	"structure": {
+		"readme": "README.md",
+		"summary": "SUMMARY.md"
+	},
+	"plugins": [
+		"search",
+		"collapsible-menu",
+		"back-to-top-button",
+		"copy-code-button",
+		"edit-link",
+		"github"
+	],
+	"pluginsConfig": {
+		"edit-link": {
+			"base": "https://github.com/binGhzal/homelab/edit/main/docs",
+			"label": "Edit This Page"
+		},
+		"github": {
+			"url": "https://github.com/binGhzal/homelab"
+		}
+	}
+}

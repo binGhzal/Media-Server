@@ -103,9 +103,18 @@ initialize_script() {
     REPO_ROOT="$(cd "$SCRIPT_DIR/.." || exit && pwd)"
 
     # Create comprehensive directory structure
-    mkdir -p "$SCRIPT_DIR"/{logs,configs,temp}
-    mkdir -p "$REPO_ROOT/terraform/templates"
-    mkdir -p "$REPO_ROOT/ansible/inventory"
+    mkdir -p "$SCRIPT_DIR"/{logs,configs,temp} || {
+        echo "Error creating directories in $SCRIPT_DIR" >&2
+        exit 1
+    }
+    mkdir -p "$REPO_ROOT/terraform/templates" || {
+        echo "Error creating directories in $REPO_ROOT/terraform" >&2
+        exit 1
+    }
+    mkdir -p "$REPO_ROOT/ansible/inventory" || {
+        echo "Error creating directories in $REPO_ROOT/ansible" >&2
+        exit 1
+    }
     mkdir -p "$REPO_ROOT/ansible/playbooks/"{templates,servers,post-deployment}
     mkdir -p "$REPO_ROOT/ansible/roles"
     mkdir -p "$REPO_ROOT/ansible/group_vars"
@@ -124,7 +133,10 @@ initialize_script() {
     LOG_FILE="$LOG_DIR/template-creator-$(date +%Y%m%d_%H%M%S).log"
 
     # Rotate old logs (keep last 10)
-    find "$LOG_DIR" -name "template-creator-*.log" -type f | sort -r | tail -n +11 | xargs rm -f 2>/dev/null || true
+    find "$LOG_DIR" -name "template-creator-*.log" -type f | sort -r | tail -n +11 | xargs rm -f 2>/dev/null || {
+        echo "Error rotating logs in $LOG_DIR" >&2
+        exit 1
+    }
 
     exec 1> >(tee -a "$LOG_FILE")
     exec 2> >(tee -a "$LOG_FILE" >&2)

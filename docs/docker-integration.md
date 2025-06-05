@@ -161,14 +161,14 @@ The script configures Docker with optimal settings:
 
 ```json
 {
-	"log-driver": "json-file",
-	"log-opts": {
-		"max-size": "10m",
-		"max-file": "3"
-	},
-	"storage-driver": "overlay2",
-	"registry-mirrors": [],
-	"insecure-registries": []
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2",
+  "registry-mirrors": [],
+  "insecure-registries": []
 }
 ```
 

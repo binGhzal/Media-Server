@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 SCRIPT_DIR="."
 test_script=$(mktemp)
 cat > "$test_script" << 'EOFTEST'

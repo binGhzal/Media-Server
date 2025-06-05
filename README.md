@@ -11,7 +11,7 @@ This repository contains the configuration files and scripts for setting up a co
 
 > **For all advanced usage, supported distributions, package categories, CLI/batch/automation, Ansible & Terraform integration, and troubleshooting, see:**
 >
-> [proxmox/README-create-template.md](./proxmox/README-create-template.md)
+> [Proxmox Template Creator Guide](./proxmox/ProxmoxTemplateCreatorGuide.md)
 >
 > This is the authoritative and most up-to-date documentation for the Proxmox Template Creator script, including all features, options, and examples.
 
@@ -65,9 +65,9 @@ The template creation script includes support for:
 1. **Download the Repository:**
 
    ```bash
-   wget https://github.com/binghzal/homelab/archive/main.zip
-   unzip main.zip
-   cd homelab-main/proxmox
+   # Clone the repository
+   git clone https://github.com/binghzal/homelab.git
+   cd homelab/proxmox
    ```
 
 2. **Prepare and Run the Script (as root):**

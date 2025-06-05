@@ -1407,13 +1407,11 @@ configure_vlan_settings() {
         if [[ $? -eq 0 ]]; then
             whiptail --title "VLAN Updated" \
                 --msgbox "VLAN enabled with ID: $VLAN_ID" 8 50
-            log_info "VLAN settings updated: enabled=$VLAN_ENABLED, ID=$VLAN_ID"
         fi
     else
         VLAN_ENABLED="false"
         whiptail --title "VLAN Disabled" \
             --msgbox "VLAN tagging disabled" 8 50
-        log_info "VLAN disabled"
     fi
 }
 
@@ -2183,8 +2181,7 @@ FIREWALL_POLICY="$FIREWALL_POLICY"
 
 # Storage Configuration
 DISK_FORMAT="$DISK_FORMAT"
-BACKUP_STORAGE="$BACKUP_STORAGE"
-ISO_STORAGE="$ISO_STORAGE"
+ISO_STORAGE: "$ISO_STORAGE"
 TEMPLATE_STORAGE="$TEMPLATE_STORAGE"
 DISK_CACHE="$DISK_CACHE"
 
@@ -2374,359 +2371,582 @@ Selected Items:
     log_info "Current settings viewed"
 }
 
-# ...existing code...
 #===============================================================================
-# MISSING CORE FUNCTIONS IMPLEMENTATION
-#===============================================================================
+# MISSING CRITICAL FUNCTIONS IMPLEMENTATION
+# ================================================================================
 
-# Main entry point function
-main() {
-    # Initialize script
-    initialize_script
-    
-    # Parse command line arguments
-    if [[ $# -gt 0 ]]; then
-        parse_cli_arguments "$@"
-        run_cli_mode
-    else
-        # Show welcome and run interactive mode
-        show_welcome
-        show_main_menu
-    fi
-}
-
-# Select distribution interactively
+# Select distribution for template creation
 select_distribution() {
-    local dist_options=()
-    local categories=()
+    log_info "Starting distribution selection"
     
-    # Build distribution list by categories
-    for category in ubuntu debian rhel fedora suse arch security container bsd minimal network specialized custom; do
-        local category_dists=()
-        for key in "${!DISTRO_LIST[@]}"; do
-            case "$key" in
-                ubuntu-*) [[ "$category" == "ubuntu" ]] && category_dists+=("$key") ;;
-                debian-*) [[ "$category" == "debian" ]] && category_dists+=("$key") ;;
-                centos-*|rhel-*|rocky-*|almalinux-*|oracle-*) [[ "$category" == "rhel" ]] && category_dists+=("$key") ;;
-                fedora-*) [[ "$category" == "fedora" ]] && category_dists+=("$key") ;;
-                opensuse-*) [[ "$category" == "suse" ]] && category_dists+=("$key") ;;
-                arch*) [[ "$category" == "arch" ]] && category_dists+=("$key") ;;
-                kali-*|parrot-*) [[ "$category" == "security" ]] && category_dists+=("$key") ;;
-                talos-*|flatcar|bottlerocket) [[ "$category" == "container" ]] && category_dists+=("$key") ;;
-                freebsd-*|openbsd-*|netbsd-*) [[ "$category" == "bsd" ]] && category_dists+=("$key") ;;
-                alpine-*|tinycorelinux|slitaz|puppy-*) [[ "$category" == "minimal" ]] && category_dists+=("$key") ;;
-                opnsense-*|pfsense-*|vyos-*|routeros-*) [[ "$category" == "network" ]] && category_dists+=("$key") ;;
-                clearlinux|rescuezilla|gparted-*) [[ "$category" == "specialized" ]] && category_dists+=("$key") ;;
-                custom-*) [[ "$category" == "custom" ]] && category_dists+=("$key") ;;
-            esac
-        done
-        
-        if [[ ${#category_dists[@]} -gt 0 ]]; then
-            categories+=("$category")
-        fi
-    done
+    # Get distribution list
+    local dist_list=()
+    local dist_keys=()
     
-    # Select category first
-    local cat_options=()
-    for cat in "${categories[@]}"; do
-        case "$cat" in
-            ubuntu) cat_options+=("$cat" "Ubuntu Family (LTS and Latest)") ;;
-            debian) cat_options+=("$cat" "Debian Family (Stable and Testing)") ;;
-            rhel) cat_options+=("$cat" "Red Hat Enterprise Family") ;;
-            fedora) cat_options+=("$cat" "Fedora") ;;
-            suse) cat_options+=("$cat" "SUSE Family") ;;
-            arch) cat_options+=("$cat" "Arch Linux Family") ;;
-            security) cat_options+=("$cat" "Security-Focused Distributions") ;;
-            container) cat_options+=("$cat" "Container-Optimized") ;;
-            bsd) cat_options+=("$cat" "BSD Systems") ;;
-            minimal) cat_options+=("$cat" "Minimal/Lightweight") ;;
-            network) cat_options+=("$cat" "Network/Firewall") ;;
-            specialized) cat_options+=("$cat" "Specialized/Rescue") ;;
-            custom) cat_options+=("$cat" "Custom ISO/Image") ;;
-        esac
-    done
-    
-    local selected_category
-    selected_category=$(whiptail --title "Select Distribution Category" \
-        --menu "Choose a distribution category:" 20 80 10 \
-        "${cat_options[@]}" \
-        3>&1 1>&2 2>&3)
-    
-    [[ $? -ne 0 ]] && return 1
-    
-    # Now show distributions in selected category
-    local dist_options=()
     for key in "${!DISTRO_LIST[@]}"; do
-        local match=false
-        case "$key" in
-            ubuntu-*) [[ "$selected_category" == "ubuntu" ]] && match=true ;;
-            debian-*) [[ "$selected_category" == "debian" ]] && match=true ;;
-            centos-*|rhel-*|rocky-*|almalinux-*|oracle-*) [[ "$selected_category" == "rhel" ]] && match=true ;;
-            fedora-*) [[ "$selected_category" == "fedora" ]] && match=true ;;
-            opensuse-*) [[ "$selected_category" == "suse" ]] && match=true ;;
-            arch*) [[ "$selected_category" == "arch" ]] && match=true ;;
-            kali-*|parrot-*) [[ "$selected_category" == "security" ]] && match=true ;;
-            talos-*|flatcar|bottlerocket) [[ "$selected_category" == "container" ]] && match=true ;;
-            freebsd-*|openbsd-*|netbsd-*) [[ "$selected_category" == "bsd" ]] && match=true ;;
-            alpine-*|tinycorelinux|slitaz|puppy-*) [[ "$selected_category" == "minimal" ]] && match=true ;;
-            opnsense-*|pfsense-*|vyos-*|routeros-*) [[ "$selected_category" == "network" ]] && match=true ;;
-            clearlinux|rescuezilla|gparted-*) [[ "$selected_category" == "specialized" ]] && match=true ;;
-            custom-*) [[ "$selected_category" == "custom" ]] && match=true ;;
-        esac
+        IFS='|' read -ra dist_info <<< "${DISTRO_LIST[$key]}"
+        local display_name="${dist_info[0]}"
+        local notes="${dist_info[7]:-}"
         
-        if [[ "$match" == true ]]; then
-            IFS='|' read -r name url fmt pkgmgr ostype user size notes <<< "${DISTRO_LIST[$key]}"
-            dist_options+=("$key" "$name - $notes")
-        fi
+        dist_list+=("$key" "$display_name ($notes)")
+        dist_keys+=("$key")
     done
     
-    local selected_dist
-    selected_dist=$(whiptail --title "Select Distribution" \
-        --menu "Choose a distribution:" 20 80 10 \
-        "${dist_options[@]}" \
+    # Sort the distribution list alphabetically
+    local sorted_dist_list=()
+    while IFS= read -r -d '' line; do
+        sorted_dist_list+=("$line")
+    done < <(printf '%s\0' "${dist_list[@]}" | sort -z)
+    
+    # Show distribution selection dialog
+    local selected_key
+    selected_key=$(whiptail --title "Distribution Selection" \
+        --menu "Select a distribution:" 25 80 15 \
+        "${sorted_dist_list[@]}" \
         3>&1 1>&2 2>&3)
     
-    [[ $? -ne 0 ]] && return 1
-    
-    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_dist]}"
-    SELECTED_DISTRIBUTION_KEY="$selected_dist"
-    
-    log_info "Selected distribution: $selected_dist"
-    return 0
-}
-
-# Core template creation function
-create_template_main() {
-    log_info "Starting template creation process"
-    
-    # Parse distribution details
-    IFS='|' read -r dist_name dist_url dist_format dist_pkgmgr dist_ostype dist_user dist_size dist_notes <<< "$SELECTED_DISTRIBUTION"
-    
-    # Set defaults from distribution if not already set
-    VM_NAME="${VM_NAME:-${SELECTED_DISTRIBUTION_KEY}-template}"
-    VMID_DEFAULT="${VMID_DEFAULT:-$(get_next_available_vmid)}"
-    VM_MEMORY="${VM_MEMORY:-2048}"
-    VM_CORES="${VM_CORES:-2}"
-    VM_DISK_SIZE="${VM_DISK_SIZE:-$dist_size}"
-    VM_STORAGE="${VM_STORAGE:-local-lvm}"
-    CLOUD_USER_DEFAULT="${CLOUD_USER_DEFAULT:-$dist_user}"
-    
-    log_info "Creating template: $VM_NAME (ID: $VMID_DEFAULT)"
-    log_info "Distribution: $dist_name"
-    log_info "Format: $dist_format, Package Manager: $dist_pkgmgr"
-    
-    # Download image if needed
-    local image_path
-    image_path=$(download_distribution_image "$dist_url" "$dist_format")
-    [[ $? -ne 0 ]] && return 1
-    
-    # Create VM
-    if ! create_vm_from_image "$image_path" "$dist_format"; then
-        log_error "Failed to create VM from image"
+    if [[ $? -ne 0 ]]; then
+        log_warn "Distribution selection cancelled"
         return 1
     fi
     
-    # Configure cloud-init
-    if ! configure_cloud_init; then
-        log_error "Failed to configure cloud-init"
+    # Validate selection
+    if [[ -z "${DISTRO_LIST[$selected_key]:-}" ]]; then
+        log_error "Invalid distribution selected: $selected_key"
         return 1
     fi
     
-    # Install packages if selected
-    if [[ ${#SELECTED_PACKAGES[@]} -gt 0 ]]; then
-        if ! install_packages_virt_customize "$image_path" "$dist_pkgmgr"; then
-            log_error "Failed to install packages"
+    # Store selection
+    SELECTED_DISTRIBUTION_KEY="$selected_key"
+    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_key]}"
+    DISTRIBUTION_SELECTED="$SELECTED_DISTRIBUTION"
+    
+    # Parse distribution info
+    IFS='|' read -ra dist_info <<< "$SELECTED_DISTRIBUTION"
+    DIST_NAME="${dist_info[0]}"
+    IMG_URL="${dist_info[1]}"
+    IMG_FORMAT="${dist_info[2]}"
+    PKG_MANAGER="${dist_info[3]}"
+    OS_TYPE="${dist_info[4]}"
+    DEFAULT_USER="${dist_info[5]}"
+    DEFAULT_DISK_SIZE="${dist_info[6]:-20G}"
+    DIST_NOTES="${dist_info[7]:-}"
+    
+    # Handle custom ISO selection
+    if [[ "$selected_key" == "custom-iso" ]]; then
+        if ! handle_custom_iso_selection; then
+            log_error "Custom ISO configuration failed"
             return 1
         fi
     fi
     
-    # Convert to template
-    if ! convert_to_template; then
-        log_error "Failed to convert VM to template"
-        return 1
-    fi
-    
-    # Execute Terraform modules if selected (for template deployment)
-    if [[ "$TERRAFORM_ENABLED" == "true" && ${#SELECTED_TERRAFORM_MODULES[@]} -gt 0 ]]; then
-        execute_terraform_modules "$VMID_DEFAULT" "$VM_NAME"
-    fi
-    
-    log_success "Template creation completed successfully!"
-    log_info "Template ID: $VMID_DEFAULT"
-    log_info "Template Name: $VM_NAME"
+    log_info "Selected distribution: $DIST_NAME"
+    log_info "Image URL: $IMG_URL"
+    log_info "Format: $IMG_FORMAT"
+    log_info "Package Manager: $PKG_MANAGER"
     
     return 0
 }
 
-# Get next available VM ID
-get_next_available_vmid() {
-    local start_id="${VMID_DEFAULT:-9000}"
-    local current_id="$start_id"
+# Handle custom ISO/image selection
+handle_custom_iso_selection() {
+    log_info "Configuring custom ISO/image"
     
-    while qm status "$current_id" &>/dev/null; do
-        ((current_id++))
+    # Get custom image URL
+    IMG_URL=$(whiptail --title "Custom Image URL" \
+        --inputbox "Enter the URL or local path to your image/ISO:" 10 70 \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -ne 0 || -z "$IMG_URL" ]]; then
+        log_error "Custom image URL is required"
+        return 1
+    fi
+    
+    # Detect format from URL/filename
+    local detected_format=""
+    case "$IMG_URL" in
+        *.qcow2) detected_format="qcow2" ;;
+        *.img) detected_format="raw" ;;
+        *.iso) detected_format="iso" ;;
+        *.vmdk) detected_format="vmdk" ;;
+        *.raw) detected_format="raw" ;;
+        *) detected_format="unknown" ;;
+    esac
+    
+    # Let user select or confirm format
+    IMG_FORMAT=$(whiptail --title "Image Format" \
+        --menu "Select the image format:" 15 60 8 \
+        "qcow2" "QCOW2 (recommended, supports snapshots)" \
+        "raw" "Raw disk image" \
+        "iso" "ISO file" \
+        "vmdk" "VMware disk" \
+        "auto" "Auto-detect" \
+        3>&1 1>&2 2>&3)
+    
+    if [[ $? -ne 0 ]]; then
+        IMG_FORMAT="$detected_format"
+    fi
+    
+    # Get package manager
+    PKG_MANAGER=$(whiptail --title "Package Manager" \
+        --menu "Select the package manager:" 15 60 8 \
+        "apt" "APT (Debian/Ubuntu)" \
+        "dnf" "DNF (Fedora/RHEL 8+)" \
+        "yum" "YUM (CentOS/RHEL 7)" \
+        "zypper" "Zypper (openSUSE)" \
+        "pacman" "Pacman (Arch)" \
+        "apk" "APK (Alpine)" \
+        "emerge" "Emerge (Gentoo)" \
+        "auto" "Auto-detect" \
+        3>&1 1>&2 2>&3)
+    
+    [[ $? -ne 0 ]] && PKG_MANAGER="auto"
+    
+    # Set other defaults
+    DIST_NAME="Custom Image"
+    OS_TYPE="l26"
+    DEFAULT_USER="root"
+    DEFAULT_DISK_SIZE="20G"
+    DIST_NOTES="Custom user-supplied image"
+    
+    log_info "Custom image configured: $IMG_URL ($IMG_FORMAT)"
+    return 0
+}
+
+# Get next available VMID
+get_next_available_vmid() {
+    local start_vmid="${VMID_DEFAULT:-9000}"
+    local max_vmid=99999
+    local current_vmid="$start_vmid"
+    
+    # Get list of existing VMIDs
+    local existing_vmids
+    existing_vmids=$(qm list 2>/dev/null | awk 'NR>1 {print $1}' | sort -n)
+    
+    # Find next available VMID
+    while [[ $current_vmid -le $max_vmid ]]; do
+        if ! echo "$existing_vmids" | grep -q "^$current_vmid$"; then
+            echo "$current_vmid"
+            return 0
+        fi
+        ((current_vmid++))
     done
     
-    echo "$current_id"
+    log_error "No available VMID found"
+    echo "9000"  # fallback
+    return 1
 }
 
 # Download distribution image
 download_distribution_image() {
-    local url="$1"
-    local format="$2"
-    local filename=$(basename "$url")
-    local download_path="$SCRIPT_DIR/temp/$filename"
+    log_info "Downloading distribution image"
     
-    # Create temp directory
-    mkdir -p "$SCRIPT_DIR/temp"
-    
-    # Skip download if file already exists and is valid
-    if [[ -f "$download_path" ]]; then
-        log_info "Image already exists: $download_path"
-        echo "$download_path"
-        return 0
-    fi
-    
-    log_info "Downloading image: $url"
-    if wget -q --show-progress -O "$download_path" "$url"; then
-        log_success "Image downloaded: $download_path"
-        echo "$download_path"
-        return 0
-    else
-        log_error "Failed to download image: $url"
+    if [[ -z "$IMG_URL" ]]; then
+        log_error "No image URL specified"
         return 1
     fi
+    
+    # Create download directory
+    local download_dir="$WORK_DIR/images"
+    mkdir -p "$download_dir"
+    
+    # Extract filename from URL
+    local image_filename
+    image_filename=$(basename "$IMG_URL")
+    local local_image_path="$download_dir/$image_filename"
+    
+    # Check if it's a local file
+    if [[ -f "$IMG_URL" ]]; then
+        log_info "Using local image file: $IMG_URL"
+        cp "$IMG_URL" "$local_image_path"
+        IMAGE_PATH="$local_image_path"
+        return 0
+    fi
+    
+    # Download the image
+    log_info "Downloading image from: $IMG_URL"
+    if ! wget -O "$local_image_path" "$IMG_URL" 2>&1 | tee -a "$LOG_FILE"; then
+        log_error "Failed to download image from $IMG_URL"
+        return 1
+    fi
+    
+    # Verify download
+    if [[ ! -f "$local_image_path" || ! -s "$local_image_path" ]]; then
+        log_error "Downloaded image is empty or corrupted"
+        return 1
+    fi
+    
+    IMAGE_PATH="$local_image_path"
+    log_success "Image downloaded successfully: $IMAGE_PATH"
+    return 0
 }
 
-# Create VM from image
+# Create VM from downloaded image
 create_vm_from_image() {
-    local image_path="$1"
-    local format="$2"
+    log_info "Creating VM from image"
     
-    log_info "Creating VM from image: $image_path"
-    
-    # Create VM with basic configuration
-    if qm create "$VMID_DEFAULT" \
-        --name "$VM_NAME" \
-        --memory "$VM_MEMORY" \
-        --cores "$VM_CORES" \
-        --net0 "virtio,bridge=$NETWORK_BRIDGE" \
-        --ostype "$OS_TYPE" \
-        --agent 1; then
-        
-        log_success "VM $VMID_DEFAULT created successfully"
-        
-        # Import disk
-        local disk_import_cmd="qm importdisk $VMID_DEFAULT $image_path $VM_STORAGE"
-        if $disk_import_cmd; then
-            log_success "Disk imported successfully"
-            
-            # Set boot disk
-            if qm set "$VMID_DEFAULT" --scsi0 "$VM_STORAGE:vm-$VMID_DEFAULT-disk-0"; then
-                log_success "Boot disk configured"
-                return 0
-            else
-                log_error "Failed to configure boot disk"
-                return 1
-            fi
-        else
-            log_error "Failed to import disk"
-            return 1
-        fi
-    else
-        log_error "Failed to create VM"
+    if [[ -z "$IMAGE_PATH" || ! -f "$IMAGE_PATH" ]]; then
+        log_error "Image file not found: $IMAGE_PATH"
         return 1
     fi
+    
+    # Import disk image to storage
+    local disk_import_cmd
+    case "$IMG_FORMAT" in
+        "qcow2"|"vmdk"|"raw")
+            disk_import_cmd="qm importdisk $VMID_DEFAULT \"$IMAGE_PATH\" $STORAGE_DEFAULT"
+            ;;
+        "iso")
+            # For ISO files, create a new VM and attach ISO as CD-ROM
+            create_vm_with_iso
+            return $?
+            ;;
+        *)
+            log_error "Unsupported image format: $IMG_FORMAT"
+            return 1
+            ;;
+    esac
+    
+    # Create VM configuration
+    log_info "Creating VM configuration for VMID: $VMID_DEFAULT"
+    
+    qm create "$VMID_DEFAULT" \
+        --name "$VM_NAME" \
+        --memory "$MEMORY_MB_DEFAULT" \
+        --cores "$CPU_CORES_DEFAULT" \
+        --net0 "virtio,bridge=$BRIDGE_DEFAULT" \
+        --scsihw "virtio-scsi-pci" \
+        --boot "order=scsi0" \
+        --agent 1 \
+        --ostype "$OS_TYPE" \
+        || {
+            log_error "Failed to create VM configuration"
+            return 1
+        }
+    
+    # Import and attach disk
+    log_info "Importing disk image to storage"
+    eval "$disk_import_cmd" || {
+        log_error "Failed to import disk image"
+        return 1
+    }
+    
+    # Attach the imported disk
+    qm set "$VMID_DEFAULT" \
+        --scsi0 "$STORAGE_DEFAULT:vm-$VMID_DEFAULT-disk-0,size=$DISK_SIZE_DEFAULT" \
+        || {
+            log_error "Failed to attach disk to VM"
+            return 1
+        }
+    
+    log_success "VM created successfully with VMID: $VMID_DEFAULT"
+    return 0
 }
 
-# Configure cloud-init
-configure_cloud_init() {
-    log_info "Configuring cloud-init for VM $VMID_DEFAULT"
+# Create VM with ISO (for ISO installations)
+create_vm_with_iso() {
+    log_info "Creating VM with ISO image"
     
-    local cloud_init_cmd="qm set $VMID_DEFAULT"
-    cloud_init_cmd="$cloud_init_cmd --ide2 $VM_STORAGE:cloudinit"
-    cloud_init_cmd="$cloud_init_cmd --boot c --bootdisk scsi0"
-    cloud_init_cmd="$cloud_init_cmd --serial0 socket --vga serial0"
+    # Create VM with ISO attached as CD-ROM
+    qm create "$VMID_DEFAULT" \
+        --name "$VM_NAME" \
+        --memory "$MEMORY_MB_DEFAULT" \
+        --cores "$CPU_CORES_DEFAULT" \
+        --net0 "virtio,bridge=$BRIDGE_DEFAULT" \
+        --scsihw "virtio-scsi-pci" \
+        --boot "order=ide2,scsi0" \
+        --agent 1 \
+        --ostype "$OS_TYPE" \
+        --ide2 "$STORAGE_DEFAULT:iso/$IMAGE_PATH,media=cdrom" \
+        --scsi0 "$STORAGE_DEFAULT:$DISK_SIZE_DEFAULT" \
+        || {
+            log_error "Failed to create VM with ISO"
+            return 1
+        }
+    
+    log_info "VM created with ISO. Manual installation may be required."
+    return 0
+}
+
+# Configure cloud-init for the VM
+configure_cloud_init() {
+    log_info "Configuring cloud-init"
+    
+    # Enable cloud-init
+    qm set "$VMID_DEFAULT" --ide2 "$STORAGE_DEFAULT:cloudinit" || {
+        log_error "Failed to enable cloud-init"
+        return 1
+    }
     
     # Set cloud-init user
-    if [[ -n "$CLOUD_USER_DEFAULT" ]]; then
-        cloud_init_cmd="$cloud_init_cmd --ciuser $CLOUD_USER_DEFAULT"
-    fi
-    
-    # Set SSH key if provided
-    if [[ -n "$SSH_KEY" ]]; then
-        cloud_init_cmd="$cloud_init_cmd --sshkey \"$SSH_KEY\""
-    fi
-    
-    # Execute cloud-init configuration
-    if eval "$cloud_init_cmd"; then
-        log_success "Cloud-init configured successfully"
-        return 0
-    else
-        log_error "Failed to configure cloud-init"
+    local cloud_user="${CLOUD_USER_DEFAULT:-$DEFAULT_USER}"
+    qm set "$VMID_DEFAULT" --ciuser "$cloud_user" || {
+        log_error "Failed to set cloud-init user"
         return 1
+    }
+    
+    # Set cloud-init password
+    if [[ -n "$CLOUD_PASSWORD_DEFAULT" ]]; then
+        qm set "$VMID_DEFAULT" --cipassword "$CLOUD_PASSWORD_DEFAULT" || {
+            log_warn "Failed to set cloud-init password"
+        }
     fi
+    
+    # Configure SSH keys
+    if [[ "$SSH_KEY_ENABLED" == "true" && -f "$SSH_KEY_FILE" ]]; then
+        qm set "$VMID_DEFAULT" --sshkeys "$SSH_KEY_FILE" || {
+            log_warn "Failed to set SSH keys"
+        }
+    fi
+    
+    # Configure network if static
+    if [[ "$NETWORK_TYPE" == "static" && -n "$STATIC_IP" ]]; then
+        qm set "$VMID_DEFAULT" --ipconfig0 "ip=$STATIC_IP,gw=$STATIC_GATEWAY" || {
+            log_warn "Failed to set static IP configuration"
+        }
+    fi
+    
+    log_success "Cloud-init configured successfully"
+    return 0
 }
 
 # Install packages using virt-customize
 install_packages_virt_customize() {
-    local image_path="$1"
-    local pkg_manager="$2"
+    log_info "Installing packages using virt-customize"
     
-    log_info "Installing ${#SELECTED_PACKAGES[@]} packages using virt-customize"
+    if [[ ${#SELECTED_PACKAGES[@]} -eq 0 ]]; then
+        log_info "No packages selected for installation"
+        return 0
+    fi
     
-    local install_cmd="virt-customize -a $image_path"
+    # Stop the VM if running
+    qm stop "$VMID_DEFAULT" 2>/dev/null || true
     
-    # Build package installation command based on package manager
-    case "$pkg_manager" in
-        apt)
-            install_cmd="$install_cmd --update"
-            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+    # Wait for VM to stop
+    sleep 5
+    
+    # Get the disk image path
+    local disk_image
+    disk_image=$(qm config "$VMID_DEFAULT" | grep 'scsi0:' | awk '{print $2}' | cut -d',' -f1)
+    
+    if [[ -z "$disk_image" ]]; then
+        log_error "Failed to find VM disk image"
+        return 1
+    fi
+    
+    # Build package list
+    local package_list=""
+    for package in "${SELECTED_PACKAGES[@]}"; do
+        package_list="$package_list $package"
+    done
+    
+    # Install packages based on package manager
+    local install_cmd=""
+    case "$PKG_MANAGER" in
+        "apt")
+            install_cmd="apt-get update && apt-get install -y $package_list"
             ;;
-        dnf|yum)
-            install_cmd="$install_cmd --run-command 'dnf update -y'"
-            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+        "dnf")
+            install_cmd="dnf install -y $package_list"
             ;;
-        zypper)
-            install_cmd="$install_cmd --run-command 'zypper refresh'"
-            install_cmd="$install_cmd --install $(IFS=','; echo "${SELECTED_PACKAGES[*]}")"
+        "yum")
+            install_cmd="yum install -y $package_list"
+            ;;
+        "zypper")
+            install_cmd="zypper install -y $package_list"
+            ;;
+        "pacman")
+            install_cmd="pacman -Sy --noconfirm $package_list"
+            ;;
+        "apk")
+            install_cmd="apk update && apk add $package_list"
             ;;
         *)
-            log_warn "Package manager $pkg_manager not fully supported, skipping package installation"
+            log_warn "Unsupported package manager: $PKG_MANAGER"
             return 0
             ;;
     esac
     
-    # Execute package installation
-    if eval "$install_cmd"; then
-        log_success "Packages installed successfully"
-        return 0
-    else
-        log_error "Failed to install packages"
+    # Run virt-customize
+    log_info "Running virt-customize to install packages"
+    if ! virt-customize -a "/dev/pve/$disk_image" --run-command "$install_cmd" 2>&1 | tee -a "$LOG_FILE"; then
+        log_error "Failed to install packages using virt-customize"
         return 1
     fi
+    
+    log_success "Packages installed successfully"
+    return 0
 }
 
 # Convert VM to template
 convert_to_template() {
-    log_info "Converting VM $VMID_DEFAULT to template"
+    log_info "Converting VM to template"
     
-    if qm template "$VMID_DEFAULT"; then
-        log_success "VM successfully converted to template"
-        
-        # Add template tag
-        if qm set "$VMID_DEFAULT" --tags "template"; then
-            log_success "Template tagged successfully"
-        fi
-        
-        return 0
-    else
+    # Stop the VM if running
+    qm stop "$VMID_DEFAULT" 2>/dev/null || true
+    
+    # Wait for VM to fully stop
+    local timeout=60
+    local count=0
+    
+    while qm status "$VMID_DEFAULT" | grep -q "running" && [[ $count -lt $timeout ]]; do
+        sleep 2
+        ((count += 2))
+    done
+    
+    if qm status "$VMID_DEFAULT" | grep -q "running"; then
+        log_error "VM failed to stop within timeout"
+        return 1
+    fi
+    
+    # Convert to template
+    if ! qm template "$VMID_DEFAULT" 2>&1 | tee -a "$LOG_FILE"; then
         log_error "Failed to convert VM to template"
         return 1
     fi
+    
+    # Add template tags
+    qm set "$VMID_DEFAULT" --tags "$TEMPLATE_TAG,${VM_CATEGORY_TAG:-general}" 2>/dev/null || true
+    
+    # Set template notes
+    local template_notes="Template: $DIST_NAME
+Created: $(date)
+Packages: ${#SELECTED_PACKAGES[@]} packages
+Distribution: $SELECTED_DISTRIBUTION_KEY"
+    
+    qm set "$VMID_DEFAULT" --description "$template_notes" 2>/dev/null || true
+    
+    log_success "VM converted to template successfully"
+    log_success "Template VMID: $VMID_DEFAULT"
+    
+    return 0
 }
 
-# Only run main if script is executed directly (not sourced)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+# Main template creation function
+create_template_main() {
+    log_info "Starting main template creation workflow"
+    
+    # Validate prerequisites
+    if [[ -z "$DISTRIBUTION_SELECTED" ]]; then
+        log_error "No distribution selected"
+        return 1
+    fi
+    
+    # Set default VM name if not set
+    if [[ -z "$VM_NAME" ]]; then
+        VM_NAME="${SELECTED_DISTRIBUTION_KEY:-unknown}-template"
+    fi
+    
+    # Get next available VMID if not set
+    if [[ -z "$VMID_DEFAULT" ]]; then
+        VMID_DEFAULT=$(get_next_available_vmid)
+    fi
+    
+    # Create work directory
+    WORK_DIR="/tmp/template-creation-$$"
+    mkdir -p "$WORK_DIR"
+    
+    log_info "Creating template: $VM_NAME (VMID: $VMID_DEFAULT)"
+    
+    # Execute template creation steps
+    if ! download_distribution_image; then
+        log_error "Failed to download distribution image"
+        cleanup_on_exit
+        return 1
+    fi
+    
+    if ! create_vm_from_image; then
+        log_error "Failed to create VM from image"
+        cleanup_on_exit
+        return 1
+    fi
+    
+    if ! configure_cloud_init; then
+        log_error "Failed to configure cloud-init"
+        cleanup_on_exit
+        return 1
+    fi
+    
+    if ! install_packages_virt_customize; then
+        log_error "Failed to install packages"
+        # Continue despite package installation failure
+    fi
+    
+    if ! convert_to_template; then
+        log_error "Failed to convert VM to template"
+        cleanup_on_exit
+        return 1
+    fi
+    
+    log_success "Template creation completed successfully!"
+    log_success "Template VMID: $VMID_DEFAULT"
+    log_success "Template Name: $VM_NAME"
+    
+    # Show completion message
+    whiptail --title "Template Creation Complete" \
+        --msgbox "Template created successfully!
+
+Template Name: $VM_NAME
+Template VMID: $VMID_DEFAULT
+Distribution: $DIST_NAME
+Packages: ${#SELECTED_PACKAGES[@]} packages
+
+The template is now ready for use." 12 60
+    
+    # Cleanup
+    cleanup_on_exit
+    
+    return 0
+}
+
+# Main function to handle script execution
+main() {
+    log_info "Starting Proxmox Template Creator v$SCRIPT_VERSION"
+    
+    # Check if running as root
+    check_root
+    
+    # Install dependencies if needed
+    check_dependencies
+    
+    # Initialize defaults
+    initialize_defaults
+    
+    # Set up signal handlers
+    trap cleanup_on_interrupt SIGINT SIGTERM
+    trap cleanup_on_exit EXIT
+    
+    # Parse command line arguments if provided
+    if [[ $# -gt 0 ]]; then
+        parse_arguments "$@"
+        
+        # If CLI mode is enabled, run non-interactive
+        if [[ "$CLI_MODE" == "true" ]]; then
+            log_info "Running in CLI mode"
+            
+            # Validate required parameters for CLI mode
+            if [[ -z "$DISTRIBUTION_SELECTED" ]]; then
+                log_error "Distribution must be specified in CLI mode"
+                show_help
+                exit 1
+            fi
+            
+            # Run template creation directly
+            if ! create_template_main; then
+                log_error "Template creation failed in CLI mode"
+                exit 1
+            fi
+            
+            exit 0
+        fi
+    fi
+    
+    # Show welcome message
+    show_welcome
+    
+    # Start main menu loop
+    main_menu
+}
+
+# Call main function with all arguments
+main "$@"

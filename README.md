@@ -1,7 +1,7 @@
 # Homelab Infrastructure
 
 Access the wiki by clocking this button:
-[![Hosted on GitBook](https://gitbook.com/images/badges/hosted-on-gitbook.png)](https://bizarreindustries.gitbook.io/homelab)
+[![GitBook](https://img.shields.io/badge/GitBook-%23000000.svg?style=for-the-badge&logo=gitbook&logoColor=white)](https://bizarreindustries.gitbook.io/homelab)
 
 ## Introduction
 

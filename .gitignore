@@ -1,6 +1,7 @@
 # Ignore local development files
 **/.vscode
 **/.DS_Store
+**/.github/instructions
 
 # Ignore backup files
 **/*.backup

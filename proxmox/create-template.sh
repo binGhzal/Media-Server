@@ -99,8 +99,8 @@ initialize_script() {
     check_dependencies
 
     # Set script directory
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" || exit)" && pwd)"
+    REPO_ROOT="$(cd "$SCRIPT_DIR/.." || exit && pwd)"
 
     # Create comprehensive directory structure
     mkdir -p "$SCRIPT_DIR"/{logs,configs,temp}
@@ -116,8 +116,8 @@ initialize_script() {
     # Set global paths
     TERRAFORM_DIR="$REPO_ROOT/terraform/templates"
     ANSIBLE_DIR="$REPO_ROOT/ansible"
-    INVENTORY_DIR="$ANSIBLE_DIR/inventory"
-    PLAYBOOKS_DIR="$ANSIBLE_DIR/playbooks"
+    export INVENTORY_DIR="$ANSIBLE_DIR/inventory"
+    export PLAYBOOKS_DIR="$ANSIBLE_DIR/playbooks"
 
     # Initialize logging with rotation
     LOG_DIR="$SCRIPT_DIR/logs"
@@ -130,8 +130,8 @@ initialize_script() {
     exec 2> >(tee -a "$LOG_FILE" >&2)
 
     # Set up signal handlers for cleanup
-    trap cleanup_on_exit EXIT
-    trap cleanup_on_interrupt INT TERM
+    trap cleanup_on_exit EXIT || true
+    trap cleanup_on_interrupt INT TERM || true
 
     log_info "Proxmox Template Creator v$SCRIPT_VERSION initialized"
     log_info "Working directory: $SCRIPT_DIR"

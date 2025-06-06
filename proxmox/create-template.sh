@@ -3177,7 +3177,7 @@ EOF
     }
 
     rm -f "$temp_script"
-    log_success "Packages installed successfully"
+    log_success "Packages installed successfully."
     return 0
 }
 
@@ -3678,7 +3678,7 @@ select_distribution() {
         dist_desc=$(echo "$dist_info" | cut -d'|' -f8)
         local dist_cat
         dist_cat=$(echo "$dist_info" | cut -d'|' -f9 2>/dev/null || echo "")
-    
+
         if [[ -z "$selected_category" || "$dist_cat" == "$selected_category" ]]; then
             dist_options+=("$dist" "$dist_name - $dist_desc")
         fi

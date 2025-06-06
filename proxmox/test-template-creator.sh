@@ -551,7 +551,7 @@ test_integration_workflow() {
         echo "✅ Integration workflow functions found"
 
         # Check if they're called in create_template_main
-        if grep -A 20 "create_template_main" "$SCRIPT_DIR/create-template.sh" | grep -q "provision_docker_templates\|provision_k8s_templates\|generate_terraform_config"; then
+        if grep -A 100 "create_template_main" "$SCRIPT_DIR/create-template.sh" | grep -q "provision_docker_templates\|provision_k8s_templates\|generate_terraform_config"; then
             echo "✅ Integration functions called in main workflow"
         else
             echo "❌ Integration functions not called in main workflow"

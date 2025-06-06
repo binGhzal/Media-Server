@@ -3397,7 +3397,7 @@ provision_docker_templates() {
         fi
 
         # Copy template to LXC - template copy operation
-        pct exec "$TEMP_LXC_ID" -- tee "$template_lxc_path" < "$template_host_path" > /dev/null || {
+        cat "$template_host_path" | pct exec "$TEMP_LXC_ID" -- tee "$template_lxc_path" > /dev/null || {
             log_error "Failed to copy template: $template"
             continue
         }

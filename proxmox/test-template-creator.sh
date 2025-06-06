@@ -37,7 +37,7 @@ echo ""
 
 # Test specific function definitions
 echo "Test 3: Checking critical function definitions..."
-critical_functions=(
+declare -a critical_functions=(
     "show_main_menu"
     "select_distribution"
     "select_packages"
@@ -48,7 +48,7 @@ critical_functions=(
     "import_configuration"
     "load_configuration_file"
     "initialize_script"
-main
+    "main"
     "get_next_available_vmid"
     "download_distribution_image"
     "create_vm_from_image"
@@ -69,7 +69,7 @@ main
     "view_current_settings"
 )
 
-missing_functions=()
+declare -a missing_functions=()
 for func in "${critical_functions[@]}"; do
     if grep -q "^${func}() {" "$SCRIPT_DIR/create-template.sh"; then
         echo "   ✅ $func - defined"
@@ -562,6 +562,8 @@ test_integration_workflow() {
         return 1
     fi
 }
+
+test_integration_workflow
 
 test_integration_workflow
 echo ""

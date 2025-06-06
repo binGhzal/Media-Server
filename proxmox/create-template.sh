@@ -3693,7 +3693,7 @@ select_distribution() {
 
     [[ $? -ne 0 ]] && return 1
 
-    SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_dist]}"
+    SELECTED_export DISTRIBUTION=  # Used by external components or in dynamic contexts"${DISTRO_LIST[$selected_dist]}"
     log_info "Selected distribution: $(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1)"
     return 0
 }
@@ -3717,7 +3717,7 @@ export_configuration() {
 # Generated on $(date)
 
 # Distribution
-SELECTED_DISTRIBUTION="$SELECTED_DISTRIBUTION"
+SELECTED_export DISTRIBUTION=  # Used by external components or in dynamic contexts"$SELECTED_DISTRIBUTION"
 
 # VM Settings
 VM_NAME="$VM_NAME"
@@ -3921,7 +3921,7 @@ parse_arguments() {
                 ;;
             --distro)
                 shift
-                SELECTED_DISTRIBUTION="$1"
+                SELECTED_export DISTRIBUTION=  # Used by external components or in dynamic contexts"$1"
                 ;;
             --vm-name)
                 shift
@@ -4195,11 +4195,11 @@ parse_cli_args() {
                 exit 0
                 ;;
             --distribution)
-                DISTRIBUTION="$2"
+                export DISTRIBUTION=  # Used by external components or in dynamic contexts"$2"
                 shift 2
                 ;;
             --template-name)
-                TEMPLATE_NAME="$2"
+                export TEMPLATE_NAME=  # Used by external components or in dynamic contexts"$2"
                 shift 2
                 ;;
             --dry-run)
@@ -4215,12 +4215,12 @@ parse_cli_args() {
                 shift 2
                 ;;
             --docker-template)
-                DOCKER_TEMPLATE="$2"
+                export DOCKER_TEMPLATE=  # Used by external components or in dynamic contexts"$2"
                 DOCKER_INTEGRATION="true"
                 shift 2
                 ;;
             --k8s-template)
-                K8S_TEMPLATE="$2"
+                export K8S_TEMPLATE=  # Used by external components or in dynamic contexts"$2"
                 K8S_INTEGRATION="true"
                 shift 2
                 ;;

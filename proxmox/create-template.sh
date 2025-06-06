@@ -1774,7 +1774,8 @@ configure_storage_settings() {
 
 # Configure default storage pool
 configure_default_storage() {
-    local storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1 " " $2}')
+    local storage_list
+    storage_list=$(pvesm status | grep -E 'active|enabled' | awk '{print $1 " " $2}')
     local storage_options=()
 
     while IFS=' ' read -r storage_name storage_type; do
@@ -1813,7 +1814,8 @@ configure_disk_format() {
 
 # Configure backup storage
 configure_backup_storage() {
-    local backup_list=$(pvesm status | grep -E 'backup.*active' | awk '{print $1}')
+    local backup_list
+    backup_list=$(pvesm status | grep -E 'backup.*active' | awk '{print $1}')
     local backup_options=()
 
     for backup in $backup_list; do
@@ -1840,7 +1842,8 @@ configure_backup_storage() {
 
 # Configure ISO storage
 configure_iso_storage() {
-    local iso_list=$(pvesm status | grep -E 'iso.*active' | awk '{print $1}')
+    local iso_list
+    iso_list=$(pvesm status | grep -E 'iso.*active' | awk '{print $1}')
     local iso_options=()
 
     for iso in $iso_list; do
@@ -1868,7 +1871,8 @@ configure_iso_storage() {
 
 # Configure template storage
 configure_template_storage() {
-    local template_list=$(pvesm status | grep -E 'images.*active' | awk '{print $1}')
+    local template_list
+    template_list=$(pvesm status | grep -E 'images.*active' | awk '{print $1}')
     local template_options=()
 
     for template in $template_list; do
@@ -1967,9 +1971,10 @@ configure_ansible_automation() {
 
     # Ask if Ansible should be enabled
     local enable_ansible
-    export enable_ansible=$(whiptail --title "Ansible Integration" \
+    enable_ansible=$(whiptail --title "Ansible Integration" \
         --yesno "Enable Ansible post-deployment automation?" 8 70 \
         3>&1 1>&2 2>&3)
+    export enable_ansible
 
     if [[ $? -eq 0 ]]; then
         ANSIBLE_ENABLED="true"
@@ -2003,9 +2008,11 @@ configure_terraform_automation() {
 
     # Ask if Terraform should be enabled
     local enable_terraform
-    export enable_terraform=$(whiptail --title "Terraform Integration" \
+    whiptail --title "Terraform Integration" \
         --yesno "Enable Terraform integration for template deployment?" 8 70 \
-        3>&1 1>&2 2>&3)
+        3>&1 1>&2 2>&3
+    enable_terraform=$?
+    export enable_terraform
 
     if [[ $? -eq 0 ]]; then
         TERRAFORM_ENABLED="true"
@@ -3085,8 +3092,10 @@ configure_cloud_init() {
 
 # Install selected packages using virt-customize
 install_packages_virt_customize() {
-    local pkg_mgr="$1"
-    local vm_disk="$VM_STORAGE:vm-$VMID_DEFAULT-disk-0"
+    local pkg_mgr
+    pkg_mgr="$1"
+    local vm_disk
+    vm_disk="$VM_STORAGE:vm-$VMID_DEFAULT-disk-0"
 
     if [[ ${#SELECTED_PACKAGES[@]} -eq 0 ]]; then
         log_info "No packages selected, skipping package installation"
@@ -3145,7 +3154,8 @@ install_packages_virt_customize() {
     fi
 
     # Create a temporary script for package installation
-    local temp_script=$(mktemp)
+    local temp_script
+    temp_script=$(mktemp)
     cat > "$temp_script" << EOF
 #!/bin/bash
 set -e
@@ -3264,12 +3274,12 @@ create_template_main() {
     fi
 
     # Step 4: Install selected packages
-    if [[ ${#SELECTED_PACKAGES[@]} -gt 0 ]]; then
-        if ! install_packages_virt_customize; then
-            log_error "Failed to install packages"
-            return 1
+        if [[ ${#SELECTED_PACKAGES[@]} -gt 0 ]]; then
+            if ! install_packages_virt_customize "apt-get"; then
+                log_error "Failed to install packages"
+                return 1
+            fi
         fi
-    fi
 
     # Step 5: Apply Docker templates if selected
     if [[ ${#SELECTED_DOCKER_TEMPLATES[@]} -gt 0 ]]; then
@@ -3399,7 +3409,8 @@ provision_docker_templates() {
         }
 
         # Create any necessary directories defined in the compose file
-        local dirs=$(grep -oP '(?<=./)[^:]*(?=:)' "$template_host_path" | sort | uniq)
+        local dirs
+        dirs=$(grep -oP '(?<=./)[^:]*(?=:)' "$template_host_path" | sort | uniq)
         for dir in $dirs; do
             pct exec "$TEMP_LXC_ID" -- mkdir -p "$dir" || log_warn "Failed to create directory: $dir"
         done
@@ -3561,7 +3572,8 @@ provision_k8s_templates() {
 
     # Save cluster information
     if [[ "$K8S_SAVE_CLUSTER_INFO" == "true" ]]; then
-        local cluster_info_file="/tmp/k8s-cluster-info-$(date +%Y%m%d-%H%M%S).txt"
+        local cluster_info_file
+        cluster_info_file="/tmp/k8s-cluster-info-$(date +%Y%m%d-%H%M%S).txt"
         pct exec "$k8s_container_id" -- kubectl cluster-info > "$cluster_info_file" 2>/dev/null || true
         pct exec "$k8s_container_id" -- kubectl get nodes -o wide >> "$cluster_info_file" 2>/dev/null || true
         pct exec "$k8s_container_id" -- kubectl get all --all-namespaces >> "$cluster_info_file" 2>/dev/null || true
@@ -3660,10 +3672,13 @@ select_distribution() {
     # Build distribution list for selected category
     for dist in "${!DISTRO_LIST[@]}"; do
         local dist_info="${DISTRO_LIST[$dist]}"
-        local dist_name=$(echo "$dist_info" | cut -d'|' -f1)
-        local dist_desc=$(echo "$dist_info" | cut -d'|' -f8)
-        local dist_cat=$(echo "$dist_info" | cut -d'|' -f9 2>/dev/null || echo "")
-
+        local dist_name
+        dist_name=$(echo "$dist_info" | cut -d'|' -f1)
+        local dist_desc
+        dist_desc=$(echo "$dist_info" | cut -d'|' -f8)
+        local dist_cat
+        dist_cat=$(echo "$dist_info" | cut -d'|' -f9 2>/dev/null || echo "")
+    
         if [[ -z "$selected_category" || "$dist_cat" == "$selected_category" ]]; then
             dist_options+=("$dist" "$dist_name - $dist_desc")
         fi
@@ -4055,16 +4070,19 @@ select_docker_template_ui() {
     mapfile -t docker_list < <(list_docker_templates)
     local options=()
     for tmpl in "${docker_list[@]}"; do options+=("$tmpl" "$tmpl"); done
-    local sel=$(whiptail --title "Select Docker Template" --menu "Docker templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
+    local sel
+    sel=$(whiptail --title "Select Docker Template" --menu "Docker templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
     SELECTED_DOCKER_TEMPLATES=("$sel")
     DOCKER_INTEGRATION="true"
     return 0
 }
-
 select_k8s_template_ui() {
-    local k8s_list=($(list_k8s_templates)) options=()
+    local k8s_list=()
+    mapfile -t k8s_list < <(list_k8s_templates)
+    local options=()
     for tmpl in "${k8s_list[@]}"; do options+=("$tmpl" "$tmpl"); done
-    local sel=$(whiptail --title "Select K8s Template" --menu "Kubernetes templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
+    local sel
+    sel=$(whiptail --title "Select K8s Template" --menu "Kubernetes templates:" 20 70 10 "${options[@]}" 3>&1 1>&2 2>&3) || return 1
     SELECTED_K8S_TEMPLATES=("$sel")
     K8S_INTEGRATION="true"
     return 0

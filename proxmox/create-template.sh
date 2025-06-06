@@ -3693,7 +3693,7 @@ select_distribution() {
 
     [[ $? -ne 0 ]] && return 1
 
-    SELECTED_export DISTRIBUTION=  # Used by external components or in dynamic contexts"${DISTRO_LIST[$selected_dist]}"
+    export SELECTED_DISTRIBUTION="${DISTRO_LIST[$selected_dist]}"
     log_info "Selected distribution: $(echo "$SELECTED_DISTRIBUTION" | cut -d'|' -f1)"
     return 0
 }

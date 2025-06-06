@@ -7,6 +7,178 @@ Access the wiki by clicking this button:
 
 This repository contains the configuration files and scripts for setting up a comprehensive homelab environment. The infrastructure supports various applications and services including virtualization, container orchestration, monitoring, automation, and development tools.
 
+## Installation
+
+### Prerequisites
+
+- Proxmox VE 7.0 or later
+- Root access to Proxmox host
+- Minimum 4GB RAM
+- 20GB free disk space
+- Internet connectivity
+
+### Quick Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/binghzal/homelab.git
+   cd homelab
+   ```
+
+2. Make scripts executable:
+
+   ```bash
+   chmod +x proxmox/*.sh
+   ```
+
+3. Run as root:
+   ```bash
+   sudo ./proxmox/create-template.sh
+   ```
+
+## Usage
+
+### Basic Usage
+
+1. **Interactive Mode**:
+
+   ```bash
+   sudo ./proxmox/create-template.sh
+   ```
+
+2. **CLI Mode**:
+
+   ```bash
+   sudo ./proxmox/create-template.sh --distribution ubuntu-22.04 --template-name dev-template
+   ```
+
+3. **Batch Mode**:
+   ```bash
+   sudo ./proxmox/create-template.sh --batch --config examples/ubuntu-22.04-dev.conf
+   ```
+
+### Advanced Usage
+
+1. **Docker Template Creation**:
+
+   ```bash
+   sudo ./proxmox/create-template.sh --docker-template web-server
+   ```
+
+2. **Kubernetes Template Creation**:
+
+   ```bash
+   sudo ./proxmox/create-template.sh --k8s-template monitoring-stack
+   ```
+
+3. **Dry Run Mode**:
+   ```bash
+   sudo ./proxmox/create-template.sh --dry-run --distribution ubuntu-22.04
+   ```
+
+## Configuration
+
+### Template Configuration
+
+1. **Basic Settings**:
+
+   - Distribution selection
+   - Template name
+   - VM specifications (CPU, memory, disk)
+
+2. **Package Selection**:
+
+   - Development tools
+   - System utilities
+   - Infrastructure tools
+   - Monitoring tools
+
+3. **Network Configuration**:
+   - DHCP/Static IP
+   - VLAN support
+   - Bridge selection
+
+### Automation Configuration
+
+1. **Ansible Integration**:
+
+   - Inventory management
+   - Playbook execution
+   - Role assignment
+
+2. **Terraform Integration**:
+   - Resource definitions
+   - State management
+   - Provider configuration
+
+## Examples
+
+### Development Template
+
+```bash
+sudo ./proxmox/create-template.sh \
+  --distribution ubuntu-22.04 \
+  --template-name dev-template \
+  --packages "zsh,fzf,vscode-server,docker.io" \
+  --cores 2 --memory 4096 --disk-size 32
+```
+
+### Production Template
+
+```bash
+sudo ./proxmox/create-template.sh \
+  --distribution rocky-9 \
+  --template-name prod-template \
+  --packages "docker.io,ansible,terraform,prometheus-node-exporter" \
+  --cores 4 --memory 8192 --disk-size 64
+```
+
+### Monitoring Template
+
+```bash
+sudo ./proxmox/create-template.sh \
+  --distribution debian-12 \
+  --template-name monitoring-template \
+  --packages "prometheus-node-exporter,grafana,alertmanager" \
+  --cores 2 --memory 4096 --disk-size 32
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+### Development Guidelines
+
+- Follow shell script best practices
+- Add comprehensive error handling
+- Include detailed comments
+- Update documentation
+- Add tests for new features
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Security
+
+For security concerns, please see our [SECURITY.md](SECURITY.md) file.
+
+## Support
+
+- GitHub Issues: For bug reports and feature requests
+- Documentation: [GitBook Wiki](https://bizarreindustries.gitbook.io/homelab)
+- Community: Join our Discord server
+
+## Acknowledgments
+
+- Proxmox VE team for the excellent virtualization platform
+- All contributors who have helped improve this project
+- The open-source community for their invaluable tools and resources
+
 ## Proxmox Template Creator - Full Documentation
 
 > **For all advanced usage, supported distributions, package categories, CLI/batch/automation, Ansible & Terraform integration, and troubleshooting, see:**

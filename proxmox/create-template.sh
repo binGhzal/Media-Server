@@ -4087,3 +4087,157 @@ select_k8s_template_ui() {
     K8S_INTEGRATION="true"
     return 0
 }
+
+#===============================================================================
+# ERROR HANDLING AND CLEANUP
+#===============================================================================
+
+# Handle errors
+handle_error() {
+    local error_msg="$1"
+    local error_code="${2:-1}"
+
+    log_error "$error_msg"
+    cleanup_temp_resources
+    exit "$error_code"
+}
+
+# Cleanup temporary resources
+cleanup_temp_resources() {
+    log_info "Cleaning up temporary resources..."
+
+    # Clean up temporary files
+    if [ -d "$SCRIPT_DIR/temp" ]; then
+        rm -rf "$SCRIPT_DIR/temp"/*
+    fi
+
+    # Clean up temporary LXC containers
+    if [ -n "$TEMP_LXC_ID" ]; then
+        pct stop "$TEMP_LXC_ID" 2>/dev/null || true
+        pct destroy "$TEMP_LXC_ID" 2>/dev/null || true
+    fi
+
+    # Clean up temporary VMs
+    if [ -n "$TEMP_VM_ID" ]; then
+        qm stop "$TEMP_VM_ID" 2>/dev/null || true
+        qm destroy "$TEMP_VM_ID" 2>/dev/null || true
+    fi
+
+    log_success "Cleanup completed"
+}
+
+# Cleanup on exit
+cleanup_on_exit() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        log_error "Script exited with error code $exit_code"
+        cleanup_temp_resources
+    fi
+    exit $exit_code
+}
+
+# Cleanup on interrupt
+cleanup_on_interrupt() {
+    log_error "Script interrupted by user"
+    cleanup_temp_resources
+    exit 1
+}
+
+# Validate automation settings
+validate_automation_settings() {
+    local errors=()
+
+    # Validate Ansible settings
+    if [ "$USE_ANSIBLE" = "true" ]; then
+        if ! command -v ansible &> /dev/null; then
+            errors+=("Ansible is not installed")
+        fi
+        if [ ! -d "$ANSIBLE_DIR" ]; then
+            errors+=("Ansible directory not found: $ANSIBLE_DIR")
+        fi
+    fi
+
+    # Validate Terraform settings
+    if [ "$USE_TERRAFORM" = "true" ]; then
+        if ! command -v terraform &> /dev/null; then
+            errors+=("Terraform is not installed")
+        fi
+        if [ ! -d "$TERRAFORM_DIR" ]; then
+            errors+=("Terraform directory not found: $TERRAFORM_DIR")
+        fi
+    fi
+
+    # Return errors if any
+    if [ ${#errors[@]} -gt 0 ]; then
+        echo "${errors[*]}"
+        return 1
+    else
+        return 0
+    fi
+}
+
+#===============================================================================
+# COMMAND LINE ARGUMENT PARSING
+#===============================================================================
+
+# Parse command line arguments
+parse_cli_args() {
+    local POSITIONAL_ARGS=()
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help)
+                show_help
+                exit 0
+                ;;
+            --version)
+                echo "Proxmox Template Creator v$SCRIPT_VERSION"
+                exit 0
+                ;;
+            --distribution)
+                DISTRIBUTION="$2"
+                shift 2
+                ;;
+            --template-name)
+                TEMPLATE_NAME="$2"
+                shift 2
+                ;;
+            --dry-run)
+                DRY_RUN="true"
+                shift
+                ;;
+            --batch)
+                BATCH_MODE="true"
+                shift
+                ;;
+            --config)
+                CONFIG_FILE="$2"
+                shift 2
+                ;;
+            --docker-template)
+                DOCKER_TEMPLATE="$2"
+                DOCKER_INTEGRATION="true"
+                shift 2
+                ;;
+            --k8s-template)
+                K8S_TEMPLATE="$2"
+                K8S_INTEGRATION="true"
+                shift 2
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                log_warn "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                # Positional argument
+                POSITIONAL_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}

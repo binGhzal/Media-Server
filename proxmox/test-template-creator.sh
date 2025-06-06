@@ -8,7 +8,7 @@
 #
 # Author: Improved by GitHub Copilot
 # License: Same as create-template.sh
-# Version: 3.0
+# Version: 4.0
 #==============================================================================
 
 set -euo pipefail
@@ -56,12 +56,23 @@ TESTS=(
     "test_cli_flags:Check CLI argument flags"
     "test_docker_k8s_templates:Check Docker/K8s template integration"
     "test_config_files:Check example config files"
+    "test_error_handling:Check error handling and recovery"
+    "test_directory_structure:Check required directory structure"
+    "test_dependency_checks:Check dependency validation"
+    "test_validation_functions:Check input validation"
+    "test_cleanup_functions:Check cleanup procedures"
 )
 
 # Test implementations
 
 test_syntax() {
-    bash -n "$TARGET_SCRIPT" && print_msg pass "Script syntax is valid" || { print_msg fail "Script syntax errors found"; return 1; }
+    if bash -n "$TARGET_SCRIPT"; then
+        print_msg pass "Script syntax is valid"
+        return 0
+    else
+        print_msg fail "Script syntax errors found"
+        return 1
+    fi
 }
 
 test_structure() {
@@ -87,7 +98,8 @@ test_critical_functions() {
 
 test_sudo_removal() {
     local sudo_count
-    sudo_count=$(grep -c "sudo " "$TARGET_SCRIPT" || true)
+    # Exclude comments and variable names containing "sudo"
+    sudo_count=$(grep "sudo " "$TARGET_SCRIPT" | grep -v "# " | grep -v "SUDO" | wc -l)
     if (( sudo_count == 0 )); then
         print_msg pass "No sudo commands found - script designed for root execution"
     elif (( sudo_count < 5 )); then
@@ -106,7 +118,7 @@ test_logging() {
 }
 
 test_cli_flags() {
-    local flags=(--help --batch --docker-template --k8s-template --config)
+    local flags=(--help --batch --docker-template --k8s-template --config --dry-run --distribution --template-name)
     local missing=()
     for f in "${flags[@]}"; do
         grep -q "[[:space:]]$f" "$TARGET_SCRIPT" || missing+=("$f")
@@ -136,6 +148,71 @@ test_config_files() {
         print_msg pass "Example configuration files found"
     else
         print_msg fail "Missing example config files: ${missing[*]}"; return 1
+    fi
+}
+
+test_error_handling() {
+    local error_handlers=(cleanup_on_exit cleanup_on_interrupt handle_error)
+    local missing=()
+    for h in "${error_handlers[@]}"; do
+        grep -q "$h" "$TARGET_SCRIPT" || missing+=("$h")
+    done
+    if (( ${#missing[@]} == 0 )); then
+        print_msg pass "Error handling functions found"
+    else
+        print_msg fail "Missing error handlers: ${missing[*]}"; return 1
+    fi
+}
+
+test_directory_structure() {
+    local dirs=(logs configs temp terraform/templates ansible/inventory ansible/playbooks docker/templates kubernetes/templates)
+    local missing=()
+    for d in "${dirs[@]}"; do
+        [[ -d "$SCRIPT_DIR/$d" ]] || missing+=("$d")
+    done
+    if (( ${#missing[@]} == 0 )); then
+        print_msg pass "Required directory structure exists"
+    else
+        print_msg warn "Missing directories: ${missing[*]}"
+    fi
+}
+
+test_dependency_checks() {
+    local deps=(whiptail pvesm qm pct curl wget jq virt-customize guestfs-tools)
+    local missing=()
+    for d in "${deps[@]}"; do
+        grep -q "$d" "$TARGET_SCRIPT" || missing+=("$d")
+    done
+    if (( ${#missing[@]} == 0 )); then
+        print_msg pass "Dependency checks implemented"
+    else
+        print_msg fail "Missing dependency checks: ${missing[*]}"; return 1
+    fi
+}
+
+test_validation_functions() {
+    local validators=(validate_vm_settings validate_network_settings validate_storage_settings validate_automation_settings)
+    local missing=()
+    for v in "${validators[@]}"; do
+        grep -q "$v" "$TARGET_SCRIPT" || missing+=("$v")
+    done
+    if (( ${#missing[@]} == 0 )); then
+        print_msg pass "Input validation functions found"
+    else
+        print_msg fail "Missing validators: ${missing[*]}"; return 1
+    fi
+}
+
+test_cleanup_functions() {
+    local cleanup=(cleanup_on_exit cleanup_on_interrupt cleanup_temp_resources)
+    local missing=()
+    for c in "${cleanup[@]}"; do
+        grep -q "$c" "$TARGET_SCRIPT" || missing+=("$c")
+    done
+    if (( ${#missing[@]} == 0 )); then
+        print_msg pass "Cleanup functions found"
+    else
+        print_msg fail "Missing cleanup functions: ${missing[*]}"; return 1
     fi
 }
 

@@ -32,7 +32,7 @@ The Proxmox Template Creator is a modular system designed for streamlined creati
 
 The system consists of the following key components:
 
-```
+```ascii
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
 │                           Bootstrap Script                              │
@@ -94,7 +94,7 @@ The bootstrap process is designed to provide a seamless initial experience for u
 
 ### Bootstrap Flow
 
-```
+```ascii
 ┌────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │                │     │                 │     │                 │
 │  Single curl   ├────►│  Root user and  ├────►│  Dependency     │

@@ -22,10 +22,11 @@ The Proxmox Template Creator provides a comprehensive solution for creating and 
 Simply run this command to get started:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/username/homelab/main/scripts/bootstrap.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/binghzal/homelab/main/scripts/bootstrap.sh | sudo bash
 ```
 
 This single command handles everything:
+
 - Downloads and installs all dependencies
 - Clones the repository to the appropriate location
 - Sets up automatic updates
@@ -69,7 +70,7 @@ For detailed documentation:
 If you encounter issues or have questions:
 
 1. Check the [System Design](docs/SYSTEM_DESIGN.md) and [Progress Tracker](docs/PROGRESS_TRACKER.md)
-2. Review existing [GitHub Issues](../../issues)
+2. Review existing [GitHub Issues](https://github.com/binghzal/homelab/issues)
 3. Create a new issue with detailed information
 
 ## License

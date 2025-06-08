@@ -3,18 +3,18 @@
   hosts: all
   become: yes
   gather_facts: yes
-  
+
   vars:
     ssh_port: 22
     allowed_users: []
-    
+
   tasks:
     - name: Update all packages
       apt:
         upgrade: dist
         update_cache: yes
         cache_valid_time: 3600
-        
+
     - name: Install security packages
       apt:
         name:
@@ -23,7 +23,7 @@
           - unattended-upgrades
           - apt-listchanges
         state: present
-        
+
     - name: Configure automatic security updates
       copy:
         dest: /etc/apt/apt.conf.d/50unattended-upgrades
@@ -37,32 +37,32 @@
           Unattended-Upgrade::MinimalSteps "true";
           Unattended-Upgrade::Remove-Unused-Dependencies "true";
           Unattended-Upgrade::Automatic-Reboot "false";
-          
+
     - name: Enable automatic updates
       copy:
         dest: /etc/apt/apt.conf.d/20auto-upgrades
         content: |
           APT::Periodic::Update-Package-Lists "1";
           APT::Periodic::Unattended-Upgrade "1";
-          
+
     - name: Configure UFW default policies
       ufw:
         direction: "{{ item.direction }}"
         policy: "{{ item.policy }}"
       loop:
-        - { direction: 'incoming', policy: 'deny' }
-        - { direction: 'outgoing', policy: 'allow' }
-        
+        - { direction: "incoming", policy: "deny" }
+        - { direction: "outgoing", policy: "allow" }
+
     - name: Allow SSH through UFW
       ufw:
         rule: allow
         port: "{{ ssh_port }}"
         proto: tcp
-        
+
     - name: Enable UFW
       ufw:
         state: enabled
-        
+
     - name: Configure fail2ban for SSH
       copy:
         dest: /etc/fail2ban/jail.local
@@ -71,44 +71,44 @@
           bantime = 3600
           findtime = 600
           maxretry = 3
-          
+
           [sshd]
           enabled = true
           port = {{ ssh_port }}
           filter = sshd
           logpath = /var/log/auth.log
           maxretry = 3
-          
+
     - name: Start and enable fail2ban
       systemd:
         name: fail2ban
         state: started
         enabled: yes
-        
+
     - name: Disable root login via SSH
       lineinfile:
         path: /etc/ssh/sshd_config
-        regexp: '^#?PermitRootLogin'
-        line: 'PermitRootLogin no'
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
         backup: yes
       notify: restart ssh
-      
+
     - name: Disable password authentication
       lineinfile:
         path: /etc/ssh/sshd_config
-        regexp: '^#?PasswordAuthentication'
-        line: 'PasswordAuthentication no'
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
         backup: yes
       notify: restart ssh
-      
+
     - name: Set SSH protocol version
       lineinfile:
         path: /etc/ssh/sshd_config
-        regexp: '^#?Protocol'
-        line: 'Protocol 2'
+        regexp: "^#?Protocol"
+        line: "Protocol 2"
         backup: yes
       notify: restart ssh
-      
+
   handlers:
     - name: restart ssh
       systemd:

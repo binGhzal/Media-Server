@@ -54,6 +54,7 @@ The project follows a modular implementation strategy with each component develo
 | Template logging                            | Not started  | Low      | Log template creation and management                                                    |
 | persistant cloudinit configuration          | Not started  | Medium   | Persistent cloud-init configuration saved so it can be reused across multiple templates |
 | Template versioning                         | Not started  | Medium   | Version control for templates                                                           |
+| custom template id generation               | Not started  | Medium   | Generate unique IDs for templates with the ability to override them if needed           |
 
 ### 3. Main Controller
 

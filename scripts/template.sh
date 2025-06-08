@@ -96,6 +96,57 @@ supports_cloudinit() {
     return 1
 }
 
+# Function to validate template configuration
+validate_template_config() {
+    local errors=()
+    
+    # Validate template name
+    if [[ ! "$template_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        errors+=("Template name contains invalid characters. Use only letters, numbers, hyphens, and underscores.")
+    fi
+    
+    # Validate CPU cores
+    if ! [[ "$cpu" =~ ^[0-9]+$ ]] || [ "$cpu" -lt 1 ] || [ "$cpu" -gt 32 ]; then
+        errors+=("CPU cores must be a number between 1 and 32.")
+    fi
+    
+    # Validate RAM
+    if ! [[ "$ram" =~ ^[0-9]+$ ]] || [ "$ram" -lt 512 ] || [ "$ram" -gt 131072 ]; then
+        errors+=("RAM must be a number between 512 MB and 128 GB.")
+    fi
+    
+    # Validate storage
+    if ! [[ "$storage" =~ ^[0-9]+$ ]] || [ "$storage" -lt 8 ] || [ "$storage" -gt 2048 ]; then
+        errors+=("Storage must be a number between 8 GB and 2048 GB.")
+    fi
+    
+    # Validate cloud-init configuration
+    if [ "$use_cloudinit" = "yes" ]; then
+        if [ -z "$ci_user" ]; then
+            errors+=("Cloud-init user cannot be empty.")
+        fi
+        
+        # Validate static IP configuration if provided
+        if [ "$ci_network" != "dhcp" ] && [[ "$ci_network" =~ ip= ]]; then
+            if ! echo "$ci_network" | grep -q "gw="; then
+                errors+=("Static IP configuration requires a gateway.")
+            fi
+        fi
+    fi
+    
+    # Display errors if any
+    if [ ${#errors[@]} -gt 0 ]; then
+        error_message="Configuration validation failed:\n\n"
+        for error in "${errors[@]}"; do
+            error_message+="• $error\n"
+        done
+        whiptail --title "Validation Errors" --msgbox "$error_message" 20 70
+        return 1
+    fi
+    
+    return 0
+}
+
 # Function to check required tools
 check_dependencies() {
     local deps=(curl qemu-img whiptail jq)
@@ -236,6 +287,15 @@ if supports_cloudinit "$distro"; then
         ci_sshkey_result=$?
         if [ $ci_sshkey_result -ne 0 ]; then exit 0; fi
         
+        # Validate SSH key format
+        if [ -n "$ci_sshkey" ]; then
+            if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ' >/dev/null; then
+                if ! whiptail --title "Invalid SSH Key" --yesno "The SSH key format appears invalid. Continue anyway?" 10 60; then
+                    exit 0
+                fi
+            fi
+        fi
+        
         ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
             "dhcp" "Automatic IP configuration (DHCP)" \
             "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
@@ -262,15 +322,78 @@ else
     whiptail --title "Notice" --msgbox "Cloud-init is not supported for $distro distribution." 10 60
 fi
 
-# --- Step 6: Tagging/Categorization ---
+# --- Step 6: Package Pre-installation (Cloud-init only) ---
+install_packages=""
+if [ "$use_cloudinit" = "yes" ]; then
+    if whiptail --title "Package Installation" --yesno "Do you want to pre-install packages via cloud-init?" 10 60; then
+        # Package categories
+        PACKAGE_CATEGORIES=(
+            "essential" "Essential tools (curl, wget, vim, htop)" OFF
+            "docker" "Docker and Docker Compose" OFF
+            "development" "Development tools (git, build-essential)" OFF
+            "monitoring" "Monitoring agents (node-exporter)" OFF
+            "security" "Security tools (fail2ban, ufw)" OFF
+            "custom" "Custom package list" OFF
+        )
+        
+        selected_packages=$(whiptail --title "Select Package Categories" --checklist "Choose packages to install:" 20 70 6 "${PACKAGE_CATEGORIES[@]}" 3>&1 1>&2 2>&3)
+        if [ $? -eq 0 ]; then
+            # Build package list based on selections
+            packages=()
+            for category in $selected_packages; do
+                category=$(echo "$category" | tr -d '"')
+                case "$category" in
+                    essential)
+                        packages+=(curl wget vim htop tree unzip)
+                        ;;
+                    docker)
+                        packages+=(docker.io docker-compose)
+                        ;;
+                    development)
+                        packages+=(git build-essential)
+                        ;;
+                    monitoring)
+                        packages+=(prometheus-node-exporter)
+                        ;;
+                    security)
+                        packages+=(fail2ban ufw)
+                        ;;
+                    custom)
+                        custom_packages=$(whiptail --title "Custom Packages" --inputbox "Enter package names (space-separated):" 10 60 "" 3>&1 1>&2 2>&3)
+                        if [ -n "$custom_packages" ]; then
+                            read -ra custom_array <<< "$custom_packages"
+                            packages+=("${custom_array[@]}")
+                        fi
+                        ;;
+                esac
+            done
+            
+            if [ ${#packages[@]} -gt 0 ]; then
+                install_packages=$(IFS=' '; echo "${packages[*]}")
+                log "INFO" "Packages to install: $install_packages"
+            fi
+        fi
+    fi
+fi
+
+# --- Step 7: Tagging/Categorization ---
 tags=$(whiptail --title "Tags" --inputbox "Enter tags (comma-separated):" 10 60 "" 3>&1 1>&2 2>&3)
 tags_result=$?
 if [ $tags_result -ne 0 ]; then exit 0; fi
 
-# --- Step 7: Confirm and Create ---
+# --- Step 8: Validate Configuration ---
+if ! validate_template_config; then
+    log "ERROR" "Template configuration validation failed"
+    exit 1
+fi
+
+# --- Step 9: Confirm and Create ---
 summary="Template: $template_name\nDistro: $distro $version\nCPU: $cpu\nRAM: $ram MB\nDisk: $storage GB\nCloud-Init: $use_cloudinit\nTags: $tags"
 if [ "$use_cloudinit" = "yes" ]; then
     summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}...\nNetwork: $ci_network"
+    if [ -n "$install_packages" ]; then
+        summary+="\nPackages: $install_packages"
+    fi
 fi
 
 if ! whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70; then
@@ -375,11 +498,10 @@ if [ "$use_cloudinit" = "yes" ]; then
     
     # Only set SSH key if provided
     if [ -n "$ci_sshkey" ]; then
-        # Fix for SSH key configuration - write key to a temporary file first
-        SSH_KEY_FILE=$(mktemp)
-        echo "$ci_sshkey" > "$SSH_KEY_FILE"
-        qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
-        rm -f "$SSH_KEY_FILE"
+        # Fix for SSH key configuration - use direct parameter instead of file
+        # Escape any special characters in the SSH key
+        escaped_key=$(printf '%s\n' "$ci_sshkey" | sed 's/[[\.*^$()+?{|]/\\&/g')
+        qm set "$vmid" --sshkey "$escaped_key"
     fi
     
     # Set network configuration
@@ -387,6 +509,62 @@ if [ "$use_cloudinit" = "yes" ]; then
         qm set "$vmid" --ipconfig0 "ip=dhcp"
     else
         qm set "$vmid" --ipconfig0 "$ci_network"
+    fi
+    
+    # Configure package installation via cloud-init
+    if [ -n "$install_packages" ]; then
+        log "INFO" "Configuring package installation: $install_packages"
+        # Create cloud-init user data for package installation
+        CLOUD_INIT_FILE=$(mktemp)
+        cat > "$CLOUD_INIT_FILE" << EOF
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+EOF
+        # Add each package to the cloud-init config
+        for package in $install_packages; do
+            echo "  - $package" >> "$CLOUD_INIT_FILE"
+        done
+        
+        # Add QEMU guest agent installation
+        echo "  - qemu-guest-agent" >> "$CLOUD_INIT_FILE"
+        
+        # Add runcmd to start qemu-guest-agent
+        cat >> "$CLOUD_INIT_FILE" << EOF
+runcmd:
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+EOF
+        
+        # Set the cloud-init configuration
+        qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
+        
+        # Copy the file to Proxmox snippets directory (if it exists)
+        if [ -d "/var/lib/vz/snippets" ]; then
+            cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
+        fi
+        
+        rm -f "$CLOUD_INIT_FILE"
+    else
+        # Just install QEMU guest agent
+        CLOUD_INIT_FILE=$(mktemp)
+        cat > "$CLOUD_INIT_FILE" << EOF
+#cloud-config
+package_update: true
+packages:
+  - qemu-guest-agent
+runcmd:
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+EOF
+        qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
+        
+        if [ -d "/var/lib/vz/snippets" ]; then
+            cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
+        fi
+        
+        rm -f "$CLOUD_INIT_FILE"
     fi
 fi
 

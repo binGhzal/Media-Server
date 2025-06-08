@@ -162,6 +162,89 @@ check_kubernetes() {
     fi
 }
 
+# Function to install k3s (lightweight Kubernetes)
+install_k3s() {
+    local node_type="$1"  # "server" or "agent"
+    local server_ip="$2"  # Only required for agent nodes
+    local node_token="$3" # Only required for agent nodes
+    
+    log "INFO" "Installing k3s as $node_type..."
+    
+    # Download and install k3s
+    if [ "$node_type" = "server" ]; then
+        # Install k3s server (master)
+        curl -sfL https://get.k3s.io | sh -
+        
+        # Get the node token for other nodes to join
+        local token
+        token=$(cat /var/lib/rancher/k3s/server/node-token)
+        
+        # Set up kubectl for the current user
+        mkdir -p "$HOME/.kube"
+        cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
+        chown -R "$(id -u):$(id -g)" "$HOME/.kube"
+        
+        # Also set up kubectl for the sudo user if applicable
+        if [ "$SUDO_USER" ]; then
+            sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+            mkdir -p "$sudo_home/.kube"
+            cp /etc/rancher/k3s/k3s.yaml "$sudo_home/.kube/config"
+            sed -i "s/127.0.0.1/$(hostname -I | awk '{print $1}')/g" "$sudo_home/.kube/config"
+            chown -R "$SUDO_USER:$(id -gn "$SUDO_USER")" "$sudo_home/.kube"
+        fi
+        
+        log "INFO" "k3s server installed successfully"
+        log "INFO" "Node token: $token"
+        log "INFO" "Server IP: $(hostname -I | awk '{print $1}')"
+        whiptail --title "k3s Server Info" --msgbox "k3s server installed successfully!\n\nServer IP: $(hostname -I | awk '{print $1}')\nNode Token: $token\n\nSave this information to join other nodes." 15 70
+        
+    elif [ "$node_type" = "agent" ]; then
+        # Install k3s agent (worker)
+        if [ -z "$server_ip" ] || [ -z "$node_token" ]; then
+            log "ERROR" "Server IP and node token are required for agent installation"
+            return 1
+        fi
+        
+        curl -sfL https://get.k3s.io | K3S_URL="https://$server_ip:6443" K3S_TOKEN="$node_token" sh -
+        
+        log "INFO" "k3s agent installed successfully and joined cluster at $server_ip"
+    else
+        log "ERROR" "Invalid node type: $node_type. Must be 'server' or 'agent'"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Function to uninstall k3s
+uninstall_k3s() {
+    log "INFO" "Uninstalling k3s..."
+    
+    if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
+        /usr/local/bin/k3s-uninstall.sh
+    elif [ -f /usr/local/bin/k3s-agent-uninstall.sh ]; then
+        /usr/local/bin/k3s-agent-uninstall.sh
+    else
+        log "WARN" "k3s uninstall script not found"
+    fi
+    
+    log "INFO" "k3s uninstalled"
+}
+
+# Function to check k3s status
+check_k3s() {
+    if systemctl is-active --quiet k3s; then
+        log "INFO" "k3s server is running"
+        return 0
+    elif systemctl is-active --quiet k3s-agent; then
+        log "INFO" "k3s agent is running"
+        return 0
+    else
+        log "INFO" "k3s is not running"
+        return 1
+    fi
+}
+
 # Function to install Kubernetes tools
 install_kubernetes_tools() {
     log "INFO" "Installing Kubernetes tools (kubectl, kubeadm, kubelet)..."

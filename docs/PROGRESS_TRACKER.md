@@ -10,18 +10,18 @@ The project follows a modular implementation strategy with each component develo
 
 ### 1. Bootstrap System
 
-| Feature                  | Status      | Priority | Notes                                           |
-| ------------------------ | ----------- | -------- | ----------------------------------------------- |
-| Single command install   | Complete    | High     | Curl-based installation script                  |
-| Dependency management    | Complete    | High     | Auto-detection and installation of dependencies |
-| Repository handling      | Complete    | High     | Clone or update from Git repository             |
-| Root user verification   | Complete    | High     | Check for required privileges                   |
-| OS compatibility check   | Complete    | Medium   | Verify running on compatible Linux distro       |
-| Proxmox detection        | Complete    | High     | Detect and verify Proxmox environment           |
-| Configuration setup      | Complete    | High     | Initial configuration directory and files       |
-| Auto-update mechanism    | Not started | Medium   | Regular checks for updates                      |
-| Error handling framework | In progress | High     | Consistent error management across modules      |
-| Main controller & skeleton modules | In progress | High | Main controller and empty module scripts created |
+| Feature                            | Status      | Priority | Notes                                            |
+| ---------------------------------- | ----------- | -------- | ------------------------------------------------ |
+| Single command install             | Complete    | High     | Curl-based installation script                   |
+| Dependency management              | Complete    | High     | Auto-detection and installation of dependencies  |
+| Repository handling                | Complete    | High     | Clone or update from Git repository              |
+| Root user verification             | Complete    | High     | Check for required privileges                    |
+| OS compatibility check             | Complete    | Medium   | Verify running on compatible Linux distro        |
+| Proxmox detection                  | Complete    | High     | Detect and verify Proxmox environment            |
+| Configuration setup                | Complete    | High     | Initial configuration directory and files        |
+| Auto-update mechanism              | Not started | Medium   | Regular checks for updates                       |
+| Error handling framework           | In progress | High     | Consistent error management across modules       |
+| Main controller & skeleton modules | In progress | High     | Main controller and empty module scripts created |
 
 ### 2. Template Creation
 

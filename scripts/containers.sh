@@ -453,6 +453,304 @@ docker_deployment() {
     return 0
 }
 
+# Main function for k3s deployment
+k3s_deployment() {
+    # Check if k3s is already installed
+    if ! check_k3s; then
+        # Ask to install k3s
+        if (whiptail --title "k3s Installation" --yesno "k3s is not installed. Would you like to install it now?" 10 60 3>&1 1>&2 2>&3); then
+            local node_type
+            node_type=$(whiptail --title "k3s Node Type" --menu "Select node type:" 15 60 2 \
+                "server" "k3s Server (Master Node)" \
+                "agent" "k3s Agent (Worker Node)" 3>&1 1>&2 2>&3)
+            
+            case $node_type in
+                server)
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would install k3s server"
+                    else
+                        install_k3s "server"
+                    fi
+                    ;;
+                agent)
+                    local server_ip
+                    server_ip=$(whiptail --title "Server IP" --inputbox "Enter k3s server IP address:" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$server_ip" ]; then
+                        log "ERROR" "Server IP is required for agent installation"
+                        return 1
+                    fi
+                    
+                    local node_token
+                    node_token=$(whiptail --title "Node Token" --inputbox "Enter k3s node token:" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$node_token" ]; then
+                        log "ERROR" "Node token is required for agent installation"
+                        return 1
+                    fi
+                    
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would install k3s agent to join $server_ip"
+                    else
+                        install_k3s "agent" "$server_ip" "$node_token"
+                    fi
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+        else
+            log "INFO" "k3s installation skipped."
+            return 1
+        fi
+    fi
+    
+    # k3s management options
+    local k3s_option
+    k3s_option=$(whiptail --title "k3s Management" --menu "Choose an option:" 15 60 5 \
+        "1" "Check cluster status" \
+        "2" "Deploy an application" \
+        "3" "Get node token (for adding workers)" \
+        "4" "Uninstall k3s" \
+        "5" "View cluster info" 3>&1 1>&2 2>&3)
+    
+    case $k3s_option in
+        1)
+            # Check cluster status
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would check k3s cluster status"
+            else
+                kubectl get nodes
+                kubectl get pods --all-namespaces
+            fi
+            ;;
+        2)
+            # Deploy an application
+            local app_option
+            app_option=$(whiptail --title "Application Deployment" --menu "Choose an application to deploy:" 15 60 4 \
+                "1" "Nginx web server" \
+                "2" "WordPress with MySQL" \
+                "3" "Custom YAML file" \
+                "4" "Helm chart" 3>&1 1>&2 2>&3)
+            
+            case $app_option in
+                1)
+                    # Deploy Nginx
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would deploy Nginx"
+                    else
+                        kubectl create deployment nginx --image=nginx
+                        kubectl expose deployment nginx --port=80 --type=LoadBalancer
+                        log "INFO" "Nginx deployed successfully"
+                    fi
+                    ;;
+                2)
+                    # Deploy WordPress with MySQL
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would deploy WordPress with MySQL"
+                    else
+                        # Create namespace
+                        kubectl create namespace wordpress
+                        
+                        # Deploy MySQL
+                        kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: wordpress
+type: Opaque
+data:
+  password: $(echo -n 'wordpress123' | base64)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        - name: MYSQL_DATABASE
+          value: wordpress
+        - name: MYSQL_USER
+          value: wordpress
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        ports:
+        - containerPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: wordpress
+spec:
+  selector:
+    app: mysql
+  ports:
+  - port: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:6.0
+        env:
+        - name: WORDPRESS_DB_HOST
+          value: mysql
+        - name: WORDPRESS_DB_NAME
+          value: wordpress
+        - name: WORDPRESS_DB_USER
+          value: wordpress
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  namespace: wordpress
+spec:
+  selector:
+    app: wordpress
+  ports:
+  - port: 80
+  type: LoadBalancer
+EOF
+                        log "INFO" "WordPress with MySQL deployed successfully in namespace 'wordpress'"
+                    fi
+                    ;;
+                3)
+                    # Deploy from YAML file
+                    local yaml_path
+                    yaml_path=$(whiptail --title "YAML File" --inputbox "Enter path to YAML file:" 10 60 "./deployment.yaml" 3>&1 1>&2 2>&3)
+                    if [ -z "$yaml_path" ] || [ ! -f "$yaml_path" ]; then
+                        log "ERROR" "Invalid YAML file path: $yaml_path"
+                        return 1
+                    fi
+                    
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would apply YAML file $yaml_path"
+                    else
+                        kubectl apply -f "$yaml_path"
+                        log "INFO" "Application deployed successfully from $yaml_path"
+                    fi
+                    ;;
+                4)
+                    # Install Helm and deploy chart
+                    if ! command -v helm >/dev/null 2>&1; then
+                        if (whiptail --title "Helm Installation" --yesno "Helm is not installed. Install it now?" 10 60 3>&1 1>&2 2>&3); then
+                            if [ -n "$TEST_MODE" ]; then
+                                log "INFO" "Test mode: Would install Helm"
+                            else
+                                curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                                log "INFO" "Helm installed successfully"
+                            fi
+                        else
+                            return 1
+                        fi
+                    fi
+                    
+                    local chart_name
+                    chart_name=$(whiptail --title "Helm Chart" --inputbox "Enter Helm chart name (e.g., bitnami/nginx):" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$chart_name" ]; then
+                        return 1
+                    fi
+                    
+                    local release_name
+                    release_name=$(whiptail --title "Release Name" --inputbox "Enter release name:" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$release_name" ]; then
+                        return 1
+                    fi
+                    
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would deploy Helm chart $chart_name as release $release_name"
+                    else
+                        helm repo add bitnami https://charts.bitnami.com/bitnami
+                        helm repo update
+                        helm install "$release_name" "$chart_name"
+                        log "INFO" "Helm chart $chart_name deployed as release $release_name"
+                    fi
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+            ;;
+        3)
+            # Get node token
+            if [ -f /var/lib/rancher/k3s/server/node-token ]; then
+                local token
+                token=$(cat /var/lib/rancher/k3s/server/node-token)
+                local server_ip
+                server_ip=$(hostname -I | awk '{print $1}')
+                whiptail --title "k3s Node Token" --msgbox "Server IP: $server_ip\nNode Token: $token\n\nTo join a worker node, run:\ncurl -sfL https://get.k3s.io | K3S_URL=https://$server_ip:6443 K3S_TOKEN=$token sh -" 12 80
+            else
+                whiptail --title "Error" --msgbox "Node token not found. This may not be a k3s server node." 10 60
+            fi
+            ;;
+        4)
+            # Uninstall k3s
+            if (whiptail --title "Uninstall k3s" --yesno "Are you sure you want to uninstall k3s?" 10 60 3>&1 1>&2 2>&3); then
+                if [ -n "$TEST_MODE" ]; then
+                    log "INFO" "Test mode: Would uninstall k3s"
+                else
+                    uninstall_k3s
+                fi
+            fi
+            ;;
+        5)
+            # View cluster info
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would show cluster info"
+            else
+                kubectl cluster-info
+                kubectl get nodes -o wide
+                kubectl get pods --all-namespaces
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    
+    return 0
+}
+
 # Main function for Kubernetes deployment
 kubernetes_deployment() {
     # Check if Kubernetes is already installed
@@ -571,10 +869,11 @@ kubernetes_deployment() {
 # Main menu for the containers module
 main_menu() {
     local option
-    option=$(whiptail --title "Container Workloads" --menu "Choose a container platform:" 15 60 3 \
+    option=$(whiptail --title "Container Workloads" --menu "Choose a container platform:" 15 60 4 \
         "1" "Docker - Container Engine" \
         "2" "Kubernetes - Container Orchestration" \
-        "3" "Help & Documentation" 3>&1 1>&2 2>&3)
+        "3" "k3s - Lightweight Kubernetes" \
+        "4" "Help & Documentation" 3>&1 1>&2 2>&3)
     
     case $option in
         1)
@@ -584,7 +883,10 @@ main_menu() {
             kubernetes_deployment
             ;;
         3)
-            whiptail --title "Container Workloads Help" --msgbox "Container Workloads Module v${VERSION}\n\nThis module helps you deploy and manage Docker containers and Kubernetes clusters.\n\n- Docker: Deploy single containers or multi-container applications with Docker Compose\n- Kubernetes: Set up new clusters, join existing clusters, and deploy applications\n\nFor more information, see the documentation at:\nhttps://github.com/binghzal/homelab/tree/main/docs" 16 70 3>&1 1>&2 2>&3
+            k3s_deployment
+            ;;
+        4)
+            whiptail --title "Container Workloads Help" --msgbox "Container Workloads Module v${VERSION}\n\nThis module helps you deploy and manage Docker containers and Kubernetes clusters.\n\n- Docker: Deploy single containers or multi-container applications with Docker Compose\n- Kubernetes: Set up new clusters, join existing clusters, and deploy applications\n- k3s: Lightweight Kubernetes distribution for edge computing\n\nFor more information, see the documentation at:\nhttps://github.com/binghzal/homelab/tree/main/docs" 18 70 3>&1 1>&2 2>&3
             main_menu
             ;;
         *)

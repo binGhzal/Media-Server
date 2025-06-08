@@ -558,6 +558,119 @@ EOF
     rm -f "$haproxy_config"
 }
 
+# Function to show container monitoring and health status
+show_container_monitoring() {
+    log "INFO" "Displaying container monitoring and health status..."
+    
+    # Check if Docker is running
+    if ! docker info > /dev/null 2>&1; then
+        whiptail --title "Error" --msgbox "Docker is not running or not accessible." 8 60
+        return 1
+    fi
+    
+    # Get list of containers
+    local containers
+    containers=$(docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}" 2>/dev/null)
+    
+    if [ -z "$containers" ] || [ "$(echo "$containers" | wc -l)" -eq 1 ]; then
+        whiptail --title "Container Monitoring" --msgbox "No containers found on this system." 8 60
+        return 0
+    fi
+    
+    # Show monitoring options
+    local monitoring_option
+    monitoring_option=$(whiptail --title "Container Monitoring" --menu "Choose monitoring option:" 15 80 4 \
+        "1" "View all container status" \
+        "2" "Monitor specific container" \
+        "3" "View container resource usage" \
+        "4" "View container health checks" 3>&1 1>&2 2>&3)
+    
+    case $monitoring_option in
+        1)
+            # Show all container status
+            local status_info
+            status_info=$(docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.CPU}}\t{{.MemUsage}}\t{{.NetIO}}" 2>/dev/null | head -20)
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would display container status information"
+            else
+                whiptail --title "Container Status" --msgbox "$status_info" 20 120 --scrolltext
+            fi
+            ;;
+        2)
+            # Monitor specific container
+            local container_list
+            container_list=$(docker ps -a --format "{{.Names}}" | sort)
+            
+            if [ -z "$container_list" ]; then
+                whiptail --title "Error" --msgbox "No containers found." 8 60
+                return 1
+            fi
+            
+            local menu_items=()
+            local counter=1
+            while IFS= read -r container; do
+                menu_items+=("$counter" "$container")
+                ((counter++))
+            done <<< "$container_list"
+            
+            local selected_num
+            selected_num=$(whiptail --title "Select Container" --menu "Choose container to monitor:" 15 60 8 "${menu_items[@]}" 3>&1 1>&2 2>&3)
+            
+            if [ -n "$selected_num" ]; then
+                local selected_container
+                selected_container=$(echo "$container_list" | sed -n "${selected_num}p")
+                
+                if [ -n "$TEST_MODE" ]; then
+                    log "INFO" "Test mode: Would monitor container $selected_container"
+                else
+                    # Show detailed container information
+                    local container_info
+                    container_info=$(docker inspect "$selected_container" --format "
+Container: {{.Name}}
+Status: {{.State.Status}}
+Started: {{.State.StartedAt}}
+Image: {{.Config.Image}}
+Ports: {{range .NetworkSettings.Ports}}{{.}}{{end}}
+CPU Usage: {{.HostConfig.CpuShares}}
+Memory Limit: {{.HostConfig.Memory}}
+RestartPolicy: {{.HostConfig.RestartPolicy.Name}}
+Health: {{if .State.Health}}{{.State.Health.Status}}{{else}}No health check{{end}}")
+                    
+                    whiptail --title "Container Details: $selected_container" --msgbox "$container_info" 20 80 --scrolltext
+                fi
+            fi
+            ;;
+        3)
+            # View resource usage
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would display container resource usage"
+            else
+                local stats_info
+                stats_info=$(docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}")
+                whiptail --title "Container Resource Usage" --msgbox "$stats_info" 20 120 --scrolltext
+            fi
+            ;;
+        4)
+            # View health checks
+            local health_info
+            health_info=$(docker ps --filter "health=healthy" --filter "health=unhealthy" --filter "health=starting" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null)
+            
+            if [ -z "$health_info" ] || [ "$(echo "$health_info" | wc -l)" -eq 1 ]; then
+                whiptail --title "Health Checks" --msgbox "No containers with health checks found." 8 60
+            else
+                if [ -n "$TEST_MODE" ]; then
+                    log "INFO" "Test mode: Would display container health check information"
+                else
+                    whiptail --title "Container Health Status" --msgbox "$health_info" 15 80 --scrolltext
+                fi
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # Main function for Docker deployment
 docker_deployment() {
     # Check if Docker is already installed
@@ -647,12 +760,13 @@ docker_deployment() {
         4)
             # Container management
             local manage_option
-            manage_option=$(whiptail --title "Container Management" --menu "Choose an option:" 15 60 5 \
+            manage_option=$(whiptail --title "Container Management" --menu "Choose an option:" 15 60 6 \
                 "1" "List running containers" \
                 "2" "Stop a container" \
                 "3" "Start a container" \
                 "4" "Remove a container" \
-                "5" "View container logs" 3>&1 1>&2 2>&3)
+                "5" "View container logs" \
+                "6" "Monitor container health" 3>&1 1>&2 2>&3)
             
             case $manage_option in
                 1)
@@ -687,7 +801,98 @@ docker_deployment() {
                         fi
                     fi
                     ;;
-                # Other management options would go here
+                3)
+                    # Start a container
+                    local stopped_containers
+                    stopped_containers=$(docker ps -a --filter "status=exited" --format "{{.ID}}|{{.Names}}|{{.Image}}" | tr '\n' ' ')
+                    
+                    if [ -z "$stopped_containers" ]; then
+                        whiptail --title "No Stopped Containers" --msgbox "No stopped containers found." 10 60 3>&1 1>&2 2>&3
+                        return 1
+                    fi
+                    
+                    local container_menu=()
+                    for container in $stopped_containers; do
+                        IFS='|' read -r id name image <<< "$container"
+                        container_menu+=("$id" "$name ($image)")
+                    done
+                    
+                    local selected
+                    selected=$(whiptail --title "Start Container" --menu "Select a container to start:" 15 60 5 "${container_menu[@]}" 3>&1 1>&2 2>&3)
+                    
+                    if [ -n "$selected" ]; then
+                        if [ -n "$TEST_MODE" ]; then
+                            log "INFO" "Test mode: Would start container $selected"
+                        else
+                            docker start "$selected"
+                            log "INFO" "Container $selected started."
+                        fi
+                    fi
+                    ;;
+                4)
+                    # Remove a container
+                    local all_containers
+                    all_containers=$(docker ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}" | tr '\n' ' ')
+                    
+                    if [ -z "$all_containers" ]; then
+                        whiptail --title "No Containers" --msgbox "No containers found." 10 60 3>&1 1>&2 2>&3
+                        return 1
+                    fi
+                    
+                    local container_menu=()
+                    for container in $all_containers; do
+                        IFS='|' read -r id name image status <<< "$container"
+                        container_menu+=("$id" "$name ($image) - $status")
+                    done
+                    
+                    local selected
+                    selected=$(whiptail --title "Remove Container" --menu "Select a container to remove:" 15 60 5 "${container_menu[@]}" 3>&1 1>&2 2>&3)
+                    
+                    if [ -n "$selected" ]; then
+                        if whiptail --title "Confirm Remove" --yesno "Are you sure you want to remove container $selected?\n\nThis action cannot be undone." 10 60; then
+                            if [ -n "$TEST_MODE" ]; then
+                                log "INFO" "Test mode: Would remove container $selected"
+                            else
+                                # Stop container first if running
+                                docker stop "$selected" 2>/dev/null || true
+                                docker rm "$selected"
+                                log "INFO" "Container $selected removed."
+                            fi
+                        fi
+                    fi
+                    ;;
+                5)
+                    # View container logs
+                    local running_containers
+                    running_containers=$(docker ps --format "{{.ID}}|{{.Names}}|{{.Image}}" | tr '\n' ' ')
+                    
+                    if [ -z "$running_containers" ]; then
+                        whiptail --title "No Running Containers" --msgbox "No running containers found." 10 60 3>&1 1>&2 2>&3
+                        return 1
+                    fi
+                    
+                    local container_menu=()
+                    for container in $running_containers; do
+                        IFS='|' read -r id name image <<< "$container"
+                        container_menu+=("$id" "$name ($image)")
+                    done
+                    
+                    local selected
+                    selected=$(whiptail --title "View Logs" --menu "Select a container to view logs:" 15 60 5 "${container_menu[@]}" 3>&1 1>&2 2>&3)
+                    
+                    if [ -n "$selected" ]; then
+                        if [ -n "$TEST_MODE" ]; then
+                            log "INFO" "Test mode: Would show logs for container $selected"
+                        else
+                            log "INFO" "Showing logs for container $selected (press Ctrl+C to exit)..."
+                            docker logs -f "$selected"
+                        fi
+                    fi
+                    ;;
+                6)
+                    # Container monitoring/health check
+                    show_container_monitoring
+                    ;;
                 *)
                     return 1
                     ;;

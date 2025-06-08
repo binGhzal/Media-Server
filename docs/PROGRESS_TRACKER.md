@@ -240,7 +240,7 @@ The bootstrap process is the critical entry point for the entire system, designe
 #### 1. Single-Command Installation
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/username/homelab/main/scripts/bootstrap.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/binghzal/homelab/main/scripts/bootstrap.sh | sudo bash
 ```
 
 This command downloads the bootstrap script and executes it with root privileges. The bootstrap script will:

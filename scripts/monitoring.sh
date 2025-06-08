@@ -146,8 +146,7 @@ global:
   evaluation_interval: 15s
 
 rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+  - "alert.rules.yml"
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -162,11 +161,15 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+
 alerting:
   alertmanagers:
     - static_configs:
         - targets:
-          # - alertmanager:9093
+          - alertmanager:9093
 EOF
     
     log "INFO" "Prometheus configuration created"
@@ -214,6 +217,141 @@ EOF
     curl -s https://grafana.com/api/dashboards/1860/revisions/37/download | jq '.' > "$MONITORING_DIR/grafana/dashboards/node-exporter-dashboard.json"
     
     log "INFO" "Grafana dashboard provisioning created"
+}
+
+# Function to create Alertmanager configuration
+create_alertmanager_config() {
+    log "INFO" "Creating Alertmanager configuration..."
+    
+    # Create alertmanager directory
+    mkdir -p "$MONITORING_DIR/alertmanager"
+    
+    # Create Alertmanager configuration
+    cat > "$MONITORING_DIR/alertmanager/alertmanager.yml" << 'EOF'
+global:
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@example.com'
+  resolve_timeout: 5m
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'web.hook'
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://127.0.0.1:5001/'
+        send_resolved: true
+  
+  - name: 'email'
+    email_configs:
+      - to: 'admin@example.com'
+        subject: 'Alert: {{ .GroupLabels.alertname }}'
+        body: |
+          {{ range .Alerts }}
+          Alert: {{ .Annotations.summary }}
+          Description: {{ .Annotations.description }}
+          Labels: {{ range .Labels.SortedPairs }} {{ .Name }}={{ .Value }} {{ end }}
+          {{ end }}
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+EOF
+    
+    # Create basic alert rules for Prometheus
+    cat > "$MONITORING_DIR/prometheus/config/alert.rules.yml" << 'EOF'
+groups:
+  - name: system.rules
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 90% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk usage is above 85% on {{ $labels.instance }} for filesystem {{ $labels.mountpoint }}"
+
+      - alert: PrometheusConfigurationReloadFailure
+        expr: prometheus_config_last_reload_successful != 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus configuration reload failure"
+          description: "Prometheus configuration reload error"
+
+  - name: container.rules
+    rules:
+      - alert: ContainerKilled
+        expr: time() - container_last_seen > 60
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container killed"
+          description: "A container has disappeared"
+
+      - alert: ContainerHighCpuUsage
+        expr: (sum(rate(container_cpu_usage_seconds_total[3m])) BY (instance, name) * 100) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container CPU usage is above 80%"
+
+      - alert: ContainerHighMemoryUsage
+        expr: (sum(container_memory_working_set_bytes) BY (instance, name) / sum(container_spec_memory_limit_bytes > 0) BY (instance, name) * 100) > 80
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container memory usage is above 80%"
+EOF
+    
+    # Set proper permissions
+    chown -R 65534:65534 "$MONITORING_DIR/alertmanager"
+    
+    log "INFO" "Alertmanager configuration created"
 }
 
 # Function to create Docker Compose file
@@ -292,6 +430,22 @@ services:
     networks:
       - monitoring
 
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
 networks:
   monitoring:
     driver: bridge
@@ -325,6 +479,7 @@ deploy_monitoring_stack() {
         log "INFO" "  Grafana: http://$(hostname -I | awk '{print $1}'):3000 (admin/admin)"
         log "INFO" "  Node Exporter: http://$(hostname -I | awk '{print $1}'):9100"
         log "INFO" "  cAdvisor: http://$(hostname -I | awk '{print $1}'):8080"
+        log "INFO" "  Alertmanager: http://$(hostname -I | awk '{print $1}'):9093"
     fi
 }
 
@@ -340,7 +495,7 @@ check_monitoring_status() {
     cd "$MONITORING_DIR"
     
     local services_running=0
-    local expected_services=4
+    local expected_services=5
     
     if docker compose ps --services --filter "status=running" | grep -q prometheus; then
         ((services_running++))
@@ -368,6 +523,13 @@ check_monitoring_status() {
         log "INFO" "cAdvisor: Running"
     else
         log "WARN" "cAdvisor: Not running"
+    fi
+    
+    if docker compose ps --services --filter "status=running" | grep -q alertmanager; then
+        ((services_running++))
+        log "INFO" "Alertmanager: Running"
+    else
+        log "WARN" "Alertmanager: Not running"
     fi
     
     if [ $services_running -eq $expected_services ]; then
@@ -455,6 +617,7 @@ main_menu() {
             create_prometheus_config
             create_grafana_datasource
             create_grafana_dashboards
+            create_alertmanager_config
             create_docker_compose
             deploy_monitoring_stack
             ;;
@@ -474,7 +637,7 @@ main_menu() {
             fi
             ;;
         5)
-            whiptail --title "Monitoring Stack Help" --msgbox "Monitoring Stack Module v${VERSION}\n\nThis module helps you deploy a complete monitoring solution including:\n\n- Prometheus: Metrics collection and storage\n- Grafana: Visualization dashboards\n- Node Exporter: System metrics\n- cAdvisor: Container metrics\n\nDefault access credentials:\n- Grafana: admin/admin\n\nFor more information, see the documentation at:\nhttps://github.com/binghzal/homelab/tree/main/docs" 18 70
+            whiptail --title "Monitoring Stack Help" --msgbox "Monitoring Stack Module v${VERSION}\n\nThis module helps you deploy a complete monitoring solution including:\n\n- Prometheus: Metrics collection and storage\n- Grafana: Visualization dashboards\n- Node Exporter: System metrics\n- cAdvisor: Container metrics\n- Alertmanager: Alert routing and notifications\n\nDefault access credentials:\n- Grafana: admin/admin\n\nAccess URLs (when deployed):\n- Prometheus: http://server-ip:9090\n- Grafana: http://server-ip:3000\n- Alertmanager: http://server-ip:9093\n\nFor more information, see the documentation at:\nhttps://github.com/binghzal/homelab/tree/main/docs" 20 80
             main_menu
             ;;
         *)

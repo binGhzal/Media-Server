@@ -577,28 +577,278 @@ main() {
                 3)
                     # Plan deployment only
                     log "INFO" "Creating deployment plan..."
-                    # Similar to deploy but only create plan
-                    whiptail --title "Info" --msgbox "Plan functionality - implementation similar to deploy but plan-only" 10 60
+                    
+                    # Get available modules
+                    if ! modules=$(discover_modules); then
+                        whiptail --title "Error" --msgbox "No Terraform modules found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert modules to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r module; do
+                        menu_items+=("$i" "$module")
+                        ((i++))
+                    done <<< "$modules"
+                    
+                    # Let user select module
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Module for Planning" \
+                        --menu "Choose a module to plan:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_module
+                        selected_module=$(echo "$modules" | sed -n "${selected_index}p")
+                        
+                        # Find module path
+                        local module_path=""
+                        if [ -d "$SCRIPT_DIR/../terraform/$selected_module" ]; then
+                            module_path="$SCRIPT_DIR/../terraform/$selected_module"
+                        elif [ -d "$TERRAFORM_MODULES_DIR/$selected_module" ]; then
+                            module_path="$TERRAFORM_MODULES_DIR/$selected_module"
+                        fi
+                        
+                        if [ -n "$module_path" ]; then
+                            log "INFO" "Selected module for planning: $selected_module at $module_path"
+                            
+                            # Collect variables if needed
+                            collect_variables "$module_path"
+                            
+                            # Validate configuration
+                            if validate_config "$module_path"; then
+                                # Create plan only
+                                local plan_file="$module_path/terraform.plan"
+                                if plan_deployment "$module_path" "$plan_file"; then
+                                    whiptail --title "Plan Created" --msgbox "Terraform plan created successfully!\n\nPlan file: $plan_file\n\nYou can review the plan and apply it later using the 'Deploy Infrastructure' option." 15 80
+                                else
+                                    whiptail --title "Error" --msgbox "Planning failed. Check logs for details." 10 60
+                                fi
+                            else
+                                whiptail --title "Error" --msgbox "Configuration validation failed. Check logs for details." 10 60
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Module path not found." 10 60
+                        fi
+                    fi
                     ;;
                 4)
                     # Show status
                     log "INFO" "Showing Terraform status..."
-                    whiptail --title "Info" --msgbox "Status functionality - would show current state" 10 60
+                    
+                    # Get available modules
+                    if ! modules=$(discover_modules); then
+                        whiptail --title "Error" --msgbox "No Terraform modules found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert modules to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r module; do
+                        menu_items+=("$i" "$module")
+                        ((i++))
+                    done <<< "$modules"
+                    
+                    # Let user select module
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Module for Status" \
+                        --menu "Choose a module to check status:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_module
+                        selected_module=$(echo "$modules" | sed -n "${selected_index}p")
+                        
+                        # Find module path
+                        local module_path=""
+                        if [ -d "$SCRIPT_DIR/../terraform/$selected_module" ]; then
+                            module_path="$SCRIPT_DIR/../terraform/$selected_module"
+                        elif [ -d "$TERRAFORM_MODULES_DIR/$selected_module" ]; then
+                            module_path="$TERRAFORM_MODULES_DIR/$selected_module"
+                        fi
+                        
+                        if [ -n "$module_path" ]; then
+                            log "INFO" "Showing status for module: $selected_module"
+                            
+                            # Show status in a scrollable text box
+                            local status_output
+                            if [ "$TEST_MODE" ]; then
+                                status_output="[TEST MODE] Would show Terraform state for module: $selected_module\n\nModule path: $module_path\nState file: $module_path/terraform.tfstate"
+                            else
+                                status_output=$(show_status "$module_path" 2>&1 || echo "No state information available or module not initialized.")
+                            fi
+                            
+                            # Display status in a scrollable dialog
+                            whiptail --title "Terraform Status - $selected_module" --scrolltext --msgbox "$status_output" 25 100
+                        else
+                            whiptail --title "Error" --msgbox "Module path not found." 10 60
+                        fi
+                    fi
                     ;;
                 5)
                     # Backup state
                     log "INFO" "Backing up Terraform state..."
-                    whiptail --title "Info" --msgbox "Backup functionality - would backup current state" 10 60
+                    
+                    # Get available modules
+                    if ! modules=$(discover_modules); then
+                        whiptail --title "Error" --msgbox "No Terraform modules found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert modules to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r module; do
+                        menu_items+=("$i" "$module")
+                        ((i++))
+                    done <<< "$modules"
+                    
+                    # Let user select module
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Module for Backup" \
+                        --menu "Choose a module to backup state:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_module
+                        selected_module=$(echo "$modules" | sed -n "${selected_index}p")
+                        
+                        # Find module path
+                        local module_path=""
+                        if [ -d "$SCRIPT_DIR/../terraform/$selected_module" ]; then
+                            module_path="$SCRIPT_DIR/../terraform/$selected_module"
+                        elif [ -d "$TERRAFORM_MODULES_DIR/$selected_module" ]; then
+                            module_path="$TERRAFORM_MODULES_DIR/$selected_module"
+                        fi
+                        
+                        if [ -n "$module_path" ]; then
+                            log "INFO" "Backing up state for module: $selected_module"
+                            
+                            if backup_state "$module_path"; then
+                                whiptail --title "Backup Success" --msgbox "Terraform state backed up successfully for module: $selected_module\n\nBackup location: $TERRAFORM_STATE_DIR/backups/" 12 70
+                            else
+                                whiptail --title "Backup Failed" --msgbox "Failed to backup Terraform state. Check logs for details." 10 60
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Module path not found." 10 60
+                        fi
+                    fi
                     ;;
                 6)
                     # Destroy deployment
                     log "INFO" "Destroying deployment..."
-                    whiptail --title "Info" --msgbox "Destroy functionality - would destroy infrastructure" 10 60
+                    
+                    # Get available modules
+                    if ! modules=$(discover_modules); then
+                        whiptail --title "Error" --msgbox "No Terraform modules found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert modules to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r module; do
+                        menu_items+=("$i" "$module")
+                        ((i++))
+                    done <<< "$modules"
+                    
+                    # Let user select module
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Module for Destruction" \
+                        --menu "Choose a module to destroy:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_module
+                        selected_module=$(echo "$modules" | sed -n "${selected_index}p")
+                        
+                        # Find module path
+                        local module_path=""
+                        if [ -d "$SCRIPT_DIR/../terraform/$selected_module" ]; then
+                            module_path="$SCRIPT_DIR/../terraform/$selected_module"
+                        elif [ -d "$TERRAFORM_MODULES_DIR/$selected_module" ]; then
+                            module_path="$TERRAFORM_MODULES_DIR/$selected_module"
+                        fi
+                        
+                        if [ -n "$module_path" ]; then
+                            log "INFO" "Selected module for destruction: $selected_module"
+                            
+                            # Additional confirmation for destruction
+                            if whiptail --title "DANGER - Confirm Destruction" --yesno "WARNING: You are about to DESTROY all infrastructure for module:\n\n$selected_module\n\nThis action is IRREVERSIBLE and will delete all resources!\n\nAre you absolutely sure you want to proceed?" 15 80; then
+                                # Backup state before destruction
+                                log "INFO" "Creating backup before destruction..."
+                                backup_state "$module_path"
+                                
+                                # Destroy deployment
+                                if destroy_deployment "$module_path"; then
+                                    whiptail --title "Destruction Complete" --msgbox "Infrastructure destroyed successfully for module: $selected_module\n\nAll resources have been removed." 12 70
+                                else
+                                    whiptail --title "Destruction Failed" --msgbox "Failed to destroy infrastructure. Check logs for details.\n\nSome resources may still exist and require manual cleanup." 12 70
+                                fi
+                            else
+                                log "INFO" "Destruction cancelled by user"
+                                whiptail --title "Cancelled" --msgbox "Destruction cancelled. No changes were made." 10 60
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Module path not found." 10 60
+                        fi
+                    fi
                     ;;
                 7)
                     # Validate configuration
                     log "INFO" "Validating configuration..."
-                    whiptail --title "Info" --msgbox "Validation functionality - would validate terraform files" 10 60
+                    
+                    # Get available modules
+                    if ! modules=$(discover_modules); then
+                        whiptail --title "Error" --msgbox "No Terraform modules found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert modules to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r module; do
+                        menu_items+=("$i" "$module")
+                        ((i++))
+                    done <<< "$modules"
+                    
+                    # Let user select module
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Module for Validation" \
+                        --menu "Choose a module to validate:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_module
+                        selected_module=$(echo "$modules" | sed -n "${selected_index}p")
+                        
+                        # Find module path
+                        local module_path=""
+                        if [ -d "$SCRIPT_DIR/../terraform/$selected_module" ]; then
+                            module_path="$SCRIPT_DIR/../terraform/$selected_module"
+                        elif [ -d "$TERRAFORM_MODULES_DIR/$selected_module" ]; then
+                            module_path="$TERRAFORM_MODULES_DIR/$selected_module"
+                        fi
+                        
+                        if [ -n "$module_path" ]; then
+                            log "INFO" "Validating configuration for module: $selected_module"
+                            
+                            if validate_config "$module_path"; then
+                                whiptail --title "Validation Success" --msgbox "Terraform configuration is valid for module: $selected_module\n\nAll syntax and configuration checks passed." 12 70
+                            else
+                                whiptail --title "Validation Failed" --msgbox "Terraform configuration validation failed for module: $selected_module\n\nCheck logs for detailed error information." 12 70
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Module path not found." 10 60
+                        fi
+                    fi
                     ;;
                 8)
                     log "INFO" "Exiting Terraform module"

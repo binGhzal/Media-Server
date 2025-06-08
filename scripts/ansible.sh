@@ -414,6 +414,670 @@ show_config() {
     return 0
 }
 
+# Function to create sample playbook from template
+create_sample_playbook() {
+    local template_type="$1"
+    local output_file="$2"
+    local playbook_name="$3"
+    
+    log "INFO" "Creating sample playbook: $template_type -> $output_file"
+    
+    # Ensure directory exists
+    mkdir -p "$(dirname "$output_file")"
+    
+    # Create playbook content based on template type
+    case "$template_type" in
+        "basic-setup")
+            cat > "$output_file" << 'EOF'
+---
+# Basic System Setup Playbook
+# This playbook performs basic system setup tasks including package installation,
+# user management, and security hardening.
+
+- name: Basic System Setup
+  hosts: all
+  become: yes
+  vars:
+    # Common packages to install
+    common_packages:
+      - curl
+      - wget
+      - git
+      - vim
+      - htop
+      - unzip
+      - software-properties-common
+    
+    # User configuration
+    admin_user: admin
+    admin_groups: 
+      - sudo
+      - docker
+    
+  tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+    
+    - name: Install common packages
+      package:
+        name: "{{ common_packages }}"
+        state: present
+    
+    - name: Create admin user
+      user:
+        name: "{{ admin_user }}"
+        groups: "{{ admin_groups }}"
+        shell: /bin/bash
+        create_home: yes
+        state: present
+    
+    - name: Configure SSH for admin user
+      authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+        state: present
+      ignore_errors: yes
+    
+    - name: Set timezone
+      timezone:
+        name: UTC
+    
+    - name: Configure firewall (ufw)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop:
+        - "22"
+        - "80"
+        - "443"
+      when: ansible_os_family == "Debian"
+    
+    - name: Enable firewall
+      ufw:
+        state: enabled
+        policy: deny
+      when: ansible_os_family == "Debian"
+EOF
+            ;;
+        "docker-deployment")
+            cat > "$output_file" << 'EOF'
+---
+# Docker Container Deployment Playbook
+# This playbook installs Docker and deploys containerized applications
+
+- name: Docker Container Deployment
+  hosts: all
+  become: yes
+  vars:
+    docker_compose_version: "2.20.0"
+    containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+          - "80:80"
+        volumes:
+          - "/etc/nginx/conf.d:/etc/nginx/conf.d:ro"
+      - name: redis
+        image: redis:alpine
+        ports:
+          - "6379:6379"
+  
+  tasks:
+    - name: Install Docker dependencies
+      package:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+      when: ansible_os_family == "Debian"
+    
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: ansible_os_family == "Debian"
+    
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_os_family == "Debian"
+    
+    - name: Install Docker
+      package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+    
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+    
+    - name: Install Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+    
+    - name: Deploy containers
+      docker_container:
+        name: "{{ item.name }}"
+        image: "{{ item.image }}"
+        ports: "{{ item.ports | default([]) }}"
+        volumes: "{{ item.volumes | default([]) }}"
+        state: started
+        restart_policy: always
+      loop: "{{ containers }}"
+EOF
+            ;;
+        "web-server")
+            cat > "$output_file" << 'EOF'
+---
+# Web Server Setup Playbook
+# This playbook installs and configures Nginx web server
+
+- name: Web Server Setup
+  hosts: all
+  become: yes
+  vars:
+    server_name: example.com
+    document_root: /var/www/html
+    ssl_enabled: false
+  
+  tasks:
+    - name: Install Nginx
+      package:
+        name: nginx
+        state: present
+    
+    - name: Create document root
+      file:
+        path: "{{ document_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+    
+    - name: Create default index page
+      copy:
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Welcome to {{ server_name }}</title>
+          </head>
+          <body>
+              <h1>Welcome to {{ server_name }}</h1>
+              <p>This server is configured with Ansible!</p>
+          </body>
+          </html>
+        dest: "{{ document_root }}/index.html"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+    
+    - name: Configure Nginx virtual host
+      template:
+        src: nginx-vhost.j2
+        dest: "/etc/nginx/sites-available/{{ server_name }}"
+        backup: yes
+      notify: restart nginx
+    
+    - name: Enable virtual host
+      file:
+        src: "/etc/nginx/sites-available/{{ server_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ server_name }}"
+        state: link
+      notify: restart nginx
+    
+    - name: Remove default Nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: restart nginx
+    
+    - name: Start and enable Nginx
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+    
+    - name: Configure firewall for web traffic
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop:
+        - "80"
+        - "443"
+      when: ansible_os_family == "Debian"
+  
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+EOF
+            ;;
+        "database-server")
+            cat > "$output_file" << 'EOF'
+---
+# Database Server Setup Playbook
+# This playbook installs and configures MySQL/PostgreSQL database server
+
+- name: Database Server Setup
+  hosts: all
+  become: yes
+  vars:
+    db_type: mysql  # mysql or postgresql
+    db_root_password: "{{ vault_db_root_password | default('changeme123') }}"
+    db_name: myapp
+    db_user: appuser
+    db_password: "{{ vault_db_password | default('changeme456') }}"
+  
+  tasks:
+    - name: Install MySQL server
+      package:
+        name:
+          - mysql-server
+          - mysql-client
+          - python3-pymysql
+        state: present
+      when: db_type == "mysql"
+    
+    - name: Install PostgreSQL server
+      package:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - python3-psycopg2
+        state: present
+      when: db_type == "postgresql"
+    
+    - name: Start and enable MySQL service
+      systemd:
+        name: mysql
+        state: started
+        enabled: yes
+      when: db_type == "mysql"
+    
+    - name: Start and enable PostgreSQL service
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+      when: db_type == "postgresql"
+    
+    - name: Set MySQL root password
+      mysql_user:
+        name: root
+        password: "{{ db_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: present
+      when: db_type == "mysql"
+    
+    - name: Create application database (MySQL)
+      mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_user: root
+        login_password: "{{ db_root_password }}"
+      when: db_type == "mysql"
+    
+    - name: Create application user (MySQL)
+      mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+        login_user: root
+        login_password: "{{ db_root_password }}"
+      when: db_type == "mysql"
+    
+    - name: Create application database (PostgreSQL)
+      postgresql_db:
+        name: "{{ db_name }}"
+        state: present
+      become_user: postgres
+      when: db_type == "postgresql"
+    
+    - name: Create application user (PostgreSQL)
+      postgresql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        db: "{{ db_name }}"
+        priv: ALL
+        state: present
+      become_user: postgres
+      when: db_type == "postgresql"
+    
+    - name: Configure firewall for database
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        src: "{{ ansible_default_ipv4.network }}/24"
+      loop:
+        - "3306"  # MySQL
+        - "5432"  # PostgreSQL
+      when: ansible_os_family == "Debian"
+EOF
+            ;;
+        "monitoring-setup")
+            cat > "$output_file" << 'EOF'
+---
+# Monitoring Stack Setup Playbook
+# This playbook installs Prometheus, Grafana, and Node Exporter
+
+- name: Monitoring Stack Setup
+  hosts: all
+  become: yes
+  vars:
+    prometheus_version: "2.45.0"
+    grafana_version: "10.0.0"
+    node_exporter_version: "1.6.0"
+    prometheus_user: prometheus
+    grafana_admin_password: "{{ vault_grafana_password | default('admin123') }}"
+  
+  tasks:
+    - name: Create prometheus user
+      user:
+        name: "{{ prometheus_user }}"
+        system: yes
+        shell: /bin/false
+        home: /etc/prometheus
+        create_home: no
+    
+    - name: Create prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0755'
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+    
+    - name: Download and install Prometheus
+      unarchive:
+        src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+        dest: /tmp
+        remote_src: yes
+        creates: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
+    
+    - name: Copy Prometheus binaries
+      copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0755'
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+    
+    - name: Create Prometheus configuration
+      copy:
+        content: |
+          global:
+            scrape_interval: 15s
+            evaluation_interval: 15s
+          
+          scrape_configs:
+            - job_name: 'prometheus'
+              static_configs:
+                - targets: ['localhost:9090']
+            
+            - job_name: 'node'
+              static_configs:
+                - targets: ['localhost:9100']
+        dest: /etc/prometheus/prometheus.yml
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0644'
+      notify: restart prometheus
+    
+    - name: Create Prometheus systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Prometheus
+          Wants=network-online.target
+          After=network-online.target
+          
+          [Service]
+          User={{ prometheus_user }}
+          Group={{ prometheus_user }}
+          Type=simple
+          ExecStart=/usr/local/bin/prometheus \
+            --config.file /etc/prometheus/prometheus.yml \
+            --storage.tsdb.path /var/lib/prometheus/ \
+            --web.console.templates=/etc/prometheus/consoles \
+            --web.console.libraries=/etc/prometheus/console_libraries \
+            --web.listen-address=0.0.0.0:9090 \
+            --web.enable-lifecycle
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/prometheus.service
+        mode: '0644'
+      notify:
+        - reload systemd
+        - restart prometheus
+    
+    - name: Download and install Node Exporter
+      unarchive:
+        src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: /tmp
+        remote_src: yes
+        creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
+    
+    - name: Copy Node Exporter binary
+      copy:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        owner: "{{ prometheus_user }}"
+        group: "{{ prometheus_user }}"
+        mode: '0755'
+        remote_src: yes
+    
+    - name: Create Node Exporter systemd service
+      copy:
+        content: |
+          [Unit]
+          Description=Node Exporter
+          Wants=network-online.target
+          After=network-online.target
+          
+          [Service]
+          User={{ prometheus_user }}
+          Group={{ prometheus_user }}
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: /etc/systemd/system/node_exporter.service
+        mode: '0644'
+      notify:
+        - reload systemd
+        - restart node_exporter
+    
+    - name: Install Grafana
+      get_url:
+        url: "https://dl.grafana.com/oss/release/grafana_{{ grafana_version }}_amd64.deb"
+        dest: "/tmp/grafana_{{ grafana_version }}_amd64.deb"
+    
+    - name: Install Grafana package
+      apt:
+        deb: "/tmp/grafana_{{ grafana_version }}_amd64.deb"
+        state: present
+      when: ansible_os_family == "Debian"
+    
+    - name: Configure Grafana admin password
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: '^;admin_password = admin'
+        line: "admin_password = {{ grafana_admin_password }}"
+      notify: restart grafana
+    
+    - name: Start and enable services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - prometheus
+        - node_exporter
+        - grafana-server
+    
+    - name: Configure firewall for monitoring
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      loop:
+        - "9090"  # Prometheus
+        - "9100"  # Node Exporter
+        - "3000"  # Grafana
+      when: ansible_os_family == "Debian"
+  
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+    
+    - name: restart prometheus
+      systemd:
+        name: prometheus
+        state: restarted
+    
+    - name: restart node_exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+    
+    - name: restart grafana
+      systemd:
+        name: grafana-server
+        state: restarted
+EOF
+            ;;
+        "custom")
+            cat > "$output_file" << 'EOF'
+---
+# Custom Ansible Playbook Template
+# Customize this template for your specific needs
+
+- name: Custom Playbook
+  hosts: all
+  become: yes
+  vars:
+    # Define your variables here
+    app_name: myapp
+    app_version: "1.0.0"
+    app_user: myapp
+    app_port: 8080
+  
+  tasks:
+    - name: Ensure required packages are installed
+      package:
+        name:
+          - curl
+          - wget
+          - git
+        state: present
+    
+    - name: Create application user
+      user:
+        name: "{{ app_user }}"
+        system: yes
+        shell: /bin/bash
+        create_home: yes
+        state: present
+    
+    - name: Create application directory
+      file:
+        path: "/opt/{{ app_name }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0755'
+    
+    - name: Example configuration file
+      copy:
+        content: |
+          # {{ app_name }} Configuration
+          app_name={{ app_name }}
+          app_version={{ app_version }}
+          app_port={{ app_port }}
+        dest: "/opt/{{ app_name }}/config.conf"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: '0644'
+    
+    - name: Example service template
+      copy:
+        content: |
+          [Unit]
+          Description={{ app_name }} Service
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User={{ app_user }}
+          Group={{ app_user }}
+          WorkingDirectory=/opt/{{ app_name }}
+          ExecStart=/opt/{{ app_name }}/start.sh
+          Restart=always
+          
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/{{ app_name }}.service"
+        mode: '0644'
+      notify: reload systemd
+    
+    - name: Configure firewall
+      ufw:
+        rule: allow
+        port: "{{ app_port }}"
+      when: ansible_os_family == "Debian"
+  
+  handlers:
+    - name: reload systemd
+      systemd:
+        daemon_reload: yes
+    
+    - name: restart service
+      systemd:
+        name: "{{ app_name }}"
+        state: restarted
+EOF
+            ;;
+        *)
+            log "ERROR" "Unknown template type: $template_type"
+            return 1
+            ;;
+    esac
+    
+    # Set proper permissions
+    chmod 644 "$output_file"
+    
+    log "INFO" "Sample playbook created successfully: $output_file"
+    return 0
+}
+
 # Main function to display menu and handle user selection
 main() {
     log "INFO" "Starting Ansible Module v${VERSION}"
@@ -698,7 +1362,8 @@ main() {
                         config_info+="System Roles Directory: $ANSIBLE_ROLES_DIR"
                     else
                         # Get real configuration information
-                        local temp_file=$(mktemp)
+                        local temp_file
+                        temp_file=$(mktemp)
                         {
                             echo "=== ANSIBLE VERSION ==="
                             ansible --version 2>/dev/null || echo "Ansible not installed"
@@ -724,8 +1389,52 @@ main() {
                     ;;
                 8)
                     # Create sample playbook
-                    log "INFO" "Creating sample playbook..."
-                    whiptail --title "Info" --msgbox "Sample playbook creation - would create example playbook" 10 60
+                    log "INFO" "Starting sample playbook creation workflow..."
+                    
+                    # Define sample playbook templates
+                    local templates=(
+                        "basic-setup" "Basic System Setup (packages, users, security)"
+                        "docker-deployment" "Docker Container Deployment"
+                        "web-server" "Web Server Setup (Nginx/Apache)"
+                        "database-server" "Database Server Setup (MySQL/PostgreSQL)"
+                        "monitoring-setup" "Monitoring Stack Setup (Prometheus/Grafana)"
+                        "custom" "Create Custom Playbook Template"
+                    )
+                    
+                    # Show template selection dialog
+                    local selected_template
+                    if selected_template=$(whiptail --title "Create Sample Playbook" --menu "Choose a playbook template to create:" 20 80 6 "${templates[@]}" 3>&1 1>&2 2>&3); then
+                        log "INFO" "Selected template: $selected_template"
+                        
+                        # Get playbook name
+                        local playbook_name
+                        if playbook_name=$(whiptail --title "Playbook Name" --inputbox "Enter a name for your playbook:" 10 60 "sample-$selected_template" 3>&1 1>&2 2>&3); then
+                            if [ -n "$playbook_name" ]; then
+                                # Sanitize playbook name
+                                playbook_name=$(echo "$playbook_name" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')
+                                local playbook_file="$ANSIBLE_PLAYBOOKS_DIR/${playbook_name}.yaml"
+                                
+                                # Check if file already exists
+                                if [ -f "$playbook_file" ]; then
+                                    if ! whiptail --title "File Exists" --yesno "A playbook named '$playbook_name' already exists. Overwrite it?" 10 60; then
+                                        log "INFO" "Sample playbook creation cancelled by user"
+                                        continue
+                                    fi
+                                fi
+                                
+                                # Create playbook based on template
+                                if create_sample_playbook "$selected_template" "$playbook_file" "$playbook_name"; then
+                                    whiptail --title "Success" --msgbox "Sample playbook created successfully!\n\nFile: $playbook_file\nTemplate: $selected_template\n\nYou can now edit this playbook to customize it for your needs." 15 70
+                                    log "INFO" "Sample playbook created: $playbook_file"
+                                else
+                                    whiptail --title "Error" --msgbox "Failed to create sample playbook. Check logs for details." 10 60
+                                    log "ERROR" "Failed to create sample playbook: $playbook_file"
+                                fi
+                            else
+                                whiptail --title "Error" --msgbox "Playbook name cannot be empty." 10 60
+                            fi
+                        fi
+                    fi
                     ;;
                 9)
                     log "INFO" "Exiting Ansible module"

@@ -552,8 +552,66 @@ main() {
                     ;;
                 4)
                     # Dry-run playbook
-                    log "INFO" "Dry-run playbook functionality..."
-                    whiptail --title "Info" --msgbox "Dry-run functionality - similar to execute but check mode only" 10 60
+                    log "INFO" "Starting playbook dry-run workflow..."
+                    
+                    # Get available playbooks
+                    if ! playbooks=$(discover_playbooks); then
+                        whiptail --title "Error" --msgbox "No Ansible playbooks found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert playbooks to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r playbook; do
+                        menu_items+=("$i" "$playbook")
+                        ((i++))
+                    done <<< "$playbooks"
+                    
+                    # Let user select playbook
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Playbook for Dry-run" \
+                        --menu "Choose a playbook for dry-run (check mode):" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_playbook
+                        selected_playbook=$(echo "$playbooks" | sed -n "${selected_index}p")
+                        
+                        # Find playbook path
+                        local playbook_path=""
+                        if [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yml" ]; then
+                            playbook_path="$SCRIPT_DIR/../ansible/$selected_playbook.yml"
+                        elif [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yaml" ]; then
+                            playbook_path="$SCRIPT_DIR/../ansible/$selected_playbook.yaml"
+                        elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yml" ]; then
+                            playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yml"
+                        elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml" ]; then
+                            playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml"
+                        fi
+                        
+                        if [ -n "$playbook_path" ]; then
+                            log "INFO" "Selected playbook for dry-run: $selected_playbook at $playbook_path"
+                            
+                            # Collect variables
+                            collect_variables "$playbook_path"
+                            
+                            # Validate playbook first
+                            if validate_playbook "$playbook_path"; then
+                                # Run dry-run
+                                if dry_run_playbook "$playbook_path"; then
+                                    whiptail --title "Dry-run Success" --msgbox "Playbook dry-run completed successfully!\n\nNo changes were made to target systems.\nCheck logs for detailed output." 12 70
+                                else
+                                    whiptail --title "Dry-run Failed" --msgbox "Playbook dry-run failed. Check logs for details." 10 60
+                                fi
+                            else
+                                whiptail --title "Error" --msgbox "Playbook validation failed. Check logs for details." 10 60
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Playbook file not found." 10 60
+                        fi
+                    fi
                     ;;
                 5)
                     # Validate playbook

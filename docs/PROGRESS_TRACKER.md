@@ -95,12 +95,12 @@ The project follows a modular implementation strategy with each component develo
 | Feature                     | Status       | Priority | Notes                                |
 | --------------------------- | ------------ | -------- | ------------------------------------ |
 | K8s/k3s cluster setup       | Complete     | High     | Basic Kubernetes cluster deployment  |
-| Multi-node support          | not complete | High     | Master and worker node configuration |
-| CNI plugins integration     | not complete | Medium   | Flannel, Calico, Weave networking    |
+| Multi-node support          | Complete     | High     | Master and worker node configuration |
+| CNI plugins integration     | Complete     | Medium   | Flannel, Calico, Weave, Canal networking |
 | Ingress controller setup    | Not started  | Medium   | NGINX, Traefik support               |
 | Add-ons deployment          | Not started  | Medium   | cert-manager, monitoring, dashboard  |
-| Auto-joining mechanism      | not complete | Medium   | Automatic cluster formation          |
-| Helm support                | Not started  | Medium   | Package management for K8s           |
+| Auto-joining mechanism      | Complete     | Medium   | Automatic cluster formation          |
+| Helm support                | Complete     | Medium   | Package management for K8s           |
 | K8s/k3s resource management | Not started  | Medium   | Deployments, services, pods          |
 | K8s/k3s monitoring          | Not started  | Medium   | Basic health checks and metrics      |
 

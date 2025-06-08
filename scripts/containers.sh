@@ -1014,14 +1014,17 @@ kubernetes_deployment() {
     
     # Kubernetes deployment options
     local k8s_option
-    k8s_option=$(whiptail --title "Kubernetes Deployment" --menu "Choose a deployment option:" 15 60 3 \
-        "1" "Initialize a new cluster" \
-        "2" "Join an existing cluster" \
-        "3" "Deploy an application" 3>&1 1>&2 2>&3)
+    k8s_option=$(whiptail --title "Kubernetes Deployment" --menu "Choose a deployment option:" 18 70 6 \
+        "1" "Initialize a new cluster (basic)" \
+        "2" "Setup multi-node cluster (advanced)" \
+        "3" "Auto-discover and join cluster" \
+        "4" "Join an existing cluster (manual)" \
+        "5" "Advanced cluster management" \
+        "6" "Deploy an application" 3>&1 1>&2 2>&3)
     
     case $k8s_option in
         1)
-            # Initialize a new cluster
+            # Initialize a new cluster (basic)
             local pod_cidr
             pod_cidr=$(whiptail --title "Pod Network CIDR" --inputbox "Enter Pod Network CIDR:" 10 60 "10.244.0.0/16" 3>&1 1>&2 2>&3)
             if [ -z "$pod_cidr" ]; then
@@ -1061,7 +1064,15 @@ kubernetes_deployment() {
             fi
             ;;
         2)
-            # Join an existing cluster
+            # Setup multi-node cluster (advanced)
+            setup_multi_node_cluster
+            ;;
+        3)
+            # Auto-discover and join cluster
+            auto_join_cluster
+            ;;
+        4)
+            # Join an existing cluster (manual)
             local join_command
             join_command=$(whiptail --title "Join Cluster" --inputbox "Enter the kubeadm join command:" 10 60 3>&1 1>&2 2>&3)
             if [ -z "$join_command" ]; then
@@ -1075,13 +1086,18 @@ kubernetes_deployment() {
                 log "INFO" "Node joined the cluster successfully."
             fi
             ;;
-        3)
+        5)
+            # Advanced cluster management
+            advanced_cluster_management
+            ;;
+        6)
             # Deploy an application
             local deploy_option
-            deploy_option=$(whiptail --title "Application Deployment" --menu "Choose a deployment option:" 15 60 3 \
+            deploy_option=$(whiptail --title "Application Deployment" --menu "Choose a deployment option:" 15 60 4 \
                 "1" "Deploy from YAML file" \
                 "2" "Deploy using kubectl create" \
-                "3" "Deploy using Helm" 3>&1 1>&2 2>&3)
+                "3" "Deploy using Helm" \
+                "4" "Deploy sample WordPress with MySQL" 3>&1 1>&2 2>&3)
             
             case $deploy_option in
                 1)
@@ -1100,7 +1116,176 @@ kubernetes_deployment() {
                         log "INFO" "Application deployed successfully from $yaml_path"
                     fi
                     ;;
-                # Other deployment options would go here
+                2)
+                    # Deploy using kubectl create
+                    local app_name
+                    app_name=$(whiptail --title "Application Name" --inputbox "Enter application name:" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$app_name" ]; then
+                        return 1
+                    fi
+                    
+                    local image_name
+                    image_name=$(whiptail --title "Container Image" --inputbox "Enter image name (e.g., nginx:latest):" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$image_name" ]; then
+                        return 1
+                    fi
+                    
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would create deployment $app_name with image $image_name"
+                    else
+                        kubectl create deployment "$app_name" --image="$image_name"
+                        kubectl expose deployment "$app_name" --port=80 --type=LoadBalancer
+                        log "INFO" "Application $app_name deployed successfully"
+                    fi
+                    ;;
+                3)
+                    # Deploy using Helm
+                    if ! command -v helm >/dev/null 2>&1; then
+                        if (whiptail --title "Helm Installation" --yesno "Helm is not installed. Install it now?" 10 60 3>&1 1>&2 2>&3); then
+                            if [ -n "$TEST_MODE" ]; then
+                                log "INFO" "Test mode: Would install Helm"
+                            else
+                                curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                                log "INFO" "Helm installed successfully"
+                            fi
+                        else
+                            return 1
+                        fi
+                    fi
+                    
+                    local chart_name
+                    chart_name=$(whiptail --title "Helm Chart" --inputbox "Enter Helm chart name (e.g., bitnami/nginx):" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$chart_name" ]; then
+                        return 1
+                    fi
+                    
+                    local release_name
+                    release_name=$(whiptail --title "Release Name" --inputbox "Enter release name:" 10 60 3>&1 1>&2 2>&3)
+                    if [ -z "$release_name" ]; then
+                        return 1
+                    fi
+                    
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would deploy Helm chart $chart_name as release $release_name"
+                    else
+                        helm repo add bitnami https://charts.bitnami.com/bitnami
+                        helm repo update
+                        helm install "$release_name" "$chart_name"
+                        log "INFO" "Helm chart $chart_name deployed as release $release_name"
+                    fi
+                    ;;
+                4)
+                    # Deploy sample WordPress with MySQL
+                    if [ -n "$TEST_MODE" ]; then
+                        log "INFO" "Test mode: Would deploy WordPress with MySQL"
+                    else
+                        # Create namespace
+                        kubectl create namespace wordpress
+                        
+                        # Deploy MySQL and WordPress
+                        kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: wordpress
+type: Opaque
+data:
+  password: $(echo -n 'wordpress123' | base64)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        - name: MYSQL_DATABASE
+          value: wordpress
+        - name: MYSQL_USER
+          value: wordpress
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        ports:
+        - containerPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: wordpress
+spec:
+  selector:
+    app: mysql
+  ports:
+  - port: 3306
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:6.0
+        env:
+        - name: WORDPRESS_DB_HOST
+          value: mysql
+        - name: WORDPRESS_DB_NAME
+          value: wordpress
+        - name: WORDPRESS_DB_USER
+          value: wordpress
+        - name: WORDPRESS_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  namespace: wordpress
+spec:
+  selector:
+    app: wordpress
+  ports:
+  - port: 80
+  type: LoadBalancer
+EOF
+                        log "INFO" "WordPress with MySQL deployed successfully in namespace 'wordpress'"
+                    fi
+                    ;;
                 *)
                     return 1
                     ;;
@@ -1329,6 +1514,686 @@ deploy_from_registry() {
         
         log "INFO" "Successfully deployed $container_name from $full_registry_image"
         whiptail --title "Deployment Complete" --msgbox "Container deployed successfully!\n\nContainer: $container_name\nImage: $full_registry_image\nPort mapping: ${port_mapping:-none}" 12 70
+    fi
+}
+
+# Enhanced multi-node Kubernetes support functions
+
+# Function to check cluster status and node health
+check_cluster_health() {
+    log "INFO" "Checking Kubernetes cluster health..."
+    
+    if ! command -v kubectl >/dev/null 2>&1; then
+        log "ERROR" "kubectl is not installed or not in PATH"
+        return 1
+    fi
+    
+    # Check if cluster is reachable
+    if ! kubectl cluster-info >/dev/null 2>&1; then
+        log "ERROR" "Cannot connect to Kubernetes cluster"
+        return 1
+    fi
+    
+    local node_count ready_nodes
+    node_count=$(kubectl get nodes --no-headers | wc -l)
+    ready_nodes=$(kubectl get nodes --no-headers | grep -c "Ready")
+    
+    log "INFO" "Cluster Status:"
+    log "INFO" "  Total nodes: $node_count"
+    log "INFO" "  Ready nodes: $ready_nodes"
+    
+    # Display detailed node information
+    kubectl get nodes -o wide
+    
+    # Check system pods
+    log "INFO" "System pods status:"
+    kubectl get pods -n kube-system
+    
+    return 0
+}
+
+# Function to automatically setup multi-node cluster across VMs
+setup_multi_node_cluster() {
+    log "INFO" "Setting up multi-node Kubernetes cluster..."
+    
+    # Get cluster configuration
+    local master_ip worker_ips pod_cidr cni_plugin
+    master_ip=$(whiptail --title "Master Node" --inputbox "Enter master node IP address:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$master_ip" ]; then
+        log "ERROR" "Master IP is required"
+        return 1
+    fi
+    
+    worker_ips=$(whiptail --title "Worker Nodes" --inputbox "Enter worker node IPs (comma-separated):" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$worker_ips" ]; then
+        log "WARN" "No worker nodes specified, setting up single-node cluster"
+    fi
+    
+    pod_cidr=$(whiptail --title "Pod Network CIDR" --inputbox "Enter Pod Network CIDR:" 10 60 "10.244.0.0/16" 3>&1 1>&2 2>&3)
+    if [ -z "$pod_cidr" ]; then
+        pod_cidr="10.244.0.0/16"
+    fi
+    
+    local cni_option
+    cni_option=$(whiptail --title "CNI Plugin" --menu "Select CNI plugin:" 15 60 4 \
+        "1" "Flannel (recommended)" \
+        "2" "Calico" \
+        "3" "Weave Net" \
+        "4" "Canal (Flannel + Calico)" 3>&1 1>&2 2>&3)
+    
+    case $cni_option in
+        1) cni_plugin="flannel" ;;
+        2) cni_plugin="calico" ;;
+        3) cni_plugin="weave" ;;
+        4) cni_plugin="canal" ;;
+        *) cni_plugin="flannel" ;;
+    esac
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would setup multi-node cluster"
+        log "INFO" "  Master: $master_ip"
+        log "INFO" "  Workers: $worker_ips"
+        log "INFO" "  Pod CIDR: $pod_cidr"
+        log "INFO" "  CNI: $cni_plugin"
+        return 0
+    fi
+    
+    # Initialize cluster on master node
+    log "INFO" "Initializing cluster on master node $master_ip..."
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    local master_setup_script="/tmp/k8s_master_setup.sh"
+    
+    # Create master setup script
+    cat > "$master_setup_script" << EOF
+#!/bin/bash
+set -e
+
+# Install Kubernetes tools if not present
+if ! command -v kubeadm >/dev/null 2>&1; then
+    # Add Kubernetes repository
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
+    apt-get update
+    apt-get install -y kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl
+fi
+
+# Disable swap
+swapoff -a
+sed -i '/swap/s/^\(.*\)$/#\1/g' /etc/fstab
+
+# Initialize cluster
+kubeadm init --pod-network-cidr=$pod_cidr --control-plane-endpoint $master_ip:6443 --upload-certs
+
+# Setup kubectl for root
+mkdir -p /root/.kube
+cp -i /etc/kubernetes/admin.conf /root/.kube/config
+
+# Generate join commands
+kubeadm token create --print-join-command > /tmp/worker-join-command
+kubeadm init phase upload-certs --upload-certs | tail -n 1 > /tmp/control-plane-key
+
+# Save cluster info
+echo "$master_ip" > /tmp/master-ip
+echo "$pod_cidr" > /tmp/pod-cidr
+echo "$cni_plugin" > /tmp/cni-plugin
+EOF
+    
+    # Copy and execute master setup script
+    scp $ssh_opts "$master_setup_script" "root@$master_ip:/tmp/"
+    ssh $ssh_opts "root@$master_ip" "chmod +x /tmp/k8s_master_setup.sh && /tmp/k8s_master_setup.sh"
+    
+    if [ $? -ne 0 ]; then
+        log "ERROR" "Failed to initialize cluster on master node"
+        return 1
+    fi
+    
+    log "INFO" "Master node initialized successfully"
+    
+    # Get join command from master
+    local worker_join_cmd
+    worker_join_cmd=$(ssh $ssh_opts "root@$master_ip" "cat /tmp/worker-join-command")
+    
+    # Install CNI plugin on master
+    log "INFO" "Installing CNI plugin: $cni_plugin"
+    install_cni_plugin "$master_ip" "$cni_plugin" "$pod_cidr"
+    
+    # Join worker nodes if specified
+    if [ -n "$worker_ips" ]; then
+        log "INFO" "Adding worker nodes to cluster..."
+        
+        IFS=',' read -ra WORKERS <<< "$worker_ips"
+        for worker_ip in "${WORKERS[@]}"; do
+            worker_ip=$(echo "$worker_ip" | xargs)  # Trim whitespace
+            log "INFO" "Setting up worker node: $worker_ip"
+            
+            local worker_setup_script="/tmp/k8s_worker_setup.sh"
+            
+            # Create worker setup script
+            cat > "$worker_setup_script" << EOF
+#!/bin/bash
+set -e
+
+# Install Kubernetes tools if not present
+if ! command -v kubeadm >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
+    apt-get update
+    apt-get install -y kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl
+fi
+
+# Disable swap
+swapoff -a
+sed -i '/swap/s/^\(.*\)$/#\1/g' /etc/fstab
+
+# Join cluster
+$worker_join_cmd
+EOF
+            
+            # Copy and execute worker setup script
+            scp $ssh_opts "$worker_setup_script" "root@$worker_ip:/tmp/"
+            ssh $ssh_opts "root@$worker_ip" "chmod +x /tmp/k8s_worker_setup.sh && /tmp/k8s_worker_setup.sh"
+            
+            if [ $? -eq 0 ]; then
+                log "INFO" "Worker node $worker_ip joined successfully"
+            else
+                log "ERROR" "Failed to join worker node $worker_ip"
+            fi
+        done
+    fi
+    
+    # Wait for nodes to be ready
+    log "INFO" "Waiting for all nodes to be ready..."
+    ssh $ssh_opts "root@$master_ip" "kubectl wait --for=condition=Ready nodes --all --timeout=300s"
+    
+    # Display final cluster status
+    log "INFO" "Multi-node cluster setup complete!"
+    ssh $ssh_opts "root@$master_ip" "kubectl get nodes -o wide"
+    
+    # Copy kubeconfig locally if this is the master node
+    local_ip
+    local_ip=$(hostname -I | awk '{print $1}')
+    if [ "$local_ip" = "$master_ip" ]; then
+        mkdir -p "$HOME/.kube"
+        cp /etc/kubernetes/admin.conf "$HOME/.kube/config"
+        chown -R "$(id -u):$(id -g)" "$HOME/.kube"
+        log "INFO" "kubectl configured for local use"
+    fi
+    
+    # Clean up temporary files
+    rm -f "$master_setup_script" "$worker_setup_script"
+    ssh $ssh_opts "root@$master_ip" "rm -f /tmp/k8s_master_setup.sh /tmp/worker-join-command /tmp/control-plane-key"
+    
+    return 0
+}
+
+# Function to install CNI plugins with better error handling
+install_cni_plugin() {
+    local master_ip="$1"
+    local cni_plugin="$2"
+    local pod_cidr="$3"
+    
+    log "INFO" "Installing CNI plugin: $cni_plugin on master $master_ip"
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    case $cni_plugin in
+        "flannel")
+            ssh $ssh_opts "root@$master_ip" "kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"
+            ;;
+        "calico")
+            ssh $ssh_opts "root@$master_ip" "kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/tigera-operator.yaml"
+            # Create custom resources for Calico with correct CIDR
+            ssh $ssh_opts "root@$master_ip" "cat > /tmp/calico-custom.yaml << 'EOF'
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+    - blockSize: 26
+      cidr: $pod_cidr
+      encapsulation: VXLANCrossSubnet
+      natOutgoing: Enabled
+      nodeSelector: all()
+---
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
+EOF"
+            ssh $ssh_opts "root@$master_ip" "kubectl apply -f /tmp/calico-custom.yaml"
+            ;;
+        "weave")
+            ssh $ssh_opts "root@$master_ip" "kubectl apply -f \"https://cloud.weave.works/k8s/net?k8s-version=\$(kubectl version | base64 | tr -d '\n')\""
+            ;;
+        "canal")
+            # Canal combines Flannel for networking and Calico for network policy
+            ssh $ssh_opts "root@$master_ip" "kubectl apply -f https://raw.githubusercontent.com/projectcalico/canal/master/k8s-install/1.7/rbac.yaml"
+            ssh $ssh_opts "root@$master_ip" "kubectl apply -f https://raw.githubusercontent.com/projectcalico/canal/master/k8s-install/1.7/canal.yaml"
+            ;;
+        *)
+            log "ERROR" "Unknown CNI plugin: $cni_plugin"
+            return 1
+            ;;
+    esac
+    
+    # Wait for CNI pods to be ready
+    log "INFO" "Waiting for CNI pods to be ready..."
+    case $cni_plugin in
+        "flannel")
+            ssh $ssh_opts "root@$master_ip" "kubectl wait --for=condition=ready pods --all -n kube-flannel --timeout=300s || true"
+            ;;
+        "calico")
+            ssh $ssh_opts "root@$master_ip" "kubectl wait --for=condition=ready pods --all -n calico-system --timeout=300s || true"
+            ;;
+        "weave"|"canal")
+            ssh $ssh_opts "root@$master_ip" "kubectl wait --for=condition=ready pods --all -n kube-system --timeout=300s || true"
+            ;;
+    esac
+    
+    log "INFO" "CNI plugin $cni_plugin installed successfully"
+    return 0
+}
+
+# Function for intelligent cluster joining with auto-discovery
+auto_join_cluster() {
+    log "INFO" "Starting automatic cluster discovery and joining..."
+    
+    # Try to discover existing clusters on the network
+    local discovered_masters
+    discovered_masters=$(discover_k8s_masters)
+    
+    if [ -z "$discovered_masters" ]; then
+        # No clusters found, offer to create one
+        if whiptail --title "No Clusters Found" --yesno "No Kubernetes clusters discovered on the network.\n\nWould you like to create a new cluster?" 10 60; then
+            setup_multi_node_cluster
+        fi
+        return
+    fi
+    
+    # Present discovered clusters to user
+    local cluster_options=()
+    local counter=1
+    
+    while IFS= read -r master; do
+        cluster_options+=("$counter" "Cluster at $master")
+        ((counter++))
+    done <<< "$discovered_masters"
+    
+    cluster_options+=("new" "Create new cluster")
+    
+    local choice
+    choice=$(whiptail --title "Available Clusters" --menu "Select a cluster to join or create new:" 15 60 $((${#cluster_options[@]}/2)) "${cluster_options[@]}" 3>&1 1>&2 2>&3)
+    
+    if [ "$choice" = "new" ]; then
+        setup_multi_node_cluster
+    elif [ -n "$choice" ] && [ "$choice" -ge 1 ] && [ "$choice" -le $((counter-1)) ]; then
+        local selected_master
+        selected_master=$(echo "$discovered_masters" | sed -n "${choice}p")
+        join_existing_cluster "$selected_master"
+    fi
+}
+
+# Function to discover Kubernetes masters on the network
+discover_k8s_masters() {
+    log "INFO" "Scanning network for Kubernetes clusters..."
+    
+    local network_range
+    network_range=$(ip route | grep -E '^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -n1 | awk '{print $1}')
+    
+    if [ -z "$network_range" ]; then
+        log "WARN" "Could not determine network range for scanning"
+        return 1
+    fi
+    
+    local masters=""
+    local ssh_opts="-o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes"
+    
+    # Scan common IPs in the network range
+    for i in $(seq 1 254); do
+        local ip="${network_range%.*}.$i"
+        
+        # Try to connect and check for Kubernetes API server
+        if timeout 3 ssh $ssh_opts "root@$ip" "systemctl is-active kubelet >/dev/null 2>&1 && kubectl cluster-info >/dev/null 2>&1" 2>/dev/null; then
+            masters="$masters$ip\n"
+            log "INFO" "Found Kubernetes master at $ip"
+        fi
+    done 2>/dev/null
+    
+    echo -e "$masters" | grep -v "^$"
+}
+
+# Function to join existing cluster with enhanced automation
+join_existing_cluster() {
+    local master_ip="$1"
+    
+    log "INFO" "Joining existing cluster at $master_ip..."
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    # Get join command from master
+    local join_command
+    join_command=$(ssh $ssh_opts "root@$master_ip" "kubeadm token create --print-join-command" 2>/dev/null)
+    
+    if [ -z "$join_command" ]; then
+        log "ERROR" "Failed to get join command from master node"
+        return 1
+    fi
+    
+    # Install Kubernetes tools if not present
+    if ! command -v kubeadm >/dev/null 2>&1; then
+        log "INFO" "Installing Kubernetes tools..."
+        install_kubernetes_tools
+    fi
+    
+    # Disable swap
+    swapoff -a
+    sed -i '/swap/s/^\(.*\)$/#\1/g' /etc/fstab
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would execute join command: $join_command"
+        return 0
+    fi
+    
+    # Execute join command
+    log "INFO" "Joining cluster..."
+    eval "$join_command"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "Successfully joined cluster at $master_ip"
+        
+        # Verify the join
+        ssh $ssh_opts "root@$master_ip" "kubectl get nodes"
+        
+        return 0
+    else
+        log "ERROR" "Failed to join cluster"
+        return 1
+    fi
+}
+
+# Enhanced function for advanced cluster management
+advanced_cluster_management() {
+    log "INFO" "Advanced Kubernetes cluster management..."
+    
+    local mgmt_option
+    mgmt_option=$(whiptail --title "Advanced Cluster Management" --menu "Choose an operation:" 18 70 8 \
+        "1" "Setup multi-node cluster" \
+        "2" "Auto-discover and join cluster" \
+        "3" "Check cluster health" \
+        "4" "Add worker node to existing cluster" \
+        "5" "Remove node from cluster" \
+        "6" "Upgrade cluster" \
+        "7" "Backup cluster configuration" \
+        "8" "Restore cluster configuration" 3>&1 1>&2 2>&3)
+    
+    case $mgmt_option in
+        1)
+            setup_multi_node_cluster
+            ;;
+        2)
+            auto_join_cluster
+            ;;
+        3)
+            check_cluster_health
+            ;;
+        4)
+            add_worker_node
+            ;;
+        5)
+            remove_cluster_node
+            ;;
+        6)
+            upgrade_cluster
+            ;;
+        7)
+            backup_cluster_config
+            ;;
+        8)
+            restore_cluster_config
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Function to add worker node to existing cluster
+add_worker_node() {
+    log "INFO" "Adding worker node to existing cluster..."
+    
+    local master_ip worker_ip
+    master_ip=$(whiptail --title "Master Node" --inputbox "Enter master node IP:" 10 60 3>&1 1>&2 2>&3)
+    worker_ip=$(whiptail --title "Worker Node" --inputbox "Enter new worker node IP:" 10 60 3>&1 1>&2 2>&3)
+    
+    if [ -z "$master_ip" ] || [ -z "$worker_ip" ]; then
+        log "ERROR" "Both master and worker IPs are required"
+        return 1
+    fi
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    # Get join command from master
+    local join_command
+    join_command=$(ssh $ssh_opts "root@$master_ip" "kubeadm token create --print-join-command")
+    
+    if [ -z "$join_command" ]; then
+        log "ERROR" "Failed to get join command from master"
+        return 1
+    fi
+    
+    # Setup worker node
+    local worker_setup_script="/tmp/add_worker.sh"
+    cat > "$worker_setup_script" << EOF
+#!/bin/bash
+set -e
+
+# Install Kubernetes tools if not present
+if ! command -v kubeadm >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' > /etc/apt/sources.list.d/kubernetes.list
+    apt-get update
+    apt-get install -y kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl
+fi
+
+# Disable swap
+swapoff -a
+sed -i '/swap/s/^\(.*\)$/#\1/g' /etc/fstab
+
+# Join cluster
+$join_command
+EOF
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would add worker node $worker_ip to cluster"
+        return 0
+    fi
+    
+    # Execute on worker node
+    scp $ssh_opts "$worker_setup_script" "root@$worker_ip:/tmp/"
+    ssh $ssh_opts "root@$worker_ip" "chmod +x /tmp/add_worker.sh && /tmp/add_worker.sh"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "Worker node $worker_ip added successfully"
+        ssh $ssh_opts "root@$master_ip" "kubectl get nodes"
+    else
+        log "ERROR" "Failed to add worker node"
+    fi
+    
+    rm -f "$worker_setup_script"
+}
+
+# Function to remove node from cluster
+remove_cluster_node() {
+    log "INFO" "Removing node from cluster..."
+    
+    local master_ip node_name
+    master_ip=$(whiptail --title "Master Node" --inputbox "Enter master node IP:" 10 60 3>&1 1>&2 2>&3)
+    
+    if [ -z "$master_ip" ]; then
+        log "ERROR" "Master IP is required"
+        return 1
+    fi
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    # Get list of nodes
+    local nodes
+    nodes=$(ssh $ssh_opts "root@$master_ip" "kubectl get nodes --no-headers | awk '{print \$1}'")
+    
+    if [ -z "$nodes" ]; then
+        log "ERROR" "No nodes found or cannot connect to cluster"
+        return 1
+    fi
+    
+    # Present nodes for selection
+    local node_options=()
+    local counter=1
+    
+    while IFS= read -r node; do
+        node_options+=("$counter" "$node")
+        ((counter++))
+    done <<< "$nodes"
+    
+    local choice
+    choice=$(whiptail --title "Remove Node" --menu "Select node to remove:" 15 60 $((${#node_options[@]}/2)) "${node_options[@]}" 3>&1 1>&2 2>&3)
+    
+    if [ -n "$choice" ] && [ "$choice" -ge 1 ] && [ "$choice" -le $((counter-1)) ]; then
+        node_name=$(echo "$nodes" | sed -n "${choice}p")
+        
+        if whiptail --title "Confirm Removal" --yesno "Remove node '$node_name' from cluster?" 10 60; then
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would remove node $node_name"
+                return 0
+            fi
+            
+            # Drain and delete node
+            ssh $ssh_opts "root@$master_ip" "kubectl drain $node_name --ignore-daemonsets --delete-emptydir-data --force"
+            ssh $ssh_opts "root@$master_ip" "kubectl delete node $node_name"
+            
+            log "INFO" "Node $node_name removed from cluster"
+        fi
+    fi
+}
+
+# Function to upgrade cluster
+upgrade_cluster() {
+    log "INFO" "Upgrading Kubernetes cluster..."
+    
+    local master_ip
+    master_ip=$(whiptail --title "Master Node" --inputbox "Enter master node IP:" 10 60 3>&1 1>&2 2>&3)
+    
+    if [ -z "$master_ip" ]; then
+        log "ERROR" "Master IP is required"
+        return 1
+    fi
+    
+    local target_version
+    target_version=$(whiptail --title "Target Version" --inputbox "Enter target Kubernetes version (e.g., 1.29.0):" 10 60 3>&1 1>&2 2>&3)
+    
+    if [ -z "$target_version" ]; then
+        log "ERROR" "Target version is required"
+        return 1
+    fi
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would upgrade cluster to version $target_version"
+        return 0
+    fi
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    # Upgrade master node
+    log "INFO" "Upgrading master node..."
+    ssh $ssh_opts "root@$master_ip" "
+        apt-mark unhold kubeadm
+        apt-get update
+        apt-get install -y kubeadm=$target_version-00
+        apt-mark hold kubeadm
+        kubeadm upgrade plan
+        kubeadm upgrade apply v$target_version -y
+        apt-mark unhold kubelet kubectl
+        apt-get install -y kubelet=$target_version-00 kubectl=$target_version-00
+        apt-mark hold kubelet kubectl
+        systemctl restart kubelet
+    "
+    
+    log "INFO" "Master node upgrade completed"
+    log "INFO" "Remember to upgrade worker nodes manually or use the cluster management tools"
+}
+
+# Function to backup cluster configuration
+backup_cluster_config() {
+    log "INFO" "Backing up cluster configuration..."
+    
+    local master_ip backup_path
+    master_ip=$(whiptail --title "Master Node" --inputbox "Enter master node IP:" 10 60 3>&1 1>&2 2>&3)
+    backup_path=$(whiptail --title "Backup Path" --inputbox "Enter local backup path:" 10 60 "/tmp/k8s-backup-$(date +%Y%m%d-%H%M%S)" 3>&1 1>&2 2>&3)
+    
+    if [ -z "$master_ip" ] || [ -z "$backup_path" ]; then
+        log "ERROR" "Master IP and backup path are required"
+        return 1
+    fi
+    
+    mkdir -p "$backup_path"
+    
+    local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would backup cluster config to $backup_path"
+        return 0
+    fi
+    
+    # Backup etcd and kubernetes configs
+    scp -r $ssh_opts "root@$master_ip:/etc/kubernetes" "$backup_path/"
+    scp -r $ssh_opts "root@$master_ip:/var/lib/etcd" "$backup_path/" 2>/dev/null || log "WARN" "Could not backup etcd data"
+    
+    # Export all resources
+    ssh $ssh_opts "root@$master_ip" "kubectl get all --all-namespaces -o yaml" > "$backup_path/all-resources.yaml"
+    
+    log "INFO" "Cluster configuration backed up to $backup_path"
+}
+
+# Function to restore cluster configuration
+restore_cluster_config() {
+    log "INFO" "Restoring cluster configuration..."
+    
+    local backup_path
+    backup_path=$(whiptail --title "Backup Path" --inputbox "Enter backup path:" 10 60 3>&1 1>&2 2>&3)
+    
+    if [ -z "$backup_path" ] || [ ! -d "$backup_path" ]; then
+        log "ERROR" "Valid backup path is required"
+        return 1
+    fi
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would restore cluster config from $backup_path"
+        return 0
+    fi
+    
+    if whiptail --title "Confirm Restore" --yesno "This will restore cluster configuration from backup.\nThis operation may affect current cluster state.\n\nContinue?" 12 60; then
+        # Apply backed up resources
+        if [ -f "$backup_path/all-resources.yaml" ]; then
+            kubectl apply -f "$backup_path/all-resources.yaml"
+            log "INFO" "Cluster resources restored successfully"
+        else
+            log "ERROR" "No resource backup found in $backup_path"
+        fi
     fi
 }
 

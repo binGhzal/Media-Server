@@ -163,7 +163,7 @@ The bootstrap process is designed to provide a seamless initial experience for u
 # Check root privileges
 check_root() {
     if [ $(id -u) -ne 0 ]; then
-        echo "Error: This script must be run as root or with sudo."
+        echo "Error: This script must be run as root."
         echo "Please run: sudo $0"
         exit 1
     fi

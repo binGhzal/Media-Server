@@ -2,7 +2,7 @@
 
 A streamlined system to create and manage VM templates in Proxmox environments with a single command installation.
 
-[![GitBook](https://img.shields.io/badge/GitBook-%23000000.svg?style=for-the-badge&logo=gitbook&logoColor=white)](https://bizarreindustries.gitbook.io/homelab)
+Please click this button to access the full wiki: [![GitBook](https://img.shields.io/badge/GitBook-%23000000.svg?style=for-the-badge&logo=gitbook&logoColor=white)](https://bizarreindustries.gitbook.io/homelab)
 
 ## Overview
 
@@ -22,7 +22,7 @@ The Proxmox Template Creator provides a comprehensive solution for creating and 
 Simply run this command to get started:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/binghzal/homelab/main/scripts/bootstrap.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/binghzal/homelab/main/scripts/bootstrap.sh | bash
 ```
 
 This single command handles everything:

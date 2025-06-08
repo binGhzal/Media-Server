@@ -12,15 +12,15 @@ The project follows a modular implementation strategy with each component develo
 
 | Feature                  | Status      | Priority | Notes                                           |
 | ------------------------ | ----------- | -------- | ----------------------------------------------- |
-| Single command install   | In progress | High     | Curl-based installation script                  |
-| Dependency management    | In progress | High     | Auto-detection and installation of dependencies |
-| Repository handling      | In progress | High     | Clone or update from Git repository             |
-| Root user verification   | In progress | High     | Check for required privileges                   |
-| OS compatibility check   | Not started | Medium   | Verify running on compatible Linux distro       |
-| Proxmox detection        | Not started | High     | Detect and verify Proxmox environment           |
-| Configuration setup      | Not started | High     | Initial configuration directory and files       |
+| Single command install   | Complete    | High     | Curl-based installation script                  |
+| Dependency management    | Complete    | High     | Auto-detection and installation of dependencies |
+| Repository handling      | Complete    | High     | Clone or update from Git repository             |
+| Root user verification   | Complete    | High     | Check for required privileges                   |
+| OS compatibility check   | Complete    | Medium   | Verify running on compatible Linux distro       |
+| Proxmox detection        | Complete    | High     | Detect and verify Proxmox environment           |
+| Configuration setup      | Complete    | High     | Initial configuration directory and files       |
 | Auto-update mechanism    | Not started | Medium   | Regular checks for updates                      |
-| Error handling framework | Not started | High     | Consistent error management across modules      |
+| Error handling framework | In progress | High     | Consistent error management across modules      |
 
 ### 2. Template Creation
 

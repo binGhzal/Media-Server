@@ -19,6 +19,26 @@ check_root() {
     log "INFO" "Running as root: OK"
 }
 
+# Check OS compatibility
+check_os_compatibility() {
+    local supported_os=("debian" "ubuntu" "centos" "rocky" "almalinux" "opensuse" "sles")
+    local os_id
+    if [ -f /etc/os-release ]; then
+        os_id=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
+        for os in "${supported_os[@]}"; do
+            if [[ "$os_id" == "$os" ]]; then
+                log "INFO" "Detected supported OS: $os_id"
+                return 0
+            fi
+        done
+        log "ERROR" "Unsupported OS: $os_id. Supported: ${supported_os[*]}"
+        exit 1
+    else
+        log "ERROR" "/etc/os-release not found. Cannot determine OS."
+        exit 1
+    fi
+}
+
 # Check and install dependencies
 check_dependencies() {
     local deps=(curl git whiptail jq)
@@ -47,6 +67,15 @@ check_dependencies() {
     fi
 }
 
+# Detect Proxmox environment
+check_proxmox() {
+    if pveversion >/dev/null 2>&1; then
+        log "INFO" "Proxmox detected: $(pveversion)"
+    else
+        log "WARN" "Proxmox VE not detected. Some features may not work."
+    fi
+}
+
 # Clone or update repository
 setup_repository() {
     local repo_url="https://github.com/binghzal/homelab.git"
@@ -59,6 +88,22 @@ setup_repository() {
         git -C "$repo_dir" pull
     fi
     chmod -R 750 "$repo_dir/scripts" || true
+}
+
+# Setup configuration directories and files
+setup_config() {
+    local config_dir="/etc/homelab"
+    local user_config="$config_dir/user.conf"
+    if [ ! -d "$config_dir" ]; then
+        mkdir -p "$config_dir"
+        chmod 750 "$config_dir"
+        log "INFO" "Created config directory: $config_dir"
+    fi
+    if [ ! -f "$user_config" ]; then
+        touch "$user_config"
+        chmod 640 "$user_config"
+        log "INFO" "Created user config: $user_config"
+    fi
 }
 
 # Launch main controller
@@ -75,6 +120,9 @@ launch_main() {
 
 # Main bootstrap flow
 check_root
+check_os_compatibility
 check_dependencies
+check_proxmox
 setup_repository
+setup_config
 launch_main

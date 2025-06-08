@@ -28,6 +28,7 @@ assert_output() {
     local expected="$1"; shift
     local output
     output=$("$@" 2>&1)
+    local status=$?
     if [[ "$output" == *"$expected"* ]]; then
         log "PASS" "$* => output contains '$expected'"
         ((TESTS_PASSED++))
@@ -35,43 +36,126 @@ assert_output() {
         log "FAIL" "$* => output: $output (expected: $expected)"
         ((TESTS_FAILED++))
     fi
+    return $status
 }
 
-# --- Test bootstrap.sh functions ---
-log "INFO" "Testing bootstrap.sh functions..."
-source "$(dirname "$0")/bootstrap.sh"
+assert_exit_status() {
+    local expected=$1; shift
+    "$@" > /dev/null 2>&1
+    local status=$?
+    if [ "$status" -eq "$expected" ]; then
+        log "PASS" "$* => exit status $status (expected: $expected)"
+        ((TESTS_PASSED++))
+    else
+        log "FAIL" "$* => exit status $status (expected: $expected)"
+        ((TESTS_FAILED++))
+    fi
+}
 
-assert_success check_root
-assert_success check_os_compatibility
-assert_success check_dependencies
-assert_success check_proxmox
+assert_file_exists() {
+    local file_path=$1
+    if [ -f "$file_path" ]; then
+        log "PASS" "File exists: $file_path"
+        ((TESTS_PASSED++))
+    else
+        log "FAIL" "File does not exist: $file_path"
+        ((TESTS_FAILED++))
+    fi
+}
 
-# --- Test main.sh (menu logic) ---
-log "INFO" "Testing main.sh (menu logic)..."
-if bash "$(dirname "$0")/main.sh" --test 2>&1 | grep -q "Welcome to the Proxmox Template Creator"; then
-    log "PASS" "main.sh launches and displays welcome message"
-    ((TESTS_PASSED++))
-else
-    log "FAIL" "main.sh did not display welcome message"
-    ((TESTS_FAILED++))
-fi
+assert_dir_exists() {
+    local dir_path=$1
+    if [ -d "$dir_path" ]; then
+        log "PASS" "Directory exists: $dir_path"
+        ((TESTS_PASSED++))
+    else
+        log "FAIL" "Directory does not exist: $dir_path"
+        ((TESTS_FAILED++))
+    fi
+}
+
+run_bootstrap_tests() {
+    log "INFO" "Testing bootstrap.sh functions..."
+    source "$(dirname "$0")/bootstrap.sh"
+
+    # Test core functions
+    assert_success check_root
+    assert_success check_os_compatibility
+    assert_success check_dependencies
+    assert_success check_proxmox
+
+    # Test repository handling
+    if [ -n "$TEST_SETUP_REPO" ]; then
+        assert_success setup_repository
+        assert_dir_exists "/opt/homelab"
+        assert_dir_exists "/opt/homelab/.git"
+    fi
+
+    # Test config setup
+    assert_success setup_config
+    assert_dir_exists "/etc/homelab"
+}
+
+run_template_tests() {
+    log "INFO" "Testing template.sh (module functionality)..."
+    
+    # Test with --test flag to skip actual VM creation
+    if bash "$(dirname "$0")/template.sh" --test 2>&1 | grep -q "Template Name"; then
+        log "PASS" "template.sh launches and displays inputbox"
+        ((TESTS_PASSED++))
+    else
+        log "FAIL" "template.sh did not display inputbox"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Test distribution handling
+    assert_output "Ubuntu Server" bash "$(dirname "$0")/template.sh" --list-distros
+    
+    # Test version selection
+    assert_output "Jammy Jellyfish" bash "$(dirname "$0")/template.sh" --list-versions ubuntu
+}
+
+run_container_tests() {
+    log "INFO" "Testing containers.sh (module functionality)..."
+    
+    # Basic module test
+    assert_output "Container Workloads" bash "$(dirname "$0")/containers.sh"
+    
+    # Test Docker integration if implemented
+    if grep -q "docker_install" "$(dirname "$0")/containers.sh"; then
+        assert_success bash "$(dirname "$0")/containers.sh" --check-docker
+    fi
+}
+
+run_main_tests() {
+    log "INFO" "Testing main.sh (menu logic)..."
+    if bash "$(dirname "$0")/main.sh" --test 2>&1 | grep -q "Welcome to the Proxmox Template Creator"; then
+        log "PASS" "main.sh launches and displays welcome message"
+        ((TESTS_PASSED++))
+    else
+        log "FAIL" "main.sh did not display welcome message"
+        ((TESTS_FAILED++))
+    fi
+    
+    # Verify module loading
+    assert_exit_status 0 bash "$(dirname "$0")/main.sh" --list-modules
+}
 
 # --- Test skeleton modules ---
-for mod in config.sh containers.sh monitoring.sh registry.sh terraform.sh update.sh; do
-    log "INFO" "Testing $mod (skeleton)..."
-    assert_output "to be implemented" bash "$(dirname "$0")/$mod"
-    assert_success bash "$(dirname "$0")/$mod"
-done
+run_skeleton_tests() {
+    log "INFO" "Testing skeleton modules..."
+    for mod in config.sh containers.sh monitoring.sh registry.sh terraform.sh update.sh; do
+        assert_output "to be implemented" bash "$(dirname "$0")/$mod"
+        assert_success bash "$(dirname "$0")/$mod"
+    done
+}
 
-# --- Test template.sh (UI and logic) ---
-log "INFO" "Testing template.sh (UI and logic)..."
-if bash "$(dirname "$0")/template.sh" --test 2>&1 | grep -q "Template Name"; then
-    log "PASS" "template.sh launches and displays inputbox"
-    ((TESTS_PASSED++))
-else
-    log "FAIL" "template.sh did not display inputbox"
-    ((TESTS_FAILED++))
-fi
+# Run all tests
+run_bootstrap_tests
+run_main_tests
+run_template_tests
+run_container_tests
+run_skeleton_tests
 
 # --- Summary ---
 log "INFO" "Testing complete. Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"

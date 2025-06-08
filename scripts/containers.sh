@@ -315,6 +315,249 @@ deploy_calico_cni() {
     return 0
 }
 
+# Function for multi-VM deployment
+multi_vm_deployment() {
+    log "INFO" "Starting multi-VM deployment setup..."
+    
+    # Get deployment configuration
+    local deployment_type
+    deployment_type=$(whiptail --title "Multi-VM Deployment" --menu "Choose deployment type:" 15 60 3 \
+        "1" "Docker Swarm cluster" \
+        "2" "Distributed containers across VMs" \
+        "3" "Load-balanced application" 3>&1 1>&2 2>&3)
+    
+    case $deployment_type in
+        1)
+            setup_docker_swarm
+            ;;
+        2)
+            deploy_distributed_containers
+            ;;
+        3)
+            deploy_load_balanced_app
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Function to setup Docker Swarm cluster
+setup_docker_swarm() {
+    log "INFO" "Setting up Docker Swarm cluster..."
+    
+    local swarm_option
+    swarm_option=$(whiptail --title "Docker Swarm Setup" --menu "Choose an option:" 15 60 3 \
+        "1" "Initialize new swarm (manager node)" \
+        "2" "Join existing swarm as worker" \
+        "3" "Join existing swarm as manager" 3>&1 1>&2 2>&3)
+    
+    case $swarm_option in
+        1)
+            # Initialize swarm
+            local advertise_addr
+            advertise_addr=$(whiptail --title "Advertise Address" --inputbox "Enter the IP address to advertise (leave empty for auto-detect):" 10 60 3>&1 1>&2 2>&3)
+            
+            local command="docker swarm init"
+            if [ -n "$advertise_addr" ]; then
+                command="$command --advertise-addr $advertise_addr"
+            fi
+            
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would execute: $command"
+                whiptail --title "Swarm Initialized" --msgbox "Test mode: Docker Swarm would be initialized.\n\nTo join workers, run:\ndocker swarm join --token <worker-token> <manager-ip>:2377\n\nTo join managers, run:\ndocker swarm join --token <manager-token> <manager-ip>:2377" 15 70
+            else
+                log "INFO" "Initializing Docker Swarm..."
+                eval "$command"
+                
+                # Get join tokens
+                local worker_token manager_token
+                worker_token=$(docker swarm join-token worker -q)
+                manager_token=$(docker swarm join-token manager -q)
+                local manager_ip
+                manager_ip=$(hostname -I | awk '{print $1}')
+                
+                whiptail --title "Swarm Initialized" --msgbox "Docker Swarm initialized successfully!\n\nTo join workers, run on each worker node:\ndocker swarm join --token $worker_token $manager_ip:2377\n\nTo join managers, run on each manager node:\ndocker swarm join --token $manager_token $manager_ip:2377" 15 70
+                log "INFO" "Docker Swarm initialized on $manager_ip"
+            fi
+            ;;
+        2)
+            # Join as worker
+            local join_command
+            join_command=$(whiptail --title "Join Swarm" --inputbox "Enter the full 'docker swarm join' command provided by the manager:" 10 60 3>&1 1>&2 2>&3)
+            if [ -z "$join_command" ]; then
+                return 1
+            fi
+            
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would execute: $join_command"
+            else
+                log "INFO" "Joining swarm as worker..."
+                eval "$join_command"
+                log "INFO" "Successfully joined swarm as worker"
+            fi
+            ;;
+        3)
+            # Join as manager
+            local join_command
+            join_command=$(whiptail --title "Join Swarm" --inputbox "Enter the full 'docker swarm join' command for managers:" 10 60 3>&1 1>&2 2>&3)
+            if [ -z "$join_command" ]; then
+                return 1
+            fi
+            
+            if [ -n "$TEST_MODE" ]; then
+                log "INFO" "Test mode: Would execute: $join_command"
+            else
+                log "INFO" "Joining swarm as manager..."
+                eval "$join_command"
+                log "INFO" "Successfully joined swarm as manager"
+            fi
+            ;;
+    esac
+}
+
+# Function to deploy distributed containers across VMs
+deploy_distributed_containers() {
+    log "INFO" "Setting up distributed container deployment..."
+    
+    # Get VM list
+    local vm_list
+    vm_list=$(whiptail --title "VM List" --inputbox "Enter comma-separated list of VM IPs/hostnames:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$vm_list" ]; then
+        return 1
+    fi
+    
+    # Get container configuration
+    local image_name
+    image_name=$(whiptail --title "Container Image" --inputbox "Enter container image (e.g., nginx:latest):" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$image_name" ]; then
+        return 1
+    fi
+    
+    local container_prefix
+    container_prefix=$(whiptail --title "Container Prefix" --inputbox "Enter container name prefix:" 10 60 "app" 3>&1 1>&2 2>&3)
+    
+    local port_mapping
+    port_mapping=$(whiptail --title "Port Mapping" --inputbox "Enter port mapping (e.g., 8080:80):" 10 60 3>&1 1>&2 2>&3)
+    
+    # Deploy to each VM
+    local counter=1
+    IFS=',' read -ra VMS <<< "$vm_list"
+    for vm in "${VMS[@]}"; do
+        vm=$(echo "$vm" | xargs)  # Trim whitespace
+        local container_name="${container_prefix}-${counter}"
+        
+        local ssh_command="docker run -d --name $container_name"
+        if [ -n "$port_mapping" ]; then
+            ssh_command="$ssh_command -p $port_mapping"
+        fi
+        ssh_command="$ssh_command $image_name"
+        
+        if [ -n "$TEST_MODE" ]; then
+            log "INFO" "Test mode: Would SSH to $vm and execute: $ssh_command"
+        else
+            log "INFO" "Deploying $container_name to $vm..."
+            if ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$vm" "$ssh_command"; then
+                log "INFO" "Successfully deployed $container_name to $vm"
+            else
+                log "ERROR" "Failed to deploy to $vm"
+            fi
+        fi
+        
+        ((counter++))
+    done
+    
+    if [ -z "$TEST_MODE" ]; then
+        whiptail --title "Deployment Complete" --msgbox "Distributed container deployment completed!\n\nDeployed to VMs: $vm_list\nContainer prefix: $container_prefix\nImage: $image_name" 12 70
+    fi
+}
+
+# Function to deploy load-balanced application
+deploy_load_balanced_app() {
+    log "INFO" "Setting up load-balanced application deployment..."
+    
+    # Get configuration
+    local backend_vms
+    backend_vms=$(whiptail --title "Backend VMs" --inputbox "Enter comma-separated list of backend VM IPs:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$backend_vms" ]; then
+        return 1
+    fi
+    
+    local lb_vm
+    lb_vm=$(whiptail --title "Load Balancer VM" --inputbox "Enter load balancer VM IP:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$lb_vm" ]; then
+        return 1
+    fi
+    
+    local app_image
+    app_image=$(whiptail --title "Application Image" --inputbox "Enter application image:" 10 60 "nginx:latest" 3>&1 1>&2 2>&3)
+    
+    local app_port
+    app_port=$(whiptail --title "Application Port" --inputbox "Enter application port:" 10 60 "80" 3>&1 1>&2 2>&3)
+    
+    # Deploy backends
+    local counter=1
+    IFS=',' read -ra BACKENDS <<< "$backend_vms"
+    local backend_list=""
+    
+    for backend in "${BACKENDS[@]}"; do
+        backend=$(echo "$backend" | xargs)
+        local container_name="backend-${counter}"
+        
+        if [ -n "$TEST_MODE" ]; then
+            log "INFO" "Test mode: Would deploy $container_name to $backend"
+        else
+            log "INFO" "Deploying $container_name to $backend..."
+            ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$backend" \
+                "docker run -d --name $container_name -p $app_port:$app_port $app_image"
+        fi
+        
+        backend_list="${backend_list}server backend${counter} ${backend}:${app_port} check\n    "
+        ((counter++))
+    done
+    
+    # Create HAProxy configuration
+    local haproxy_config="/tmp/haproxy.cfg"
+    cat > "$haproxy_config" << EOF
+global
+    daemon
+
+defaults
+    mode http
+    timeout connect 5000ms
+    timeout client 50000ms
+    timeout server 50000ms
+
+frontend http_front
+    bind *:80
+    default_backend http_back
+
+backend http_back
+    balance roundrobin
+    $backend_list
+EOF
+    
+    # Deploy load balancer
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would deploy HAProxy to $lb_vm"
+        log "INFO" "HAProxy config created at $haproxy_config"
+    else
+        log "INFO" "Deploying HAProxy load balancer to $lb_vm..."
+        
+        # Copy config to LB VM
+        scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$haproxy_config" "root@$lb_vm:/tmp/"
+        
+        # Deploy HAProxy container
+        ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$lb_vm" \
+            "docker run -d --name haproxy-lb -p 80:80 -v /tmp/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro haproxy:latest"
+        
+        whiptail --title "Load Balancer Deployed" --msgbox "Load-balanced application deployed successfully!\n\nLoad Balancer: http://$lb_vm\nBackends: $backend_vms\n\nThe application is now accessible through the load balancer." 12 70
+    fi
+    
+    # Clean up
+    rm -f "$haproxy_config"
+}
+
 # Main function for Docker deployment
 docker_deployment() {
     # Check if Docker is already installed
@@ -331,10 +574,11 @@ docker_deployment() {
     
     # Docker deployment options
     local docker_option
-    docker_option=$(whiptail --title "Docker Deployment" --menu "Choose a deployment option:" 15 60 3 \
+    docker_option=$(whiptail --title "Docker Deployment" --menu "Choose a deployment option:" 18 70 4 \
         "1" "Deploy a single container" \
         "2" "Deploy with Docker Compose" \
-        "3" "Container management" 3>&1 1>&2 2>&3)
+        "3" "Multi-VM deployment" \
+        "4" "Container management" 3>&1 1>&2 2>&3)
     
     case $docker_option in
         1)
@@ -397,6 +641,10 @@ docker_deployment() {
             fi
             ;;
         3)
+            # Multi-VM deployment
+            multi_vm_deployment
+            ;;
+        4)
             # Container management
             local manage_option
             manage_option=$(whiptail --title "Container Management" --menu "Choose an option:" 15 60 5 \
@@ -864,6 +1112,224 @@ kubernetes_deployment() {
     esac
     
     return 0
+}
+
+# Function for registry integration
+registry_integration() {
+    log "INFO" "Setting up container registry integration..."
+    
+    local registry_option
+    registry_option=$(whiptail --title "Registry Integration" --menu "Choose an option:" 15 60 4 \
+        "1" "Configure Docker to use private registry" \
+        "2" "Push image to private registry" \
+        "3" "Pull image from private registry" \
+        "4" "Deploy from private registry" 3>&1 1>&2 2>&3)
+    
+    case $registry_option in
+        1)
+            configure_private_registry
+            ;;
+        2)
+            push_to_registry
+            ;;
+        3)
+            pull_from_registry
+            ;;
+        4)
+            deploy_from_registry
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# Function to configure Docker for private registry
+configure_private_registry() {
+    log "INFO" "Configuring Docker for private registry..."
+    
+    local registry_url
+    registry_url=$(whiptail --title "Registry URL" --inputbox "Enter registry URL (e.g., registry.local:5000):" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_url" ]; then
+        return 1
+    fi
+    
+    local use_tls
+    if whiptail --title "Registry Security" --yesno "Does the registry use TLS/SSL?" 10 60; then
+        use_tls="yes"
+    else
+        use_tls="no"
+    fi
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would configure Docker for registry $registry_url (TLS: $use_tls)"
+    else
+        # Create Docker daemon configuration
+        local docker_config_dir="/etc/docker"
+        local docker_config_file="$docker_config_dir/daemon.json"
+        
+        mkdir -p "$docker_config_dir"
+        
+        if [ "$use_tls" = "no" ]; then
+            # Configure insecure registry
+            local insecure_registries=""
+            if [ -f "$docker_config_file" ]; then
+                insecure_registries=$(jq -r '.["insecure-registries"] // [] | join(",")' "$docker_config_file" 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$insecure_registries" ]; then
+                insecure_registries="${insecure_registries},${registry_url}"
+            else
+                insecure_registries="$registry_url"
+            fi
+            
+            cat > "$docker_config_file" << EOF
+{
+    "insecure-registries": ["$registry_url"]
+}
+EOF
+            
+            log "INFO" "Added $registry_url to insecure registries"
+        else
+            # For TLS registries, copy certificate if available
+            local cert_path
+            cert_path=$(whiptail --title "Certificate Path" --inputbox "Enter path to registry certificate (optional):" 10 60 3>&1 1>&2 2>&3)
+            
+            if [ -n "$cert_path" ] && [ -f "$cert_path" ]; then
+                local registry_host
+                registry_host=$(echo "$registry_url" | cut -d':' -f1)
+                local registry_port
+                registry_port=$(echo "$registry_url" | cut -d':' -f2)
+                
+                mkdir -p "/etc/docker/certs.d/$registry_url"
+                cp "$cert_path" "/etc/docker/certs.d/$registry_url/ca.crt"
+                log "INFO" "Copied certificate for $registry_url"
+            fi
+        fi
+        
+        # Restart Docker daemon
+        systemctl restart docker
+        log "INFO" "Docker daemon restarted"
+        
+        # Test registry access
+        if docker login "$registry_url" 2>/dev/null; then
+            log "INFO" "Successfully logged into registry $registry_url"
+        else
+            log "WARN" "Could not login to registry automatically. You may need to login manually."
+        fi
+    fi
+}
+
+# Function to push image to registry
+push_to_registry() {
+    log "INFO" "Pushing image to private registry..."
+    
+    local local_image
+    local_image=$(whiptail --title "Local Image" --inputbox "Enter local image name:tag:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$local_image" ]; then
+        return 1
+    fi
+    
+    local registry_url
+    registry_url=$(whiptail --title "Registry URL" --inputbox "Enter registry URL:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_url" ]; then
+        return 1
+    fi
+    
+    local registry_image
+    registry_image=$(whiptail --title "Registry Image" --inputbox "Enter registry image name:tag:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_image" ]; then
+        return 1
+    fi
+    
+    local full_registry_image="${registry_url}/${registry_image}"
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would tag $local_image as $full_registry_image"
+        log "INFO" "Test mode: Would push $full_registry_image"
+    else
+        log "INFO" "Tagging image..."
+        docker tag "$local_image" "$full_registry_image"
+        
+        log "INFO" "Pushing to registry..."
+        docker push "$full_registry_image"
+        
+        log "INFO" "Successfully pushed $full_registry_image"
+        whiptail --title "Push Complete" --msgbox "Image pushed successfully!\n\nLocal image: $local_image\nRegistry image: $full_registry_image" 12 70
+    fi
+}
+
+# Function to pull image from registry
+pull_from_registry() {
+    log "INFO" "Pulling image from private registry..."
+    
+    local registry_url
+    registry_url=$(whiptail --title "Registry URL" --inputbox "Enter registry URL:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_url" ]; then
+        return 1
+    fi
+    
+    local registry_image
+    registry_image=$(whiptail --title "Registry Image" --inputbox "Enter image name:tag to pull:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_image" ]; then
+        return 1
+    fi
+    
+    local full_registry_image="${registry_url}/${registry_image}"
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would pull $full_registry_image"
+    else
+        log "INFO" "Pulling from registry..."
+        docker pull "$full_registry_image"
+        
+        log "INFO" "Successfully pulled $full_registry_image"
+        whiptail --title "Pull Complete" --msgbox "Image pulled successfully!\n\nRegistry image: $full_registry_image\n\nYou can now use this image for deployments." 12 70
+    fi
+}
+
+# Function to deploy from registry
+deploy_from_registry() {
+    log "INFO" "Deploying container from private registry..."
+    
+    local registry_url
+    registry_url=$(whiptail --title "Registry URL" --inputbox "Enter registry URL:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_url" ]; then
+        return 1
+    fi
+    
+    local registry_image
+    registry_image=$(whiptail --title "Registry Image" --inputbox "Enter image name:tag to deploy:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$registry_image" ]; then
+        return 1
+    fi
+    
+    local container_name
+    container_name=$(whiptail --title "Container Name" --inputbox "Enter container name:" 10 60 3>&1 1>&2 2>&3)
+    if [ -z "$container_name" ]; then
+        return 1
+    fi
+    
+    local port_mapping
+    port_mapping=$(whiptail --title "Port Mapping" --inputbox "Enter port mapping (optional, e.g., 8080:80):" 10 60 3>&1 1>&2 2>&3)
+    
+    local full_registry_image="${registry_url}/${registry_image}"
+    
+    local command="docker run -d --name $container_name"
+    if [ -n "$port_mapping" ]; then
+        command="$command -p $port_mapping"
+    fi
+    command="$command $full_registry_image"
+    
+    if [ -n "$TEST_MODE" ]; then
+        log "INFO" "Test mode: Would execute: $command"
+    else
+        log "INFO" "Deploying container from registry..."
+        eval "$command"
+        
+        log "INFO" "Successfully deployed $container_name from $full_registry_image"
+        whiptail --title "Deployment Complete" --msgbox "Container deployed successfully!\n\nContainer: $container_name\nImage: $full_registry_image\nPort mapping: ${port_mapping:-none}" 12 70
+    fi
 }
 
 # Main menu for the containers module

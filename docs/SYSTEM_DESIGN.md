@@ -636,6 +636,12 @@ cached_download() {
 
 ---
 
+## Implementation Update (2025-06-08)
+
+- Main controller script (`main.sh`) and all module skeletons (`template.sh`, `containers.sh`, `terraform.sh`, `config.sh`, `monitoring.sh`, `registry.sh`, `update.sh`) have been created in the `scripts/` directory.
+- The main controller launches a whiptail menu for module selection and will coordinate module execution.
+- Next steps: Implement core logic for template creation and expand module functionality.
+
 This document will be continuously updated as the system evolves and new features are implemented.
 
 Last updated: June 8, 2025

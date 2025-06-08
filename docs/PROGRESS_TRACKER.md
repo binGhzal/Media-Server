@@ -21,6 +21,7 @@ The project follows a modular implementation strategy with each component develo
 | Configuration setup      | Complete    | High     | Initial configuration directory and files       |
 | Auto-update mechanism    | Not started | Medium   | Regular checks for updates                      |
 | Error handling framework | In progress | High     | Consistent error management across modules      |
+| Main controller & skeleton modules | In progress | High | Main controller and empty module scripts created |
 
 ### 2. Template Creation
 

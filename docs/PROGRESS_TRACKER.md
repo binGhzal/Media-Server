@@ -12,10 +12,10 @@ The project follows a modular implementation strategy with each component develo
 
 | Feature                  | Status      | Priority | Notes                                           |
 | ------------------------ | ----------- | -------- | ----------------------------------------------- |
-| Single command install   | Not started | High     | Curl-based installation script                  |
-| Dependency management    | Not started | High     | Auto-detection and installation of dependencies |
-| Repository handling      | Not started | High     | Clone or update from Git repository             |
-| Root user verification   | Not started | High     | Check for required privileges                   |
+| Single command install   | In progress | High     | Curl-based installation script                  |
+| Dependency management    | In progress | High     | Auto-detection and installation of dependencies |
+| Repository handling      | In progress | High     | Clone or update from Git repository             |
+| Root user verification   | In progress | High     | Check for required privileges                   |
 | OS compatibility check   | Not started | Medium   | Verify running on compatible Linux distro       |
 | Proxmox detection        | Not started | High     | Detect and verify Proxmox environment           |
 | Configuration setup      | Not started | High     | Initial configuration directory and files       |

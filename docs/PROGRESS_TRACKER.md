@@ -161,11 +161,11 @@ The project follows a modular implementation strategy with each component develo
 
 ### Core Template Creation
 
-- [] Basic VM template creation
-- [] Distribution selection
-- [] Hardware specification
-- [] Cloud-init integration
-- [] Tagging and categorization
+- [x] Basic VM template creation
+- [x] Distribution selection
+- [x] Hardware specification
+- [x] Cloud-init integration
+- [x] Tagging and categorization
 
 ### Docker/K8s Integration
 

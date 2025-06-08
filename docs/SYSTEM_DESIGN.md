@@ -640,7 +640,11 @@ cached_download() {
 
 - Main controller script (`main.sh`) and all module skeletons (`template.sh`, `containers.sh`, `terraform.sh`, `config.sh`, `monitoring.sh`, `registry.sh`, `update.sh`) have been created in the `scripts/` directory.
 - The main controller launches a whiptail menu for module selection and will coordinate module execution.
-- Next steps: Implement core logic for template creation and expand module functionality.
+- Implemented core logic for the template creation module (`scripts/template.sh`):
+  - Interactive whiptail UI for template name, distribution/version, hardware, cloud-init, SSH, network, and tags
+  - Proxmox automation for VM/template creation using `qm` and cloud-init
+  - Modular and extensible for future expansion
+- Updated progress tracker to mark core template creation features as complete
 
 This document will be continuously updated as the system evolves and new features are implemented.
 

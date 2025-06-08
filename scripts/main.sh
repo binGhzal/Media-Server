@@ -12,7 +12,7 @@ log() {
 # Welcome message
 whiptail --title "Proxmox Template Creator" --msgbox "Welcome to the Proxmox Template Creator!\n\nSelect a module to begin." 10 60
 
-# List available modules (placeholder)
+# List available modules
 MODULES=(
     "template.sh" "VM Template Creation"
     "containers.sh" "Container Workloads"
@@ -23,15 +23,13 @@ MODULES=(
     "update.sh" "Auto-Update"
 )
 
-CHOICE=$(whiptail --title "Select Module" --menu "Choose a module to run:" 20 60 8 \
-    "template.sh" "VM Template Creation" \
-    "containers.sh" "Container Workloads" \
-    "terraform.sh" "Infrastructure as Code" \
-    "config.sh" "Configuration Management" \
-    "monitoring.sh" "Monitoring Stack" \
-    "registry.sh" "Container Registry" \
-    "update.sh" "Auto-Update" \
-    3>&1 1>&2 2>&3)
+# Build menu arguments from MODULES array
+MENU_ARGS=()
+for ((i=0; i<${#MODULES[@]}; i+=2)); do
+    MENU_ARGS+=("${MODULES[i]}" "${MODULES[i+1]}")
+done
+
+CHOICE=$(whiptail --title "Select Module" --menu "Choose a module to run:" 20 60 8 "${MENU_ARGS[@]}" 3>&1 1>&2 2>&3)
 
 if [ $? -eq 0 ]; then
     log "INFO" "Selected module: $CHOICE"

@@ -10,18 +10,18 @@ The project follows a modular implementation strategy with each component develo
 
 ### 1. Bootstrap System
 
-| Feature                            | Status      | Priority | Notes                                            |
-| ---------------------------------- | ----------- | -------- | ------------------------------------------------ |
-| Single command install             | Complete    | High     | Curl-based installation script                   |
-| Dependency management              | Complete    | High     | Auto-detection and installation of dependencies  |
-| Repository handling                | Complete    | High     | Clone or update from Git repository              |
-| Root user verification             | Complete    | High     | Check for required privileges                    |
-| OS compatibility check             | Complete    | High     | Verify running on compatible Linux distro        |
-| Proxmox detection                  | Complete    | High     | Detect and verify Proxmox environment            |
-| Configuration setup                | Complete    | High     | Initial configuration directory and files        |
-| Auto-update mechanism              | Complete    | Medium   | Regular checks for updates                       |
-| Error handling framework           | Complete    | High     | Consistent error management across modules       |
-| Main controller & skeleton modules | Complete    | High     | Main controller and module scripts implemented   |
+| Feature                            | Status   | Priority | Notes                                           |
+| ---------------------------------- | -------- | -------- | ----------------------------------------------- |
+| Single command install             | Complete | High     | Curl-based installation script                  |
+| Dependency management              | Complete | High     | Auto-detection and installation of dependencies |
+| Repository handling                | Complete | High     | Clone or update from Git repository             |
+| Root user verification             | Complete | High     | Check for required privileges                   |
+| OS compatibility check             | Complete | High     | Verify running on compatible Linux distro       |
+| Proxmox detection                  | Complete | High     | Detect and verify Proxmox environment           |
+| Configuration setup                | Complete | High     | Initial configuration directory and files       |
+| Auto-update mechanism              | Complete | Medium   | Regular checks for updates                      |
+| Error handling framework           | Complete | High     | Consistent error management across modules      |
+| Main controller & skeleton modules | Complete | High     | Main controller and module scripts implemented  |
 
 ### 2. Template Creation
 
@@ -96,13 +96,13 @@ The project follows a modular implementation strategy with each component develo
 
 #### Ansible Integration
 
-| Feature              | Status      | Priority | Notes                            |
-| -------------------- | ----------- | -------- | -------------------------------- |
-| Ansible installation | Not started | High     | Automated Ansible setup          |
-| Playbook discovery   | Not started | High     | Detect available Ansible playbooks |
+| Feature              | Status      | Priority | Notes                                  |
+| -------------------- | ----------- | -------- | -------------------------------------- |
+| Ansible installation | Not started | High     | Automated Ansible setup                |
+| Playbook discovery   | Not started | High     | Detect available Ansible playbooks     |
 | Variable collection  | Not started | High     | Gather and validate required variables |
-| Role management      | Not started | Medium   | Manage Ansible roles             |
-| Execution automation | Not started | Medium   | Streamlined playbook execution   |
+| Role management      | Not started | Medium   | Manage Ansible roles                   |
+| Execution automation | Not started | Medium   | Streamlined playbook execution         |
 
 ## Testing Framework
 

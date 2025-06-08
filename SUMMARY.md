@@ -7,12 +7,10 @@
 ## Development
 
 - [Contributing](CONTRIBUTING.md)
-- [Progress Tracker](PROGRESS_TRACKER.md)
+- [Progress Tracker](docs/PROGRESS_TRACKER.md)
 
 ## Reference
 
-- [Troubleshooting](troubleshooting.md)
-- [FAQ](faq.md)
 - [Changelog](changelog.md)
 
 ## Project Information

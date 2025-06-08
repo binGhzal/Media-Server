@@ -81,20 +81,20 @@ This document tracks the progress of implementing features, fiing issues, and pl
 
 ### Implementation Progress
 
-| Feature                | Status      | Notes                                                  |
-| ---------------------- | ----------- | ------------------------------------------------------ |
-| Core template creation | incomplete | Support for 50+ distributions                          |
-| Package selection      | incomplete | 150+ packages in 16 categories                         |
-| Network configuration  | incomplete | Static/DHCP/manual VLAN/tagging support                |
-| Storage configuration  | incomplete | Full whiptail menus implemented                        |
-| UI Interface           | incomplete | Whiptail interface for all settings and workflows      |
-| CLI Interface          | incomplete | Flags for batch, Docker, and Kubernetes enabled        |
+| Feature                | Status     | Notes                                                 |
+| ---------------------- | ---------- | ----------------------------------------------------- |
+| Core template creation | incomplete | Support for 50+ distributions                         |
+| Package selection      | incomplete | 150+ packages in 16 categories                        |
+| Network configuration  | incomplete | Static/DHCP/manual VLAN/tagging support               |
+| Storage configuration  | incomplete | Full whiptail menus implemented                       |
+| UI Interface           | incomplete | Whiptail interface for all settings and workflows     |
+| CLI Interface          | incomplete | Flags for batch, Docker, and Kubernetes enabled       |
 | Ansible Integration    | incomplete | Full integration with playbook selection and eecution |
-| Terraform Integration  | incomplete | Modular architecture with variable collection          |
+| Terraform Integration  | incomplete | Modular architecture with variable collection         |
 | Docker/K8s Integration | incomplete | Complete provisioning logic with LC containers        |
-| Documentation          | incomplete | GitBook structure with comprehensive guides            |
-| Testing                | incomplete | Comprehensive test suite with 21+ test cases           |
-| CI Pipeline            | incomplete | GitHub Actions with linting, testing, and security     |
+| Documentation          | incomplete | GitBook structure with comprehensive guides           |
+| Testing                | incomplete | Comprehensive test suite with 21+ test cases          |
+| CI Pipeline            | incomplete | GitHub Actions with linting, testing, and security    |
 
 ## Detailed Feature Implementation Status
 

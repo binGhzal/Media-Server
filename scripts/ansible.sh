@@ -84,10 +84,8 @@ EOF
 done
 
 # Configuration
-ANSIBLE_DIR="/opt/ansible"
 ANSIBLE_PLAYBOOKS_DIR="/opt/ansible/playbooks"
 ANSIBLE_ROLES_DIR="/opt/ansible/roles"
-ANSIBLE_INVENTORY_DIR="/opt/ansible/inventory"
 
 # Function to check if Ansible is installed
 check_ansible() {

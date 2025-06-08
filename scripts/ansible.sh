@@ -615,8 +615,57 @@ main() {
                     ;;
                 5)
                     # Validate playbook
-                    log "INFO" "Validate playbook functionality..."
-                    whiptail --title "Info" --msgbox "Validation functionality - would validate playbook syntax" 10 60
+                    log "INFO" "Starting playbook validation workflow..."
+                    
+                    # Get available playbooks
+                    if ! playbooks=$(discover_playbooks); then
+                        whiptail --title "Error" --msgbox "No Ansible playbooks found." 10 60
+                        continue
+                    fi
+                    
+                    # Convert playbooks to menu format
+                    local menu_items=()
+                    local i=1
+                    while IFS= read -r playbook; do
+                        menu_items+=("$i" "$playbook")
+                        ((i++))
+                    done <<< "$playbooks"
+                    
+                    # Let user select playbook
+                    local selected_index
+                    selected_index=$(whiptail --title "Select Playbook for Validation" \
+                        --menu "Choose a playbook to validate:" 20 70 10 \
+                        "${menu_items[@]}" \
+                        3>&1 1>&2 2>&3)
+                    
+                    if [ $? -eq 0 ]; then
+                        local selected_playbook
+                        selected_playbook=$(echo "$playbooks" | sed -n "${selected_index}p")
+                        
+                        # Find playbook path
+                        local playbook_path=""
+                        if [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yml" ]; then
+                            playbook_path="$SCRIPT_DIR/../ansible/$selected_playbook.yml"
+                        elif [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yaml" ]; then
+                            playbook_path="$SCRIPT_DIR/../ansible/$selected_playbook.yaml"
+                        elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yml" ]; then
+                            playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yml"
+                        elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml" ]; then
+                            playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml"
+                        fi
+                        
+                        if [ -n "$playbook_path" ]; then
+                            log "INFO" "Validating playbook: $selected_playbook at $playbook_path"
+                            
+                            if validate_playbook "$playbook_path"; then
+                                whiptail --title "Validation Success" --msgbox "Playbook validation successful!\n\nPlaybook: $selected_playbook\nSyntax: Valid\nStructure: Valid" 12 70
+                            else
+                                whiptail --title "Validation Failed" --msgbox "Playbook validation failed for: $selected_playbook\n\nCheck logs for detailed error information." 12 70
+                            fi
+                        else
+                            whiptail --title "Error" --msgbox "Playbook file not found." 10 60
+                        fi
+                    fi
                     ;;
                 6)
                     # Install role from Galaxy
@@ -634,8 +683,44 @@ main() {
                     ;;
                 7)
                     # Show configuration
-                    log "INFO" "Showing Ansible configuration..."
-                    whiptail --title "Info" --msgbox "Configuration functionality - would show ansible config" 10 60
+                    log "INFO" "Displaying Ansible configuration..."
+                    
+                    # Collect configuration information
+                    local config_info=""
+                    if [ "$TEST_MODE" ]; then
+                        config_info="[TEST MODE] Ansible Configuration Information\n\n"
+                        config_info+="Ansible Version: 2.x.x (simulated)\n"
+                        config_info+="Config File: /etc/ansible/ansible.cfg\n"
+                        config_info+="Module Path: /usr/share/ansible\n"
+                        config_info+="Collections: community.general, ansible.posix\n\n"
+                        config_info+="Project Ansible Directory: $SCRIPT_DIR/../ansible\n"
+                        config_info+="System Playbooks Directory: $ANSIBLE_PLAYBOOKS_DIR\n"
+                        config_info+="System Roles Directory: $ANSIBLE_ROLES_DIR"
+                    else
+                        # Get real configuration information
+                        local temp_file=$(mktemp)
+                        {
+                            echo "=== ANSIBLE VERSION ==="
+                            ansible --version 2>/dev/null || echo "Ansible not installed"
+                            echo ""
+                            echo "=== ANSIBLE CONFIGURATION ==="
+                            ansible-config dump 2>/dev/null | head -20 || echo "No configuration available"
+                            echo ""
+                            echo "=== INSTALLED COLLECTIONS ==="
+                            ansible-galaxy collection list 2>/dev/null | head -10 || echo "No collections found"
+                            echo ""
+                            echo "=== PROJECT DIRECTORIES ==="
+                            echo "Project Ansible Directory: $SCRIPT_DIR/../ansible"
+                            echo "System Playbooks Directory: $ANSIBLE_PLAYBOOKS_DIR"
+                            echo "System Roles Directory: $ANSIBLE_ROLES_DIR"
+                        } > "$temp_file"
+                        
+                        config_info=$(cat "$temp_file")
+                        rm -f "$temp_file"
+                    fi
+                    
+                    # Display in scrollable dialog
+                    whiptail --title "Ansible Configuration" --scrolltext --msgbox "$config_info" 25 100
                     ;;
                 8)
                     # Create sample playbook

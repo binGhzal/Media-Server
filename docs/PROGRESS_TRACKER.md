@@ -1,4 +1,4 @@
-# Proxmox Template Creator - Progress Tracker
+dv # Proxmox Template Creator - Progress Tracker
 
 This document tracks the progress of implementing features, fixing issues, and planning future enhancements for the Proxmox Template Creator project.
 
@@ -58,21 +58,21 @@ The project follows a modular implementation strategy with each component develo
 
 ### 3. Main Controller
 
-| Feature                  | Status       | Priority | Notes                                 |
-| ------------------------ | ------------ | -------- | ------------------------------------- |
-| Main menu system         | Complete     | High     | User-friendly navigation working              |
-| Module selection         | Complete     | High     | Select modules to run - working               |
-| Module execution         | Complete     | High     | Run selected modules - working                |
-| Module management        | Complete     | High     | Add, remove, and update modules working       |
-| User input handling      | Complete     | High     | Collect user inputs for modules working       |
-| Error handling           | Complete     | High     | Consistent error management working           |
-| Logging system           | Complete     | Medium   | Log module execution and errors working       |
-| Configuration management | Complete     | Medium   | Manage configuration files working            |
-| Dependency management    | Complete     | High     | Ensure all dependencies are installed working |
-| Module discovery         | Complete     | Medium   | Detect available modules working              |
-| Module documentation     | Complete     | Low      | Generate documentation for modules    |
-| Module updates           | Complete     | Medium   | Check for and apply module updates    |
-| batch execution          | Complete     | Medium   | Run multiple modules in sequence      |
+| Feature                  | Status   | Priority | Notes                                         |
+| ------------------------ | -------- | -------- | --------------------------------------------- |
+| Main menu system         | Complete | High     | User-friendly navigation working              |
+| Module selection         | Complete | High     | Select modules to run - working               |
+| Module execution         | Complete | High     | Run selected modules - working                |
+| Module management        | Complete | High     | Add, remove, and update modules working       |
+| User input handling      | Complete | High     | Collect user inputs for modules working       |
+| Error handling           | Complete | High     | Consistent error management working           |
+| Logging system           | Complete | Medium   | Log module execution and errors working       |
+| Configuration management | Complete | Medium   | Manage configuration files working            |
+| Dependency management    | Complete | High     | Ensure all dependencies are installed working |
+| Module discovery         | Complete | Medium   | Detect available modules working              |
+| Module documentation     | Complete | Low      | Generate documentation for modules            |
+| Module updates           | Complete | Medium   | Check for and apply module updates            |
+| batch execution          | Complete | Medium   | Run multiple modules in sequence              |
 
 ### 4. Container Workloads
 
@@ -92,30 +92,30 @@ The project follows a modular implementation strategy with each component develo
 
 #### Kubernetes Integration
 
-| Feature                     | Status       | Priority | Notes                                |
-| --------------------------- | ------------ | -------- | ------------------------------------ |
-| K8s/k3s cluster setup       | Complete     | High     | Basic Kubernetes cluster deployment  |
-| Multi-node support          | Complete     | High     | Master and worker node configuration |
-| CNI plugins integration     | Complete     | Medium   | Flannel, Calico, Weave, Canal networking |
-| Ingress controller setup    | Not started  | Medium   | NGINX, Traefik support               |
-| Add-ons deployment          | Not started  | Medium   | cert-manager, monitoring, dashboard  |
-| Auto-joining mechanism      | Complete     | Medium   | Automatic cluster formation          |
-| Helm support                | Complete     | Medium   | Package management for K8s           |
-| K8s/k3s resource management | Not started  | Medium   | Deployments, services, pods          |
-| K8s/k3s monitoring          | Not started  | Medium   | Basic health checks and metrics      |
+| Feature                     | Status      | Priority | Notes                                    |
+| --------------------------- | ----------- | -------- | ---------------------------------------- |
+| K8s/k3s cluster setup       | Complete    | High     | Basic Kubernetes cluster deployment      |
+| Multi-node support          | Complete    | High     | Master and worker node configuration     |
+| CNI plugins integration     | Complete    | Medium   | Flannel, Calico, Weave, Canal networking |
+| Ingress controller setup    | Not started | Medium   | NGINX, Traefik support                   |
+| Add-ons deployment          | Not started | Medium   | cert-manager, monitoring, dashboard      |
+| Auto-joining mechanism      | Complete    | Medium   | Automatic cluster formation              |
+| Helm support                | Complete    | Medium   | Package management for K8s               |
+| K8s/k3s resource management | Not started | Medium   | Deployments, services, pods              |
+| K8s/k3s monitoring          | Not started | Medium   | Basic health checks and metrics          |
 
 ### 5. Infrastructure Components
 
 #### Monitoring Stack
 
-| Feature              | Status   | Priority | Notes                                |
-| -------------------- | -------- | -------- | ------------------------------------ |
-| Prometheus setup     | Complete | High     | Metrics collection and storage       |
-| Grafana deployment   | Complete | High     | Visualization dashboards             |
-| Node Exporter        | Complete | High     | System metrics collection            |
-| cAdvisor integration | Complete | Medium   | Container metrics collection         |
+| Feature              | Status      | Priority | Notes                                |
+| -------------------- | ----------- | -------- | ------------------------------------ |
+| Prometheus setup     | Complete    | High     | Metrics collection and storage       |
+| Grafana deployment   | Complete    | High     | Visualization dashboards             |
+| Node Exporter        | Complete    | High     | System metrics collection            |
+| cAdvisor integration | Complete    | Medium   | Container metrics collection         |
 | Alertmanager setup   | Not started | Medium   | Alert routing and notifications      |
-| Default dashboards   | Complete | Medium   | Pre-configured monitoring dashboards |
+| Default dashboards   | Complete    | Medium   | Pre-configured monitoring dashboards |
 | Monitoring alerts    | Not started | Medium   | Basic alert rules for monitoring     |
 
 #### Container Registry

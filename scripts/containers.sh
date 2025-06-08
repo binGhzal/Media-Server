@@ -33,18 +33,19 @@ log() {
     echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*${reset}"
 }
 
-# Error handling function
+# Error handling function - Fixed unreachable function issue
 handle_error() {
-    local exit_code=$?
-    log "ERROR" "An error occurred on line $1 with exit code $exit_code"
+    local exit_code="$1"
+    local line_no="$2"
+    log "ERROR" "An error occurred on line $line_no with exit code $exit_code"
     if [ -t 0 ]; then  # If running interactively
         whiptail --title "Error" --msgbox "An error occurred. Check the logs for details." 10 60 3>&1 1>&2 2>&3
     fi
-    exit $exit_code
+    exit "$exit_code"
 }
 
-# Set up error trap
-trap 'handle_error $LINENO' ERR
+# Set up error trap - Fixed to pass correct parameters
+trap 'handle_error $? $LINENO' ERR
 
 # Parse command line arguments
 TEST_MODE=""

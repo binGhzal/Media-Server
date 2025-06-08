@@ -131,7 +131,8 @@ fi
 
 # --- Step 1: Template Name ---
 template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ] || [ -z "$template_name" ]; then
+template_result=$?
+if [ $template_result -ne 0 ] || [ -z "$template_name" ]; then
     log "INFO" "User cancelled or empty template name."
     exit 0
 fi
@@ -143,7 +144,8 @@ for entry in "${DISTRO_LIST[@]}"; do
     distro_menu+=("$val" "$desc")
 done
 distro=$(whiptail --title "Select Distribution" --menu "Choose a Linux distribution:" 20 60 10 "${distro_menu[@]}" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ] || [ -z "$distro" ]; then
+distro_result=$?
+if [ $distro_result -ne 0 ] || [ -z "$distro" ]; then
     log "INFO" "User cancelled at distro selection."
     exit 0
 fi
@@ -196,26 +198,33 @@ case "$distro" in
         version="latest"
         ;;
 esac
-if [ $? -ne 0 ] || [ -z "$version" ]; then
+version_result=$?
+if [ $version_result -ne 0 ] || [ -z "$version" ]; then
     log "INFO" "User cancelled at version selection."
     exit 0
 fi
 
 # --- Step 4: Hardware Specification ---
 cpu=$(whiptail --title "CPU Cores" --inputbox "Enter number of CPU cores:" 10 60 "2" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ] || [ -z "$cpu" ]; then exit 0; fi
+cpu_result=$?
+if [ $cpu_result -ne 0 ] || [ -z "$cpu" ]; then exit 0; fi
+
 ram=$(whiptail --title "RAM (MB)" --inputbox "Enter RAM in MB:" 10 60 "2048" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ] || [ -z "$ram" ]; then exit 0; fi
+ram_result=$?
+if [ $ram_result -ne 0 ] || [ -z "$ram" ]; then exit 0; fi
+
 storage=$(whiptail --title "Disk Size (GB)" --inputbox "Enter disk size in GB:" 10 60 "16" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ] || [ -z "$storage" ]; then exit 0; fi
+storage_result=$?
+if [ $storage_result -ne 0 ] || [ -z "$storage" ]; then exit 0; fi
 
 # --- Step 5: Cloud-Init User/SSH Config ---
 use_cloudinit="no"
 if supports_cloudinit "$distro"; then
-    use_cloudinit=$(whiptail --title "Cloud-Init" --yesno "Enable cloud-init for this template?" 10 60 3>&1 1>&2 2>&3 && echo yes || echo no)
-    if [ "$use_cloudinit" = "yes" ]; then
+    if whiptail --title "Cloud-Init" --yesno "Enable cloud-init for this template?" 10 60 3>&1 1>&2 2>&3; then
+        use_cloudinit="yes"
         ci_user=$(whiptail --title "Cloud-Init User" --inputbox "Enter default username:" 10 60 "clouduser" 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ]; then exit 0; fi
+        ci_user_result=$?
+        if [ $ci_user_result -ne 0 ]; then exit 0; fi
         
         # Default to SSH key in ~/.ssh/id_rsa.pub if exists
         default_key=""
@@ -224,20 +233,27 @@ if supports_cloudinit "$distro"; then
         fi
         
         ci_sshkey=$(whiptail --title "SSH Public Key" --inputbox "Paste SSH public key for user $ci_user:" 10 60 "$default_key" 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ]; then exit 0; fi
+        ci_sshkey_result=$?
+        if [ $ci_sshkey_result -ne 0 ]; then exit 0; fi
         
         ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
             "dhcp" "Automatic IP configuration (DHCP)" \
             "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ]; then exit 0; fi
+        ci_network_result=$?
+        if [ $ci_network_result -ne 0 ]; then exit 0; fi
         
         if [ "$ci_network" = "static" ]; then
             ci_ip=$(whiptail --title "Static IP" --inputbox "Enter IP address (CIDR format, e.g., 192.168.1.100/24):" 10 60 "" 3>&1 1>&2 2>&3)
-            if [ $? -ne 0 ]; then exit 0; fi
+            ci_ip_result=$?
+            if [ $ci_ip_result -ne 0 ]; then exit 0; fi
+            
             ci_gw=$(whiptail --title "Gateway" --inputbox "Enter default gateway:" 10 60 "" 3>&1 1>&2 2>&3)
-            if [ $? -ne 0 ]; then exit 0; fi
+            ci_gw_result=$?
+            if [ $ci_gw_result -ne 0 ]; then exit 0; fi
+            
             ci_nameserver=$(whiptail --title "DNS" --inputbox "Enter DNS server(s) (comma-separated):" 10 60 "1.1.1.1,8.8.8.8" 3>&1 1>&2 2>&3)
-            if [ $? -ne 0 ]; then exit 0; fi
+            ci_nameserver_result=$?
+            if [ $ci_nameserver_result -ne 0 ]; then exit 0; fi
             
             ci_network="ip=$ci_ip,gw=$ci_gw,nameserver=$ci_nameserver"
         fi
@@ -248,15 +264,16 @@ fi
 
 # --- Step 6: Tagging/Categorization ---
 tags=$(whiptail --title "Tags" --inputbox "Enter tags (comma-separated):" 10 60 "" 3>&1 1>&2 2>&3)
-if [ $? -ne 0 ]; then exit 0; fi
+tags_result=$?
+if [ $tags_result -ne 0 ]; then exit 0; fi
 
 # --- Step 7: Confirm and Create ---
 summary="Template: $template_name\nDistro: $distro $version\nCPU: $cpu\nRAM: $ram MB\nDisk: $storage GB\nCloud-Init: $use_cloudinit\nTags: $tags"
 if [ "$use_cloudinit" = "yes" ]; then
     summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}...\nNetwork: $ci_network"
 fi
-whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70
-if [ $? -ne 0 ]; then
+
+if ! whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70; then
     log "INFO" "User cancelled at confirmation."
     exit 0
 fi
@@ -276,7 +293,7 @@ default_storage="local-lvm"  # Use a safe default
 if ! echo "$storage_pools" | grep -q "^local-lvm$"; then
     # Try to find another storage that supports disk images
     for pool in $storage_pools; do
-        if pvesh get /storage/$pool --output-format=json | jq -r '.content' | grep -q "images"; then
+        if pvesh get /storage/"$pool" --output-format=json | jq -r '.content' | grep -q "images"; then
             default_storage="$pool"
             break
         fi
@@ -324,19 +341,19 @@ fi
 log "INFO" "Creating VM $vmid ($template_name)..."
 whiptail --title "Creating VM" --infobox "Creating VM $vmid ($template_name)..." 10 60
 
-if ! qm create $vmid --name "$template_name" --memory "$ram" --cores "$cpu" --net0 "virtio,bridge=vmbr0"; then
+if ! qm create "$vmid" --name "$template_name" --memory "$ram" --cores "$cpu" --net0 "virtio,bridge=vmbr0"; then
     log "ERROR" "Failed to create VM $vmid"
     whiptail --title "Error" --msgbox "Failed to create VM $vmid. Check logs for details." 10 60
     exit 1
 fi
 
 # Set additional VM parameters
-qm set $vmid --scsihw virtio-scsi-pci
-qm set $vmid --ostype l26
+qm set "$vmid" --scsihw virtio-scsi-pci
+qm set "$vmid" --ostype l26
 
 # Import disk (cloud image)
 log "INFO" "Importing disk image..."
-if ! qm importdisk $vmid "$iso_path" "$default_storage"; then
+if ! qm importdisk "$vmid" "$iso_path" "$default_storage"; then
     log "ERROR" "Failed to import disk from $iso_path to $default_storage"
     whiptail --title "Error" --msgbox "Failed to import disk. Check storage configuration." 10 60
     exit 1
@@ -344,43 +361,47 @@ fi
 
 # Attach disk
 log "INFO" "Attaching disk to VM..."
-qm set $vmid --scsi0 "$default_storage:vm-$vmid-disk-0"
-qm set $vmid --boot order=scsi0
+qm set "$vmid" --scsi0 "$default_storage:vm-$vmid-disk-0"
+qm set "$vmid" --boot order=scsi0
 
 # Resize disk if needed (default size of cloud images is often small)
-qm resize $vmid scsi0 "${storage}G"
+qm resize "$vmid" scsi0 "${storage}G"
 
 # Add cloud-init drive if selected
 if [ "$use_cloudinit" = "yes" ]; then
     log "INFO" "Configuring cloud-init..."
-    qm set $vmid --ide2 "$default_storage:cloudinit"
-    qm set $vmid --ciuser "$ci_user"
+    qm set "$vmid" --ide2 "$default_storage:cloudinit"
+    qm set "$vmid" --ciuser "$ci_user"
     
     # Only set SSH key if provided
     if [ -n "$ci_sshkey" ]; then
-        qm set $vmid --sshkey <(echo "$ci_sshkey")
+        # Fix for SSH key configuration - write key to a temporary file first
+        SSH_KEY_FILE=$(mktemp)
+        echo "$ci_sshkey" > "$SSH_KEY_FILE"
+        qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
+        rm -f "$SSH_KEY_FILE"
     fi
     
     # Set network configuration
     if [ "$ci_network" = "dhcp" ]; then
-        qm set $vmid --ipconfig0 "ip=dhcp"
+        qm set "$vmid" --ipconfig0 "ip=dhcp"
     else
-        qm set $vmid --ipconfig0 "$ci_network"
+        qm set "$vmid" --ipconfig0 "$ci_network"
     fi
 fi
 
 # Add tags if provided
 if [ -n "$tags" ]; then
-    qm set $vmid --tags "$tags"
+    qm set "$vmid" --tags "$tags"
 fi
 
 # Set VM description with creation info
 creation_info="Created: $(date '+%Y-%m-%d %H:%M:%S')\nDistribution: $distro $version\nCloud-Init: $use_cloudinit"
-qm set $vmid --description "$creation_info"
+qm set "$vmid" --description "$creation_info"
 
 # Convert to template
 log "INFO" "Converting VM $vmid to template..."
-qm template $vmid
+qm template "$vmid"
 
 log "INFO" "Template $template_name ($vmid) created successfully."
 whiptail --title "Success" --msgbox "Template $template_name ($vmid) created successfully!" 10 60

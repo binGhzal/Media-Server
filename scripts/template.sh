@@ -101,46 +101,56 @@ validate_template_config() {
     local errors=()
     
     # Validate template name
-    if [[ ! "$template_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        errors+=("Template name contains invalid characters. Use only letters, numbers, hyphens, and underscores.")
+    if [ -z "$template_name" ]; then
+        errors+=("Template name is required")
+    elif [[ ! "$template_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        errors+=("Template name contains invalid characters (only alphanumeric, underscore, and dash allowed)")
     fi
     
-    # Validate CPU cores
-    if ! [[ "$cpu" =~ ^[0-9]+$ ]] || [ "$cpu" -lt 1 ] || [ "$cpu" -gt 32 ]; then
-        errors+=("CPU cores must be a number between 1 and 32.")
+    # Validate distro selection
+    if [ -z "$distro" ]; then
+        errors+=("Distribution selection is required")
     fi
     
-    # Validate RAM
+    # Validate hardware specifications
+    if ! [[ "$cpu" =~ ^[0-9]+$ ]] || [ "$cpu" -lt 1 ] || [ "$cpu" -gt 128 ]; then
+        errors+=("CPU cores must be a number between 1 and 128")
+    fi
+    
     if ! [[ "$ram" =~ ^[0-9]+$ ]] || [ "$ram" -lt 512 ] || [ "$ram" -gt 131072 ]; then
-        errors+=("RAM must be a number between 512 MB and 128 GB.")
+        errors+=("RAM must be a number between 512 MB and 128 GB")
     fi
     
-    # Validate storage
     if ! [[ "$storage" =~ ^[0-9]+$ ]] || [ "$storage" -lt 8 ] || [ "$storage" -gt 2048 ]; then
-        errors+=("Storage must be a number between 8 GB and 2048 GB.")
+        errors+=("Storage must be a number between 8 GB and 2048 GB")
     fi
     
-    # Validate cloud-init configuration
+    # Validate cloud-init configuration if enabled
     if [ "$use_cloudinit" = "yes" ]; then
         if [ -z "$ci_user" ]; then
-            errors+=("Cloud-init user cannot be empty.")
+            errors+=("Cloud-init user is required when cloud-init is enabled")
+        elif [[ ! "$ci_user" =~ ^[a-z][a-z0-9_-]*$ ]]; then
+            errors+=("Cloud-init username must start with a letter and contain only lowercase letters, numbers, underscore, and dash")
         fi
         
-        # Validate static IP configuration if provided
-        if [ "$ci_network" != "dhcp" ] && [[ "$ci_network" =~ ip= ]]; then
-            if ! echo "$ci_network" | grep -q "gw="; then
-                errors+=("Static IP configuration requires a gateway.")
+        # Validate static IP configuration
+        if [ "$ci_network" != "dhcp" ] && [[ "$ci_network" == *"ip="* ]]; then
+            local ip_part
+            ip_part=$(echo "$ci_network" | grep -o 'ip=[^,]*' | cut -d'=' -f2)
+            if [ -n "$ip_part" ] && ! [[ "$ip_part" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+                errors+=("Invalid IP address format (expected CIDR notation like 192.168.1.100/24)")
             fi
         fi
     fi
     
-    # Display errors if any
+    # Check if any errors were found
     if [ ${#errors[@]} -gt 0 ]; then
-        error_message="Configuration validation failed:\n\n"
+        local error_msg="Configuration errors found:\n\n"
         for error in "${errors[@]}"; do
-            error_message+="• $error\n"
+            error_msg+="• $error\n"
         done
-        whiptail --title "Validation Errors" --msgbox "$error_message" 20 70
+        
+        whiptail --title "Configuration Errors" --msgbox "$error_msg\nPlease fix these errors and try again." 20 70
         return 1
     fi
     
@@ -289,10 +299,12 @@ if supports_cloudinit "$distro"; then
         
         # Validate SSH key format
         if [ -n "$ci_sshkey" ]; then
-            if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ' >/dev/null; then
+            if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) [A-Za-z0-9+/]' >/dev/null; then
                 if ! whiptail --title "Invalid SSH Key" --yesno "The SSH key format appears invalid. Continue anyway?" 10 60; then
                     exit 0
                 fi
+            else
+                log "INFO" "SSH key format validation passed"
             fi
         fi
         
@@ -498,10 +510,12 @@ if [ "$use_cloudinit" = "yes" ]; then
     
     # Only set SSH key if provided
     if [ -n "$ci_sshkey" ]; then
-        # Fix for SSH key configuration - use direct parameter instead of file
-        # Escape any special characters in the SSH key
-        escaped_key=$(printf '%s\n' "$ci_sshkey" | sed 's/[[\.*^$()+?{|]/\\&/g')
-        qm set "$vmid" --sshkey "$escaped_key"
+        # Fix for SSH key configuration - write to temporary file for proper handling
+        SSH_KEY_FILE=$(mktemp)
+        echo "$ci_sshkey" > "$SSH_KEY_FILE"
+        qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
+        rm -f "$SSH_KEY_FILE"
+        log "INFO" "SSH key configured for user $ci_user"
     fi
     
     # Set network configuration

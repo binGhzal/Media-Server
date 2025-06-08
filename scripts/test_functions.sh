@@ -7,7 +7,7 @@ set -e
 TESTS_PASSED=0
 TESTS_FAILED=0
 LOG_FILE="/tmp/proxmox_template_creator_test.log"
-> "$LOG_FILE"
+true > "$LOG_FILE"
 
 log() {
     local level="$1"; shift

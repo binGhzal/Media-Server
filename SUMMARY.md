@@ -8,6 +8,7 @@
 ## Implementation
 
 - [Progress Tracker](docs/PROGRESS_TRACKER.md)
+- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Architecture](docs/SYSTEM_DESIGN.md#architecture)
 - [Bootstrap Process](docs/SYSTEM_DESIGN.md#bootstrap-process)
 - [Module Communication](docs/SYSTEM_DESIGN.md#module-communication)

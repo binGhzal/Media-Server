@@ -75,7 +75,7 @@ assert_dir_exists() {
 }
 
 run_bootstrap_tests() {
-    log "INFO" "Testing bootstrap.sh functions..."
+    log_info "Testing bootstrap.sh functions..."
     source "$(dirname "$0")/bootstrap.sh"
 
     # Test core functions
@@ -97,7 +97,7 @@ run_bootstrap_tests() {
 }
 
 run_template_tests() {
-    log "INFO" "Testing template.sh (module functionality)..."
+    log_info "Testing template.sh (module functionality)..."
     
     # Test with --test flag to skip actual VM creation
     if bash "$(dirname "$0")/template.sh" --test 2>&1 | grep -q "Template Name"; then
@@ -116,7 +116,7 @@ run_template_tests() {
 }
 
 run_container_tests() {
-    log "INFO" "Testing containers.sh (module functionality)..."
+    log_info "Testing containers.sh (module functionality)..."
     
     # Basic module test
     assert_output "Container Workloads" bash "$(dirname "$0")/containers.sh"
@@ -128,7 +128,7 @@ run_container_tests() {
 }
 
 run_main_tests() {
-    log "INFO" "Testing main.sh (menu logic)..."
+    log_info "Testing main.sh (menu logic)..."
     if bash "$(dirname "$0")/main.sh" --test 2>&1 | grep -q "Welcome to the Proxmox Template Creator"; then
         log "PASS" "main.sh launches and displays welcome message"
         ((TESTS_PASSED++))
@@ -143,7 +143,7 @@ run_main_tests() {
 
 # --- Test skeleton modules ---
 run_skeleton_tests() {
-    log "INFO" "Testing skeleton modules..."
+    log_info "Testing skeleton modules..."
     for mod in config.sh containers.sh monitoring.sh registry.sh terraform.sh update.sh; do
         assert_output "to be implemented" bash "$(dirname "$0")/$mod"
         assert_success bash "$(dirname "$0")/$mod"
@@ -158,7 +158,7 @@ run_container_tests
 run_skeleton_tests
 
 # --- Summary ---
-log "INFO" "Testing complete. Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
+log_info "Testing complete. Passed: $TESTS_PASSED, Failed: $TESTS_FAILED"
 if [ $TESTS_FAILED -eq 0 ]; then
     echo "All tests passed!"
     exit 0

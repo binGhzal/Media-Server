@@ -37,7 +37,7 @@ log() {
 handle_error() {
     local exit_code="$1"
     local line_no="$2"
-    log "ERROR" "An error occurred on line $line_no with exit code $exit_code"
+    log_error "An error occurred on line $line_no with exit code $exit_code"
     if [ -t 0 ]; then  # If running interactively
         whiptail --title "Error" --msgbox "An error occurred. Check the logs for details." 10 60 3>&1 1>&2 2>&3
     fi
@@ -76,7 +76,7 @@ EOF
             exit 0
             ;;
         *)
-            log "ERROR" "Unknown option: $1"
+            log_error "Unknown option: $1"
             echo "Try '$(basename "$0") --help' for more information."
             exit 1
             ;;
@@ -92,20 +92,20 @@ check_ansible() {
     if command -v ansible >/dev/null 2>&1; then
         local version
         version=$(ansible --version | head -n1 | awk '{print $3}')
-        log "INFO" "Ansible is installed (version: $version)"
+        log_info "Ansible is installed (version: $version)"
         return 0
     else
-        log "INFO" "Ansible is not installed"
+        log_info "Ansible is not installed"
         return 1
     fi
 }
 
 # Function to install Ansible
 install_ansible() {
-    log "INFO" "Installing Ansible..."
+    log_info "Installing Ansible..."
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would install Ansible"
+        log_info "[TEST MODE] Would install Ansible"
         return 0
     fi
     
@@ -125,29 +125,29 @@ install_ansible() {
     
     # Verify installation
     if ansible --version >/dev/null 2>&1; then
-        log "INFO" "Ansible installed successfully"
+        log_info "Ansible installed successfully"
         return 0
     else
-        log "ERROR" "Ansible installation failed"
+        log_error "Ansible installation failed"
         return 1
     fi
 }
 
 # Function to discover available Ansible playbooks
 discover_playbooks() {
-    log "INFO" "Discovering available Ansible playbooks..."
+    log_info "Discovering available Ansible playbooks..."
     
     local playbooks_found=()
     
     # Check for playbooks in the project directory
     if [ -d "$SCRIPT_DIR/../ansible" ]; then
-        log "INFO" "Found project ansible directory"
+        log_info "Found project ansible directory"
         for playbook_file in "$SCRIPT_DIR/../ansible"/*.yml "$SCRIPT_DIR/../ansible"/*.yaml; do
             if [ -f "$playbook_file" ]; then
                 local playbook_name
                 playbook_name=$(basename "$playbook_file" | sed 's/\.(yml|yaml)$//')
                 playbooks_found+=("$playbook_name")
-                log "INFO" "Found playbook: $playbook_name"
+                log_info "Found playbook: $playbook_name"
             fi
         done
     fi
@@ -159,13 +159,13 @@ discover_playbooks() {
                 local playbook_name
                 playbook_name=$(basename "$playbook_file" | sed 's/\.(yml|yaml)$//')
                 playbooks_found+=("$playbook_name")
-                log "INFO" "Found system playbook: $playbook_name"
+                log_info "Found system playbook: $playbook_name"
             fi
         done
     fi
     
     if [ ${#playbooks_found[@]} -eq 0 ]; then
-        log "WARN" "No Ansible playbooks found"
+        log_warn "No Ansible playbooks found"
         return 1
     fi
     
@@ -175,19 +175,19 @@ discover_playbooks() {
 
 # Function to discover available Ansible roles
 discover_roles() {
-    log "INFO" "Discovering available Ansible roles..."
+    log_info "Discovering available Ansible roles..."
     
     local roles_found=()
     
     # Check for roles in the project directory
     if [ -d "$SCRIPT_DIR/../ansible/roles" ]; then
-        log "INFO" "Found project ansible roles directory"
+        log_info "Found project ansible roles directory"
         for role_dir in "$SCRIPT_DIR/../ansible/roles"/*; do
             if [ -d "$role_dir" ] && [ -f "$role_dir/tasks/main.yml" ]; then
                 local role_name
                 role_name=$(basename "$role_dir")
                 roles_found+=("$role_name")
-                log "INFO" "Found role: $role_name"
+                log_info "Found role: $role_name"
             fi
         done
     fi
@@ -199,13 +199,13 @@ discover_roles() {
                 local role_name
                 role_name=$(basename "$role_dir")
                 roles_found+=("$role_name")
-                log "INFO" "Found system role: $role_name"
+                log_info "Found system role: $role_name"
             fi
         done
     fi
     
     if [ ${#roles_found[@]} -eq 0 ]; then
-        log "WARN" "No Ansible roles found"
+        log_warn "No Ansible roles found"
         return 1
     fi
     
@@ -217,7 +217,7 @@ discover_roles() {
 collect_variables() {
     local playbook_path="$1"
     
-    log "INFO" "Collecting variables for playbook: $(basename "$playbook_path")"
+    log_info "Collecting variables for playbook: $(basename "$playbook_path")"
     
     # Check for group_vars and host_vars
     local playbook_dir
@@ -226,14 +226,14 @@ collect_variables() {
     local vars_file="$playbook_dir/vars.yml"
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would collect variables for playbook"
+        log_info "[TEST MODE] Would collect variables for playbook"
         return 0
     fi
     
     # Create basic inventory if it doesn't exist
     local inventory_file="$playbook_dir/inventory.ini"
     if [ ! -f "$inventory_file" ]; then
-        log "INFO" "Creating basic inventory file: $inventory_file"
+        log_info "Creating basic inventory file: $inventory_file"
         cat > "$inventory_file" << EOF
 [proxmox_hosts]
 # Add your Proxmox hosts here
@@ -260,7 +260,7 @@ EOF
                 host=$(echo "$host" | xargs)  # Trim whitespace
                 echo "$host" >> "$inventory_file"
             done
-            log "INFO" "Added hosts to inventory: $target_hosts"
+            log_info "Added hosts to inventory: $target_hosts"
         fi
         
         # Ask for ansible user
@@ -269,7 +269,7 @@ EOF
         
         if [ $? -eq 0 ] && [ -n "$ansible_user" ]; then
             echo "ansible_user=$ansible_user" >> "$vars_file"
-            log "INFO" "Set ansible_user to '$ansible_user'"
+            log_info "Set ansible_user to '$ansible_user'"
         fi
         
         # Ask for SSH key path
@@ -278,10 +278,10 @@ EOF
         
         if [ $? -eq 0 ] && [ -n "$ssh_key_path" ]; then
             echo "ansible_ssh_private_key_file=$ssh_key_path" >> "$vars_file"
-            log "INFO" "Set SSH private key path to '$ssh_key_path'"
+            log_info "Set SSH private key path to '$ssh_key_path'"
         fi
     else
-        log "WARN" "Running non-interactively, using default configuration"
+        log_warn "Running non-interactively, using default configuration"
     fi
     
     return 0
@@ -291,10 +291,10 @@ EOF
 validate_playbook() {
     local playbook_path="$1"
     
-    log "INFO" "Validating Ansible playbook: $playbook_path"
+    log_info "Validating Ansible playbook: $playbook_path"
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would validate Ansible playbook"
+        log_info "[TEST MODE] Would validate Ansible playbook"
         return 0
     fi
     
@@ -304,16 +304,16 @@ validate_playbook() {
     # Check for inventory file
     local inventory_file="$playbook_dir/inventory.ini"
     if [ ! -f "$inventory_file" ]; then
-        log "ERROR" "No inventory file found: $inventory_file"
+        log_error "No inventory file found: $inventory_file"
         return 1
     fi
     
     # Validate playbook syntax
     if ansible-playbook --syntax-check -i "$inventory_file" "$playbook_path"; then
-        log "INFO" "Ansible playbook syntax is valid"
+        log_info "Ansible playbook syntax is valid"
         return 0
     else
-        log "ERROR" "Ansible playbook syntax validation failed"
+        log_error "Ansible playbook syntax validation failed"
         return 1
     fi
 }
@@ -322,10 +322,10 @@ validate_playbook() {
 dry_run_playbook() {
     local playbook_path="$1"
     
-    log "INFO" "Running Ansible playbook dry-run..."
+    log_info "Running Ansible playbook dry-run..."
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would run Ansible playbook dry-run"
+        log_info "[TEST MODE] Would run Ansible playbook dry-run"
         return 0
     fi
     
@@ -335,10 +335,10 @@ dry_run_playbook() {
     
     # Run in check mode
     if ansible-playbook --check -i "$inventory_file" "$playbook_path"; then
-        log "INFO" "Ansible playbook dry-run completed successfully"
+        log_info "Ansible playbook dry-run completed successfully"
         return 0
     else
-        log "ERROR" "Ansible playbook dry-run failed"
+        log_error "Ansible playbook dry-run failed"
         return 1
     fi
 }
@@ -347,10 +347,10 @@ dry_run_playbook() {
 execute_playbook() {
     local playbook_path="$1"
     
-    log "INFO" "Executing Ansible playbook..."
+    log_info "Executing Ansible playbook..."
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would execute Ansible playbook"
+        log_info "[TEST MODE] Would execute Ansible playbook"
         return 0
     fi
     
@@ -360,10 +360,10 @@ execute_playbook() {
     
     # Execute playbook
     if ansible-playbook -i "$inventory_file" "$playbook_path"; then
-        log "INFO" "Ansible playbook executed successfully"
+        log_info "Ansible playbook executed successfully"
         return 0
     else
-        log "ERROR" "Ansible playbook execution failed"
+        log_error "Ansible playbook execution failed"
         return 1
     fi
 }
@@ -372,10 +372,10 @@ execute_playbook() {
 install_role() {
     local role_name="$1"
     
-    log "INFO" "Installing Ansible role: $role_name"
+    log_info "Installing Ansible role: $role_name"
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would install Ansible role: $role_name"
+        log_info "[TEST MODE] Would install Ansible role: $role_name"
         return 0
     fi
     
@@ -384,20 +384,20 @@ install_role() {
     
     # Install role
     if ansible-galaxy install -p "$ANSIBLE_ROLES_DIR" "$role_name"; then
-        log "INFO" "Ansible role installed successfully: $role_name"
+        log_info "Ansible role installed successfully: $role_name"
         return 0
     else
-        log "ERROR" "Ansible role installation failed: $role_name"
+        log_error "Ansible role installation failed: $role_name"
         return 1
     fi
 }
 
 # Function to show Ansible configuration
 show_config() {
-    log "INFO" "Showing Ansible configuration..."
+    log_info "Showing Ansible configuration..."
     
     if [ "$TEST_MODE" ]; then
-        log "INFO" "[TEST MODE] Would show Ansible configuration"
+        log_info "[TEST MODE] Would show Ansible configuration"
         return 0
     fi
     
@@ -420,7 +420,7 @@ create_sample_playbook() {
     local output_file="$2"
     local playbook_name="$3"
     
-    log "INFO" "Creating sample playbook: $template_type -> $output_file"
+    log_info "Creating sample playbook: $template_type -> $output_file"
     
     # Ensure directory exists
     mkdir -p "$(dirname "$output_file")"
@@ -1066,7 +1066,7 @@ EOF
 EOF
             ;;
         *)
-            log "ERROR" "Unknown template type: $template_type"
+            log_error "Unknown template type: $template_type"
             return 1
             ;;
     esac
@@ -1074,23 +1074,23 @@ EOF
     # Set proper permissions
     chmod 644 "$output_file"
     
-    log "INFO" "Sample playbook created successfully: $output_file"
+    log_info "Sample playbook created successfully: $output_file"
     return 0
 }
 
 # Main function to display menu and handle user selection
 main() {
-    log "INFO" "Starting Ansible Module v${VERSION}"
+    log_info "Starting Ansible Module v${VERSION}"
     
     # Check if running as root
     if [ "$EUID" -ne 0 ]; then
-        log "ERROR" "This script must be run as root"
+        log_error "This script must be run as root"
         exit 1
     fi
     
     # Check/install dependencies
     if ! command -v python3 >/dev/null 2>&1; then
-        log "INFO" "Installing Python3..."
+        log_info "Installing Python3..."
         apt-get update && apt-get install -y python3 python3-pip
     fi
     
@@ -1100,11 +1100,11 @@ main() {
             if whiptail --title "Install Ansible" --yesno "Ansible is not installed. Would you like to install it now?" 10 60; then
                 install_ansible
             else
-                log "ERROR" "Ansible is required but not installed"
+                log_error "Ansible is required but not installed"
                 exit 1
             fi
         else
-            log "INFO" "Installing Ansible automatically..."
+            log_info "Installing Ansible automatically..."
             install_ansible
         fi
     fi
@@ -1128,7 +1128,7 @@ main() {
             
             case $choice in
                 1)
-                    log "INFO" "Discovering Ansible playbooks..."
+                    log_info "Discovering Ansible playbooks..."
                     if playbooks=$(discover_playbooks); then
                         if [ -n "$playbooks" ]; then
                             whiptail --title "Available Playbooks" --msgbox "Found playbooks:\n\n$playbooks" 20 60
@@ -1140,7 +1140,7 @@ main() {
                     fi
                     ;;
                 2)
-                    log "INFO" "Discovering Ansible roles..."
+                    log_info "Discovering Ansible roles..."
                     if roles=$(discover_roles); then
                         if [ -n "$roles" ]; then
                             whiptail --title "Available Roles" --msgbox "Found roles:\n\n$roles" 20 60
@@ -1153,7 +1153,7 @@ main() {
                     ;;
                 3)
                     # Execute playbook workflow
-                    log "INFO" "Starting playbook execution workflow..."
+                    log_info "Starting playbook execution workflow..."
                     
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
@@ -1193,7 +1193,7 @@ main() {
                         fi
                         
                         if [ -n "$playbook_path" ]; then
-                            log "INFO" "Selected playbook: $selected_playbook at $playbook_path"
+                            log_info "Selected playbook: $selected_playbook at $playbook_path"
                             
                             # Collect variables
                             collect_variables "$playbook_path"
@@ -1216,7 +1216,7 @@ main() {
                     ;;
                 4)
                     # Dry-run playbook
-                    log "INFO" "Starting playbook dry-run workflow..."
+                    log_info "Starting playbook dry-run workflow..."
                     
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
@@ -1256,7 +1256,7 @@ main() {
                         fi
                         
                         if [ -n "$playbook_path" ]; then
-                            log "INFO" "Selected playbook for dry-run: $selected_playbook at $playbook_path"
+                            log_info "Selected playbook for dry-run: $selected_playbook at $playbook_path"
                             
                             # Collect variables
                             collect_variables "$playbook_path"
@@ -1279,7 +1279,7 @@ main() {
                     ;;
                 5)
                     # Validate playbook
-                    log "INFO" "Starting playbook validation workflow..."
+                    log_info "Starting playbook validation workflow..."
                     
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
@@ -1319,7 +1319,7 @@ main() {
                         fi
                         
                         if [ -n "$playbook_path" ]; then
-                            log "INFO" "Validating playbook: $selected_playbook at $playbook_path"
+                            log_info "Validating playbook: $selected_playbook at $playbook_path"
                             
                             if validate_playbook "$playbook_path"; then
                                 whiptail --title "Validation Success" --msgbox "Playbook validation successful!\n\nPlaybook: $selected_playbook\nSyntax: Valid\nStructure: Valid" 12 70
@@ -1347,7 +1347,7 @@ main() {
                     ;;
                 7)
                     # Show configuration
-                    log "INFO" "Displaying Ansible configuration..."
+                    log_info "Displaying Ansible configuration..."
                     
                     # Collect configuration information
                     local config_info=""
@@ -1389,7 +1389,7 @@ main() {
                     ;;
                 8)
                     # Create sample playbook
-                    log "INFO" "Starting sample playbook creation workflow..."
+                    log_info "Starting sample playbook creation workflow..."
                     
                     # Define sample playbook templates
                     local templates=(
@@ -1404,7 +1404,7 @@ main() {
                     # Show template selection dialog
                     local selected_template
                     if selected_template=$(whiptail --title "Create Sample Playbook" --menu "Choose a playbook template to create:" 20 80 6 "${templates[@]}" 3>&1 1>&2 2>&3); then
-                        log "INFO" "Selected template: $selected_template"
+                        log_info "Selected template: $selected_template"
                         
                         # Get playbook name
                         local playbook_name
@@ -1417,7 +1417,7 @@ main() {
                                 # Check if file already exists
                                 if [ -f "$playbook_file" ]; then
                                     if ! whiptail --title "File Exists" --yesno "A playbook named '$playbook_name' already exists. Overwrite it?" 10 60; then
-                                        log "INFO" "Sample playbook creation cancelled by user"
+                                        log_info "Sample playbook creation cancelled by user"
                                         continue
                                     fi
                                 fi
@@ -1425,10 +1425,10 @@ main() {
                                 # Create playbook based on template
                                 if create_sample_playbook "$selected_template" "$playbook_file" "$playbook_name"; then
                                     whiptail --title "Success" --msgbox "Sample playbook created successfully!\n\nFile: $playbook_file\nTemplate: $selected_template\n\nYou can now edit this playbook to customize it for your needs." 15 70
-                                    log "INFO" "Sample playbook created: $playbook_file"
+                                    log_info "Sample playbook created: $playbook_file"
                                 else
                                     whiptail --title "Error" --msgbox "Failed to create sample playbook. Check logs for details." 10 60
-                                    log "ERROR" "Failed to create sample playbook: $playbook_file"
+                                    log_error "Failed to create sample playbook: $playbook_file"
                                 fi
                             else
                                 whiptail --title "Error" --msgbox "Playbook name cannot be empty." 10 60
@@ -1437,16 +1437,16 @@ main() {
                     fi
                     ;;
                 9)
-                    log "INFO" "Exiting Ansible module"
+                    log_info "Exiting Ansible module"
                     exit 0
                     ;;
                 *)
-                    log "ERROR" "Invalid selection"
+                    log_error "Invalid selection"
                     ;;
             esac
         else
             # Non-interactive mode - show available playbooks and exit
-            log "INFO" "Running in non-interactive mode"
+            log_info "Running in non-interactive mode"
             discover_playbooks
             exit 0
         fi

@@ -9,62 +9,14 @@ VERSION="0.2.0"
 # Directory where the script is located
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
-# Create log directory if it doesn't exist
-LOG_DIR="/var/log/homelab"
-if [ "$EUID" -eq 0 ]; then
-    mkdir -p "$LOG_DIR"
-    LOG_FILE="$LOG_DIR/main.log"
-else
-    LOG_DIR="$HOME/.local/share/homelab/logs"
-    mkdir -p "$LOG_DIR"
-    LOG_FILE="$LOG_DIR/main.log"
-fi
+# Source the centralized logging library
+source "$SCRIPT_DIR/lib/logging.sh"
 
-# Logging function with file output
-log() {
-    local level="$1"; shift
-    local color=""
-    local reset="\033[0m"
-    local timestamp
-    local message
-    
-    timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    message="[$timestamp] [$level] $*"
-    
-    case $level in
-        INFO)
-            color="\033[0;32m" # Green
-            ;;
-        WARN)
-            color="\033[0;33m" # Yellow
-            ;;
-        ERROR)
-            color="\033[0;31m" # Red
-            ;;
-        *)
-            color=""
-            ;;
-    esac
-    
-    # Output to console with color
-    echo -e "${color}${message}${reset}"
-    
-    # Output to log file without color
-    echo "$message" >> "$LOG_FILE" 2>/dev/null || true
-}
+# Initialize logging system
+init_logging "main"
 
-# Error handling function
-handle_error() {
-    local exit_code=$?
-    log "ERROR" "An error occurred on line $1 with exit code $exit_code"
-    if [ -t 0 ]; then  # If running interactively
-        whiptail --title "Error" --msgbox "An error occurred. Check the logs for details." 10 60 3>&1 1>&2 2>&3
-    fi
-    exit $exit_code
-}
-
-# Set up error trap
-trap 'handle_error $LINENO' ERR
+# Set up error trap using the centralized error handler
+trap 'handle_error $? $LINENO' ERR
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -102,7 +54,7 @@ EOF
             exit 0
             ;;
         *)
-            log "ERROR" "Unknown option: $1"
+        log_error "Unknown option: $1"
             echo "Try '$(basename "$0") --help' for more information."
             exit 1
             ;;
@@ -120,7 +72,7 @@ create_default_config() {
         mkdir -p "$config_dir"
     else
         mkdir -p "$config_dir" 2>/dev/null || {
-            log "WARN" "Cannot create system config directory, using user config"
+            log_warn "Cannot create system config directory, using user config"
             config_file="$HOME/.config/homelab/user.conf"
             config_dir="$(dirname "$config_file")"
             mkdir -p "$config_dir"
@@ -160,7 +112,7 @@ ENABLE_KUBERNETES=true
 ENABLE_MONITORING=true
 ENABLE_TERRAFORM=true
 EOF
-        log "INFO" "Created default configuration at $config_file"
+        log_info "Created default configuration at $config_file"
     fi
     
     echo "$config_file"
@@ -198,7 +150,7 @@ set_config() {
         echo "$key=$value" >> "$USER_CONFIG"
     fi
     
-    log "INFO" "Updated configuration: $key=$value"
+    log_info "Updated configuration: $key=$value"
 }
 
 # Load configuration
@@ -212,9 +164,9 @@ USER_CONFIG=$(create_default_config "$USER_CONFIG")
 if [ -f "$USER_CONFIG" ]; then
     # shellcheck source=/dev/null
     source "$USER_CONFIG"
-    log "INFO" "Loaded configuration from $USER_CONFIG"
+    log_info "Loaded configuration from $USER_CONFIG"
 else
-    log "WARN" "Configuration file not found, using defaults"
+    log_warn "Configuration file not found, using defaults"
 fi
 
 # Dependency management functions
@@ -222,7 +174,7 @@ check_dependencies() {
     local missing_deps=()
     local required_deps=(curl wget whiptail jq git)
     
-    log "INFO" "Checking dependencies..."
+    log_info "Checking dependencies..."
     
     for dep in "${required_deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
@@ -231,27 +183,27 @@ check_dependencies() {
     done
     
     if [ ${#missing_deps[@]} -gt 0 ]; then
-        log "ERROR" "Missing required dependencies: ${missing_deps[*]}"
+        log_error "Missing required dependencies: ${missing_deps[*]}"
         
         if [ -t 0 ]; then  # If running interactively
             if whiptail --title "Missing Dependencies" --yesno "Missing required tools: ${missing_deps[*]}\n\nAttempt to install them automatically?" 12 70; then
                 install_dependencies "${missing_deps[@]}"
             else
-                log "ERROR" "Cannot proceed without required dependencies"
+                log_error "Cannot proceed without required dependencies"
                 exit 1
             fi
         else
-            log "ERROR" "Cannot proceed without required dependencies"
+            log_error "Cannot proceed without required dependencies"
             exit 1
         fi
     else
-        log "INFO" "All dependencies satisfied"
+        log_info "All dependencies satisfied"
     fi
 }
 
 install_dependencies() {
     local deps=("$@")
-    log "INFO" "Installing dependencies: ${deps[*]}"
+    log_info "Installing dependencies: ${deps[*]}"
     
     # Detect package manager and install dependencies
     if command -v apt-get >/dev/null 2>&1; then
@@ -265,7 +217,7 @@ install_dependencies() {
     elif command -v pacman >/dev/null 2>&1; then
         pacman -S --noconfirm "${deps[@]}"
     else
-        log "ERROR" "No supported package manager found"
+        log_error "No supported package manager found"
         return 1
     fi
 }
@@ -378,7 +330,7 @@ readarray -t MENU_ARGS < <(build_module_menu)
 # Display the menu if there are modules available
 if [ ${#MENU_ARGS[@]} -eq 0 ]; then
     whiptail --title "Error" --msgbox "No modules found or accessible in $SCRIPT_DIR.\nPlease check your installation." 10 60 3>&1 1>&2 2>&3
-    log "ERROR" "No modules found or accessible in $SCRIPT_DIR"
+    log_error "No modules found or accessible in $SCRIPT_DIR"
     exit 1
 fi
 

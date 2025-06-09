@@ -3,11 +3,17 @@
 
 set -e
 
-# Logging function
-log() {
-    local level="$1"; shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*"
-}
+# Directory where the script is located
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# Source the centralized logging library
+source "$SCRIPT_DIR/lib/logging.sh"
+
+# Initialize logging system
+init_logging "template"
+
+# Set up error trap using the centralized error handler
+trap 'handle_error $? $LINENO' ERR
 
 # --- Distribution Configuration ---
 # Format: "distro_id|Display Name|cloud-init-support|url_template"
@@ -105,6 +111,180 @@ supports_cloudinit() {
     return 1
 }
 
+# Function to get predefined script templates
+get_script_template() {
+    local template_name="$1"
+    
+    case "$template_name" in
+        "docker-setup")
+            cat << 'EOF'
+# Install Docker and Docker Compose
+curl -fsSL https://get.docker.com | sh
+systemctl enable docker
+systemctl start docker
+usermod -aG docker $(whoami)
+
+# Install Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+EOF
+            ;;
+        "web-server")
+            cat << 'EOF'
+# Install and configure Nginx
+apt-get update
+apt-get install -y nginx
+systemctl enable nginx
+systemctl start nginx
+
+# Create basic index page
+cat > /var/www/html/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Server is ready!</h1>
+    <p>This server was configured automatically with cloud-init.</p>
+</body>
+</html>
+HTMLEOF
+
+# Configure firewall
+ufw --force enable
+ufw allow ssh
+ufw allow 'Nginx Full'
+EOF
+            ;;
+        "security-hardening")
+            cat << 'EOF'
+# Basic security hardening
+apt-get update && apt-get install -y fail2ban ufw
+
+# Configure firewall
+ufw --force enable
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow ssh
+
+# Configure fail2ban
+systemctl enable fail2ban
+systemctl start fail2ban
+
+# Disable root login and configure SSH
+sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
+sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart sshd
+
+# Set up automatic security updates
+echo 'Unattended-Upgrade::Automatic-Reboot "false";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+systemctl enable unattended-upgrades
+EOF
+            ;;
+        "monitoring-agent")
+            cat << 'EOF'
+# Install Node Exporter for Prometheus monitoring
+useradd --no-create-home --shell /bin/false node_exporter
+cd /tmp
+wget https://github.com/prometheus/node_exporter/releases/latest/download/node_exporter-*linux-amd64.tar.gz
+tar -xzf node_exporter-*linux-amd64.tar.gz
+cp node_exporter-*linux-amd64/node_exporter /usr/local/bin/
+chown node_exporter:node_exporter /usr/local/bin/node_exporter
+
+# Create systemd service
+cat > /etc/systemd/system/node_exporter.service << 'SERVICEEOF'
+[Unit]
+Description=Node Exporter
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+systemctl daemon-reload
+systemctl enable node_exporter
+systemctl start node_exporter
+EOF
+            ;;
+        "dev-tools")
+            cat << 'EOF'
+# Install development tools
+apt-get update
+apt-get install -y git vim neovim tmux htop tree curl wget build-essential
+
+# Install modern development tools
+curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+apt-get install -y nodejs
+
+# Install Python development tools
+apt-get install -y python3-pip python3-venv python3-dev
+
+# Configure git (placeholder - users should customize)
+# git config --global user.name "Your Name"
+# git config --global user.email "your.email@example.com"
+EOF
+            ;;
+        "auto-updates")
+            cat << 'EOF'
+# Configure automatic updates
+apt-get update
+apt-get install -y unattended-upgrades
+
+# Configure automatic updates
+cat > /etc/apt/apt.conf.d/20auto-upgrades << 'CONFEOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+CONFEOF
+
+# Configure what packages to update automatically
+cat > /etc/apt/apt.conf.d/50unattended-upgrades << 'CONFEOF'
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}:${distro_codename}-updates";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+CONFEOF
+
+systemctl enable unattended-upgrades
+systemctl start unattended-upgrades
+EOF
+            ;;
+        "custom-user")
+            cat << 'EOF'
+# Create additional system user
+adduser --disabled-password --gecos "" deploy
+usermod -aG sudo deploy
+
+# Set up SSH directory for deploy user
+mkdir -p /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
+chown deploy:deploy /home/deploy/.ssh
+
+# Example: Copy authorized_keys (customize as needed)
+# cp /home/*/. ssh/authorized_keys /home/deploy/.ssh/
+# chown deploy:deploy /home/deploy/.ssh/authorized_keys
+# chmod 600 /home/deploy/.ssh/authorized_keys
+EOF
+            ;;
+        *)
+            echo ""
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 # Function to validate template configuration
 validate_template_config() {
     local errors=()
@@ -168,7 +348,7 @@ validate_template_config() {
 
 # Function to list all templates in Proxmox
 list_templates() {
-    log "INFO" "Listing Proxmox templates..."
+    log_info "Listing Proxmox templates..."
     
     # Get list of VMs that are templates
     local templates
@@ -305,10 +485,10 @@ delete_template() {
         
         if whiptail --title "Confirm Deletion" --yesno "Are you sure you want to delete template:\n\nVMID: $selected_vmid\nName: $template_name\n\nThis action cannot be undone!" 12 70; then
             if qm destroy "$selected_vmid"; then
-                log "INFO" "Template $selected_vmid ($template_name) deleted successfully"
+                log_info "Template $selected_vmid ($template_name) deleted successfully"
                 whiptail --title "Success" --msgbox "Template $selected_vmid ($template_name) deleted successfully!" 10 60
             else
-                log "ERROR" "Failed to delete template $selected_vmid"
+                log_error "Failed to delete template $selected_vmid"
                 whiptail --title "Error" --msgbox "Failed to delete template $selected_vmid. Check logs for details." 10 60
             fi
         fi
@@ -349,14 +529,14 @@ clone_template() {
             
             if qm clone "$selected_vmid" "$new_vmid" --name "$new_name"; then
                 if qm template "$new_vmid"; then
-                    log "INFO" "Template cloned successfully: $selected_vmid -> $new_vmid ($new_name)"
+                    log_info "Template cloned successfully: $selected_vmid -> $new_vmid ($new_name)"
                     whiptail --title "Success" --msgbox "Template cloned successfully!\n\nOriginal: $selected_vmid\nNew: $new_vmid ($new_name)" 12 60
                 else
-                    log "ERROR" "Failed to convert cloned VM to template"
+                    log_error "Failed to convert cloned VM to template"
                     whiptail --title "Error" --msgbox "VM cloned but failed to convert to template. Check VMID $new_vmid manually." 10 60
                 fi
             else
-                log "ERROR" "Failed to clone template $selected_vmid"
+                log_error "Failed to clone template $selected_vmid"
                 whiptail --title "Error" --msgbox "Failed to clone template $selected_vmid. Check logs for details." 10 60
             fi
         fi
@@ -443,10 +623,10 @@ EOF
 )
             
             if echo "$enhanced_config" | jq '.' > "$config_file"; then
-                log "INFO" "Template configuration exported to $config_file"
+                log_info "Template configuration exported to $config_file"
                 whiptail --title "Success" --msgbox "Template configuration exported successfully!\n\nFile: $config_file" 10 70
             else
-                log "ERROR" "Failed to export template configuration"
+                log_error "Failed to export template configuration"
                 whiptail --title "Error" --msgbox "Failed to export template configuration. Check permissions." 10 60
             fi
         fi
@@ -508,10 +688,10 @@ import_template_config() {
                 # Convert to template
                 qm template "$new_vmid"
                 
-                log "INFO" "Template imported successfully: VMID $new_vmid ($new_name)"
+                log_info "Template imported successfully: VMID $new_vmid ($new_name)"
                 whiptail --title "Success" --msgbox "Template imported successfully!\n\nVMID: $new_vmid\nName: $new_name\n\nNote: Disk images need to be restored separately." 12 70
             else
-                log "ERROR" "Failed to create VM from imported configuration"
+                log_error "Failed to create VM from imported configuration"
                 whiptail --title "Error" --msgbox "Failed to create VM from imported configuration. Check logs for details." 10 60
             fi
         fi
@@ -565,10 +745,10 @@ delete_saved_config() {
         if whiptail --title "Confirm Deletion" --yesno "Are you sure you want to delete configuration:\n\n$selected_config\n\nThis action cannot be undone!" 10 60; then
             local config_file="$TEMPLATE_CONFIG_DIR/${selected_config}.json"
             if rm -f "$config_file"; then
-                log "INFO" "Configuration file deleted: $config_file"
+                log_info "Configuration file deleted: $config_file"
                 whiptail --title "Success" --msgbox "Configuration file deleted successfully!" 10 60
             else
-                log "ERROR" "Failed to delete configuration file: $config_file"
+                log_error "Failed to delete configuration file: $config_file"
                 whiptail --title "Error" --msgbox "Failed to delete configuration file. Check permissions." 10 60
             fi
         fi
@@ -706,7 +886,7 @@ validate_template() {
         
         whiptail --title "Template Validation Results" --msgbox "$validation_results" 25 80
         
-        log "INFO" "Template validation completed for VMID $selected_vmid: $error_count errors, $warning_count warnings"
+        log_info "Template validation completed for VMID $selected_vmid: $error_count errors, $warning_count warnings"
     fi
 }
 
@@ -744,13 +924,13 @@ test_template() {
             
             # Clone template to test VM
             if qm clone "$selected_vmid" "$test_vmid" --name "test-$selected_vmid-$(date +%s)"; then
-                log "INFO" "Test VM $test_vmid created from template $selected_vmid"
+                log_info "Test VM $test_vmid created from template $selected_vmid"
                 
                 # Start the test VM
                 whiptail --title "Testing" --infobox "Starting test VM $test_vmid...\nThis may take a moment..." 8 50
                 
                 if qm start "$test_vmid"; then
-                    log "INFO" "Test VM $test_vmid started successfully"
+                    log_info "Test VM $test_vmid started successfully"
                     
                     # Wait a moment for VM to start
                     sleep 10
@@ -784,14 +964,14 @@ test_template() {
                     
                     whiptail --title "Template Test Results" --msgbox "$test_results" 20 70
                     
-                    log "INFO" "Template test completed successfully for VMID $selected_vmid"
+                    log_info "Template test completed successfully for VMID $selected_vmid"
                 else
-                    log "ERROR" "Failed to start test VM $test_vmid"
+                    log_error "Failed to start test VM $test_vmid"
                     qm destroy "$test_vmid"
                     whiptail --title "Test Failed" --msgbox "❌ Test failed: Could not start test VM\n\nTest VM has been cleaned up." 10 60
                 fi
             else
-                log "ERROR" "Failed to clone template $selected_vmid for testing"
+                log_error "Failed to clone template $selected_vmid for testing"
                 whiptail --title "Test Failed" --msgbox "❌ Test failed: Could not clone template for testing" 10 60
             fi
         fi
@@ -810,7 +990,7 @@ check_dependencies() {
     done
     
     if [ ${#missing[@]} -gt 0 ]; then
-        log "ERROR" "Missing dependencies: ${missing[*]}"
+        log_error "Missing dependencies: ${missing[*]}"
         whiptail --title "Error" --msgbox "Missing required tools: ${missing[*]}\n\nPlease install these dependencies and try again." 10 70
         exit 1
     fi
@@ -819,7 +999,7 @@ check_dependencies() {
 # Check for Proxmox environment
 check_proxmox() {
     if ! command -v pvesh &> /dev/null; then
-        log "ERROR" "This script must be run in a Proxmox VE environment."
+        log_error "This script must be run in a Proxmox VE environment."
         whiptail --title "Error" --msgbox "This script must be run in a Proxmox VE environment." 10 60
         exit 1
     fi
@@ -868,7 +1048,7 @@ main_menu() {
                 show_help
                 ;;
             8|"")
-                log "INFO" "Exiting template creator"
+                log_info "Exiting template creator"
                 exit 0
                 ;;
         esac
@@ -911,7 +1091,7 @@ create_template() {
 template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
 template_result=$?
 if [ $template_result -ne 0 ] || [ -z "$template_name" ]; then
-    log "INFO" "User cancelled or empty template name."
+    log_info "User cancelled or empty template name."
     exit 0
 fi
 
@@ -924,7 +1104,7 @@ done
 distro=$(whiptail --title "Select Distribution" --menu "Choose a Linux distribution:" 20 60 10 "${distro_menu[@]}" 3>&1 1>&2 2>&3)
 distro_result=$?
 if [ $distro_result -ne 0 ] || [ -z "$distro" ]; then
-    log "INFO" "User cancelled at distro selection."
+    log_info "User cancelled at distro selection."
     exit 0
 fi
 
@@ -978,7 +1158,7 @@ case "$distro" in
 esac
 version_result=$?
 if [ $version_result -ne 0 ] || [ -z "$version" ]; then
-    log "INFO" "User cancelled at version selection."
+    log_info "User cancelled at version selection."
     exit 0
 fi
 
@@ -1021,7 +1201,7 @@ if supports_cloudinit "$distro"; then
                     exit 0
                 fi
             else
-                log "INFO" "SSH key format validation passed"
+                log_info "SSH key format validation passed"
             fi
         fi
         
@@ -1099,7 +1279,7 @@ if [ "$use_cloudinit" = "yes" ]; then
             
             if [ ${#packages[@]} -gt 0 ]; then
                 install_packages=$(IFS=' '; echo "${packages[*]}")
-                log "INFO" "Packages to install: $install_packages"
+                log_info "Packages to install: $install_packages"
             fi
         fi
     fi
@@ -1112,7 +1292,7 @@ if [ $tags_result -ne 0 ]; then exit 0; fi
 
 # --- Step 8: Validate Configuration ---
 if ! validate_template_config; then
-    log "ERROR" "Template configuration validation failed"
+    log_error "Template configuration validation failed"
     exit 1
 fi
 
@@ -1123,16 +1303,21 @@ if [ "$use_cloudinit" = "yes" ]; then
     if [ -n "$install_packages" ]; then
         summary+="\nPackages: $install_packages"
     fi
+    if [ -n "$custom_scripts" ]; then
+        summary+="\nCustom Scripts: Configured"
+    else
+        summary+="\nCustom Scripts: None"
+    fi
 fi
 
 if ! whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70; then
-    log "INFO" "User cancelled at confirmation."
+    log_info "User cancelled at confirmation."
     exit 0
 fi
 
 # Exit here if in test mode
 if [ -n "$TEST_MODE" ]; then
-    log "INFO" "Test mode - exiting before VM creation."
+    log_info "Test mode - exiting before VM creation."
     exit 0
 fi
 
@@ -1154,7 +1339,7 @@ fi
 
 # Get next available VMID
 vmid=$(pvesh get /cluster/nextid)
-log "INFO" "Using VMID: $vmid"
+log_info "Using VMID: $vmid"
 
 # Download image
 iso_dir="/var/lib/vz/template/iso"
@@ -1167,22 +1352,22 @@ mkdir -p "$iso_dir"
 # Get URL template and replace version placeholder
 url_template=$(get_distro_url_template "$distro")
 if [ -z "$url_template" ]; then
-    log "ERROR" "Failed to get download URL template for $distro"
+    log_error "Failed to get download URL template for $distro"
     whiptail --title "Error" --msgbox "Failed to get download URL template for $distro." 10 60
     exit 1
 fi
 
 # Replace version placeholder in URL
 download_url="${url_template//%version%/$version}"
-log "INFO" "Download URL: $download_url"
+log_info "Download URL: $download_url"
 
 if [ ! -f "$iso_path" ]; then
-    log "INFO" "Downloading image for $distro $version..."
+    log_info "Downloading image for $distro $version..."
     whiptail --title "Downloading" --infobox "Downloading $distro $version image...\nThis may take a few minutes." 10 60
     
     # Download the image
     if ! curl -L -o "$iso_path" "$download_url"; then
-        log "ERROR" "Failed to download image from $download_url"
+        log_error "Failed to download image from $download_url"
         whiptail --title "Error" --msgbox "Failed to download image. Check network connection and try again." 10 60
         rm -f "$iso_path"  # Clean up partial download
         exit 1
@@ -1190,11 +1375,11 @@ if [ ! -f "$iso_path" ]; then
 fi
 
 # Create VM
-log "INFO" "Creating VM $vmid ($template_name)..."
+log_info "Creating VM $vmid ($template_name)..."
 whiptail --title "Creating VM" --infobox "Creating VM $vmid ($template_name)..." 10 60
 
 if ! qm create "$vmid" --name "$template_name" --memory "$ram" --cores "$cpu" --net0 "virtio,bridge=vmbr0"; then
-    log "ERROR" "Failed to create VM $vmid"
+    log_error "Failed to create VM $vmid"
     whiptail --title "Error" --msgbox "Failed to create VM $vmid. Check logs for details." 10 60
     exit 1
 fi
@@ -1204,15 +1389,15 @@ qm set "$vmid" --scsihw virtio-scsi-pci
 qm set "$vmid" --ostype l26
 
 # Import disk (cloud image)
-log "INFO" "Importing disk image..."
+log_info "Importing disk image..."
 if ! qm importdisk "$vmid" "$iso_path" "$default_storage"; then
-    log "ERROR" "Failed to import disk from $iso_path to $default_storage"
+    log_error "Failed to import disk from $iso_path to $default_storage"
     whiptail --title "Error" --msgbox "Failed to import disk. Check storage configuration." 10 60
     exit 1
 fi
 
 # Attach disk
-log "INFO" "Attaching disk to VM..."
+log_info "Attaching disk to VM..."
 qm set "$vmid" --scsi0 "$default_storage:vm-$vmid-disk-0"
 qm set "$vmid" --boot order=scsi0
 
@@ -1221,7 +1406,7 @@ qm resize "$vmid" scsi0 "${storage}G"
 
 # Add cloud-init drive if selected
 if [ "$use_cloudinit" = "yes" ]; then
-    log "INFO" "Configuring cloud-init..."
+    log_info "Configuring cloud-init..."
     qm set "$vmid" --ide2 "$default_storage:cloudinit"
     qm set "$vmid" --ciuser "$ci_user"
     
@@ -1232,7 +1417,7 @@ if [ "$use_cloudinit" = "yes" ]; then
         echo "$ci_sshkey" > "$SSH_KEY_FILE"
         qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
         rm -f "$SSH_KEY_FILE"
-        log "INFO" "SSH key configured for user $ci_user"
+        log_info "SSH key configured for user $ci_user"
     fi
     
     # Set network configuration
@@ -1244,7 +1429,7 @@ if [ "$use_cloudinit" = "yes" ]; then
     
     # Configure package installation via cloud-init
     if [ -n "$install_packages" ]; then
-        log "INFO" "Configuring package installation: $install_packages"
+        log_info "Configuring package installation: $install_packages"
         # Create cloud-init user data for package installation
         CLOUD_INIT_FILE=$(mktemp)
         cat > "$CLOUD_INIT_FILE" << EOF
@@ -1309,10 +1494,10 @@ creation_info="Created: $(date '+%Y-%m-%d %H:%M:%S')\nDistribution: $distro $ver
 qm set "$vmid" --description "$creation_info"
 
 # Convert to template
-log "INFO" "Converting VM $vmid to template..."
+log_info "Converting VM $vmid to template..."
 qm template "$vmid"
 
-log "INFO" "Template $template_name ($vmid) created successfully."
+log_info "Template $template_name ($vmid) created successfully."
 whiptail --title "Success" --msgbox "Template $template_name ($vmid) created successfully!" 10 60
 return 0
 }
@@ -1353,7 +1538,7 @@ create_template() {
     template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
     template_result=$?
     if [ $template_result -ne 0 ] || [ -z "$template_name" ]; then
-        log "INFO" "User cancelled or empty template name."
+        log_info "User cancelled or empty template name."
         return 0
     fi
 
@@ -1366,7 +1551,7 @@ create_template() {
     distro=$(whiptail --title "Select Distribution" --menu "Choose a Linux distribution:" 20 60 10 "${distro_menu[@]}" 3>&1 1>&2 2>&3)
     distro_result=$?
     if [ $distro_result -ne 0 ] || [ -z "$distro" ]; then
-        log "INFO" "User cancelled at distro selection."
+        log_info "User cancelled at distro selection."
         return 0
     fi
 
@@ -1420,7 +1605,7 @@ create_template() {
     esac
     version_result=$?
     if [ $version_result -ne 0 ] || [ -z "$version" ]; then
-        log "INFO" "User cancelled at version selection."
+        log_info "User cancelled at version selection."
         return 0
     fi
 
@@ -1463,8 +1648,50 @@ create_template() {
                         return 0
                     fi
                 else
-                    log "INFO" "SSH key format validation passed"
+                    log_info "SSH key format validation passed"
                 fi
+            fi
+            
+            # Cloud-init password configuration
+            ci_password=""
+            ci_password_enabled="no"
+            if whiptail --title "Password Authentication" --yesno "Do you want to enable password authentication for user $ci_user?\n\nNote: SSH key authentication is recommended for better security." 12 70; then
+                ci_password_enabled="yes"
+                
+                # Get minimum password length from config (default 12)
+                local min_length=12
+                if command -v source >/dev/null 2>&1; then
+                    min_length=$(grep "^MIN_PASSWORD_LENGTH=" "$SCRIPT_DIR/../scripts/config.sh" 2>/dev/null | cut -d'=' -f2 || echo "12")
+                fi
+                
+                while true; do
+                    ci_password=$(whiptail --title "Set Password" --passwordbox "Enter password for user $ci_user (minimum $min_length characters):" 12 60 3>&1 1>&2 2>&3)
+                    ci_password_result=$?
+                    if [ $ci_password_result -ne 0 ]; then
+                        ci_password_enabled="no"
+                        break
+                    fi
+                    
+                    # Validate password length
+                    if [ ${#ci_password} -lt $min_length ]; then
+                        whiptail --title "Password Too Short" --msgbox "Password must be at least $min_length characters long. Please try again." 10 60
+                        continue
+                    fi
+                    
+                    # Confirm password
+                    ci_password_confirm=$(whiptail --title "Confirm Password" --passwordbox "Confirm password for user $ci_user:" 10 60 3>&1 1>&2 2>&3)
+                    if [ $? -ne 0 ]; then
+                        ci_password_enabled="no"
+                        break
+                    fi
+                    
+                    if [ "$ci_password" = "$ci_password_confirm" ]; then
+                        log_info "Password authentication configured for user $ci_user"
+                        break
+                    else
+                        whiptail --title "Password Mismatch" --msgbox "Passwords do not match. Please try again." 10 60
+                    fi
+                done
             fi
             
             ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
@@ -1541,8 +1768,64 @@ create_template() {
                 
                 if [ ${#packages[@]} -gt 0 ]; then
                     install_packages=$(IFS=' '; echo "${packages[*]}")
-                    log "INFO" "Packages to install: $install_packages"
+                    log_info "Packages to install: $install_packages"
                 fi
+            fi
+        fi
+    fi
+
+    # --- Step 6.5: Custom Script Execution (Cloud-init only) ---
+    custom_scripts=""
+    if [ "$use_cloudinit" = "yes" ]; then
+        if whiptail --title "Custom Scripts" --yesno "Do you want to add custom scripts to run during first boot?" 10 60; then
+            # Script execution options
+            script_option=$(whiptail --title "Script Options" --menu "Choose script input method:" 15 70 4 \
+                "commands" "Simple commands (one per line)" \
+                "script" "Custom multi-line script" \
+                "template" "Predefined script templates" \
+                "none" "Skip custom scripts" 3>&1 1>&2 2>&3)
+            
+            if [ "$script_option" != "none" ] && [ $? -eq 0 ]; then
+                case "$script_option" in
+                    "commands")
+                        custom_scripts=$(whiptail --title "Custom Commands" --inputbox "Enter commands (one per line, use \\n for newlines):" 15 70 "" 3>&1 1>&2 2>&3)
+                        if [ $? -eq 0 ] && [ -n "$custom_scripts" ]; then
+                            # Convert \n to actual newlines
+                            custom_scripts=$(echo -e "$custom_scripts")
+                            log_info "Custom commands configured"
+                        fi
+                        ;;
+                    "script")
+                        # Use a temporary file for multi-line script input
+                        SCRIPT_INPUT_FILE=$(mktemp)
+                        if whiptail --title "Custom Script" --textbox /dev/null 20 80 --scrolltext 2>"$SCRIPT_INPUT_FILE"; then
+                            if [ -s "$SCRIPT_INPUT_FILE" ]; then
+                                custom_scripts=$(cat "$SCRIPT_INPUT_FILE")
+                                log_info "Custom script configured"
+                            fi
+                        fi
+                        rm -f "$SCRIPT_INPUT_FILE"
+                        ;;
+                    "template")
+                        # Predefined script templates
+                        template_choice=$(whiptail --title "Script Templates" --menu "Choose a predefined script template:" 18 80 8 \
+                            "docker-setup" "Install and configure Docker" \
+                            "web-server" "Basic web server setup (nginx)" \
+                            "security-hardening" "Basic security hardening" \
+                            "monitoring-agent" "Install monitoring agents" \
+                            "dev-tools" "Development tools setup" \
+                            "auto-updates" "Configure automatic updates" \
+                            "custom-user" "Create additional system user" \
+                            "none" "Cancel template selection" 3>&1 1>&2 2>&3)
+                        
+                        if [ "$template_choice" != "none" ] && [ $? -eq 0 ]; then
+                            custom_scripts=$(get_script_template "$template_choice")
+                            if [ -n "$custom_scripts" ]; then
+                                log_info "Applied script template: $template_choice"
+                            fi
+                        fi
+                        ;;
+                esac
             fi
         fi
     fi
@@ -1554,27 +1837,38 @@ create_template() {
 
     # --- Step 8: Validate Configuration ---
     if ! validate_template_config; then
-        log "ERROR" "Template configuration validation failed"
+        log_error "Template configuration validation failed"
         return 1
     fi
 
     # --- Step 9: Confirm and Create ---
     summary="Template: $template_name\nDistro: $distro $version\nCPU: $cpu\nRAM: $ram MB\nDisk: $storage GB\nCloud-Init: $use_cloudinit\nTags: $tags"
     if [ "$use_cloudinit" = "yes" ]; then
-        summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}...\nNetwork: $ci_network"
+        summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}..."
+        if [ "$ci_password_enabled" = "yes" ]; then
+            summary+="\nPassword: Enabled"
+        else
+            summary+="\nPassword: Disabled"
+        fi
+        summary+="\nNetwork: $ci_network"
         if [ -n "$install_packages" ]; then
             summary+="\nPackages: $install_packages"
+        fi
+        if [ -n "$custom_scripts" ]; then
+            summary+="\nCustom Scripts: Configured"
+        else
+            summary+="\nCustom Scripts: None"
         fi
     fi
 
     if ! whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70; then
-        log "INFO" "User cancelled at confirmation."
+        log_info "User cancelled at confirmation."
         return 0
     fi
 
     # Exit here if in test mode
     if [ -n "$TEST_MODE" ]; then
-        log "INFO" "Test mode - exiting before VM creation."
+        log_info "Test mode - exiting before VM creation."
         return 0
     fi
 
@@ -1596,7 +1890,7 @@ create_template() {
 
     # Get next available VMID
     vmid=$(pvesh get /cluster/nextid)
-    log "INFO" "Using VMID: $vmid"
+    log_info "Using VMID: $vmid"
 
     # Download image
     iso_dir="/var/lib/vz/template/iso"
@@ -1609,22 +1903,22 @@ create_template() {
     # Get URL template and replace version placeholder
     url_template=$(get_distro_url_template "$distro")
     if [ -z "$url_template" ]; then
-        log "ERROR" "Failed to get download URL template for $distro"
+        log_error "Failed to get download URL template for $distro"
         whiptail --title "Error" --msgbox "Failed to get download URL template for $distro." 10 60
         return 1
     fi
 
     # Replace version placeholder in URL
     download_url="${url_template//%version%/$version}"
-    log "INFO" "Download URL: $download_url"
+    log_info "Download URL: $download_url"
 
     if [ ! -f "$iso_path" ]; then
-        log "INFO" "Downloading image for $distro $version..."
+        log_info "Downloading image for $distro $version..."
         whiptail --title "Downloading" --infobox "Downloading $distro $version image...\nThis may take a few minutes." 10 60
         
         # Download the image
         if ! curl -L -o "$iso_path" "$download_url"; then
-            log "ERROR" "Failed to download image from $download_url"
+            log_error "Failed to download image from $download_url"
             whiptail --title "Error" --msgbox "Failed to download image. Check network connection and try again." 10 60
             rm -f "$iso_path"  # Clean up partial download
             return 1
@@ -1632,11 +1926,11 @@ create_template() {
     fi
 
     # Create VM
-    log "INFO" "Creating VM $vmid ($template_name)..."
+    log_info "Creating VM $vmid ($template_name)..."
     whiptail --title "Creating VM" --infobox "Creating VM $vmid ($template_name)..." 10 60
 
     if ! qm create "$vmid" --name "$template_name" --memory "$ram" --cores "$cpu" --net0 "virtio,bridge=vmbr0"; then
-        log "ERROR" "Failed to create VM $vmid"
+        log_error "Failed to create VM $vmid"
         whiptail --title "Error" --msgbox "Failed to create VM $vmid. Check logs for details." 10 60
         return 1
     fi
@@ -1646,15 +1940,15 @@ create_template() {
     qm set "$vmid" --ostype l26
 
     # Import disk (cloud image)
-    log "INFO" "Importing disk image..."
+    log_info "Importing disk image..."
     if ! qm importdisk "$vmid" "$iso_path" "$default_storage"; then
-        log "ERROR" "Failed to import disk from $iso_path to $default_storage"
+        log_error "Failed to import disk from $iso_path to $default_storage"
         whiptail --title "Error" --msgbox "Failed to import disk. Check storage configuration." 10 60
         return 1
     fi
 
     # Attach disk
-    log "INFO" "Attaching disk to VM..."
+    log_info "Attaching disk to VM..."
     qm set "$vmid" --scsi0 "$default_storage:vm-$vmid-disk-0"
     qm set "$vmid" --boot order=scsi0
 
@@ -1663,7 +1957,7 @@ create_template() {
 
     # Add cloud-init drive if selected
     if [ "$use_cloudinit" = "yes" ]; then
-        log "INFO" "Configuring cloud-init..."
+        log_info "Configuring cloud-init..."
         qm set "$vmid" --ide2 "$default_storage:cloudinit"
         qm set "$vmid" --ciuser "$ci_user"
         
@@ -1674,7 +1968,13 @@ create_template() {
             echo "$ci_sshkey" > "$SSH_KEY_FILE"
             qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
             rm -f "$SSH_KEY_FILE"
-            log "INFO" "SSH key configured for user $ci_user"
+            log_info "SSH key configured for user $ci_user"
+        fi
+        
+        # Set cloud-init password if provided
+        if [ "$ci_password_enabled" = "yes" ] && [ -n "$ci_password" ]; then
+            qm set "$vmid" --cipassword "$ci_password"
+            log_info "Password authentication configured for user $ci_user"
         fi
         
         # Set network configuration
@@ -1686,7 +1986,7 @@ create_template() {
         
         # Configure package installation via cloud-init
         if [ -n "$install_packages" ]; then
-            log "INFO" "Configuring package installation: $install_packages"
+            log_info "Configuring package installation: $install_packages"
             # Create cloud-init user data for package installation
             CLOUD_INIT_FILE=$(mktemp)
             cat > "$CLOUD_INIT_FILE" << EOF
@@ -1703,12 +2003,23 @@ EOF
             # Add QEMU guest agent installation
             echo "  - qemu-guest-agent" >> "$CLOUD_INIT_FILE"
             
-            # Add runcmd to start qemu-guest-agent
+            # Add runcmd to start qemu-guest-agent and custom scripts
             cat >> "$CLOUD_INIT_FILE" << EOF
 runcmd:
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
 EOF
+            
+            # Add custom scripts if configured
+            if [ -n "$custom_scripts" ]; then
+                echo "  # Custom scripts" >> "$CLOUD_INIT_FILE"
+                # Convert custom scripts to YAML runcmd format
+                while IFS= read -r line; do
+                    if [ -n "$line" ]; then
+                        echo "  - $line" >> "$CLOUD_INIT_FILE"
+                    fi
+                done <<< "$custom_scripts"
+            fi
             
             # Set the cloud-init configuration
             qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
@@ -1731,6 +2042,17 @@ runcmd:
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
 EOF
+            
+            # Add custom scripts if configured
+            if [ -n "$custom_scripts" ]; then
+                echo "  # Custom scripts" >> "$CLOUD_INIT_FILE"
+                # Convert custom scripts to YAML runcmd format
+                while IFS= read -r line; do
+                    if [ -n "$line" ]; then
+                        echo "  - $line" >> "$CLOUD_INIT_FILE"
+                    fi
+                done <<< "$custom_scripts"
+            fi
             qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
             
             if [ -d "/var/lib/vz/snippets" ]; then
@@ -1751,10 +2073,10 @@ EOF
     qm set "$vmid" --description "$creation_info"
 
     # Convert to template
-    log "INFO" "Converting VM $vmid to template..."
+    log_info "Converting VM $vmid to template..."
     qm template "$vmid"
 
-    log "INFO" "Template $template_name ($vmid) created successfully."
+    log_info "Template $template_name ($vmid) created successfully."
     whiptail --title "Success" --msgbox "Template $template_name ($vmid) created successfully!" 10 60
     return 0
 }
@@ -1796,7 +2118,7 @@ main_menu() {
                 show_help
                 ;;
             8|"")
-                log "INFO" "Exiting template creator"
+                log_info "Exiting template creator"
                 exit 0
                 ;;
         esac
@@ -1822,4 +2144,5 @@ elif [ $# -eq 0 ]; then
 else
     # Arguments were provided and handled at the beginning of the script
     # This handles --list-distros, --list-versions, --test, etc.
-    log "INFO" "CLI arguments were processed at script start"
+    log_info "CLI arguments were processed at script start"
+fi

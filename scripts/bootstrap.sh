@@ -29,8 +29,8 @@ log() {
 # Error handling function
 handle_error() {
     local exit_code=$?
-    log "ERROR" "An error occurred on line $1 with exit code $exit_code"
-    log "ERROR" "Bootstrap failed. Please check the logs and try again."
+    log_error "An error occurred on line $1 with exit code $exit_code"
+    log_error "Bootstrap failed. Please check the logs and try again."
     exit $exit_code
 }
 
@@ -40,10 +40,10 @@ trap 'handle_error $LINENO' ERR
 # Check root privileges
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        log "ERROR" "This script must be run as root or with sudo."
+        log_error "This script must be run as root or with sudo."
         exit 1
     fi
-    log "INFO" "Running as root: OK"
+    log_info "Running as root: OK"
     return 0
 }
 
@@ -62,14 +62,14 @@ check_os_compatibility() {
         done
         
         if [ $os_supported -eq 1 ]; then
-            log "INFO" "Detected supported OS: $os_id"
+            log_info "Detected supported OS: $os_id"
             return 0
         else
-            log "ERROR" "Unsupported OS: $os_id. Supported: ${supported_os[*]}"
+            log_error "Unsupported OS: $os_id. Supported: ${supported_os[*]}"
             exit 1
         fi
     else
-        log "ERROR" "/etc/os-release not found. Cannot determine OS."
+        log_error "/etc/os-release not found. Cannot determine OS."
         exit 1
     fi
 }
@@ -79,7 +79,7 @@ check_dependencies() {
     local deps=(curl git whiptail jq wget curl qemu-img)
     local missing=()
 
-    log "INFO" "Checking dependencies..."
+    log_info "Checking dependencies..."
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
             missing+=("$dep")
@@ -87,36 +87,36 @@ check_dependencies() {
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
-        log "INFO" "Installing missing dependencies: ${missing[*]}"
+        log_info "Installing missing dependencies: ${missing[*]}"
         
         # Determine package manager
         if command -v apt >/dev/null 2>&1; then
-            log "INFO" "Using apt package manager"
+            log_info "Using apt package manager"
             apt update -q
             apt install -y "${missing[@]}" || {
-                log "ERROR" "Failed to install packages with apt"
+                log_error "Failed to install packages with apt"
                 exit 1
             }
         elif command -v dnf >/dev/null 2>&1; then
-            log "INFO" "Using dnf package manager"
+            log_info "Using dnf package manager"
             dnf install -y "${missing[@]}" || {
-                log "ERROR" "Failed to install packages with dnf"
+                log_error "Failed to install packages with dnf"
                 exit 1
             }
         elif command -v yum >/dev/null 2>&1; then
-            log "INFO" "Using yum package manager"
+            log_info "Using yum package manager"
             yum install -y "${missing[@]}" || {
-                log "ERROR" "Failed to install packages with yum"
+                log_error "Failed to install packages with yum"
                 exit 1
             }
         elif command -v zypper >/dev/null 2>&1; then
-            log "INFO" "Using zypper package manager"
+            log_info "Using zypper package manager"
             zypper install -y "${missing[@]}" || {
-                log "ERROR" "Failed to install packages with zypper"
+                log_error "Failed to install packages with zypper"
                 exit 1
             }
         else
-            log "ERROR" "No supported package manager found. Please install manually: ${missing[*]}"
+            log_error "No supported package manager found. Please install manually: ${missing[*]}"
             exit 1
         fi
         
@@ -129,12 +129,12 @@ check_dependencies() {
         done
         
         if [ ${#still_missing[@]} -gt 0 ]; then
-            log "ERROR" "Failed to install some dependencies: ${still_missing[*]}"
+            log_error "Failed to install some dependencies: ${still_missing[*]}"
             exit 1
         fi
     fi
     
-    log "INFO" "All dependencies satisfied."
+    log_info "All dependencies satisfied."
     return 0
 }
 
@@ -143,22 +143,22 @@ check_proxmox() {
     if command -v pveversion >/dev/null 2>&1; then
         local pve_version
         pve_version=$(pveversion | grep -oP 'pve-manager\/\K[0-9]+\.[0-9]+')
-        log "INFO" "Proxmox VE $pve_version detected"
+        log_info "Proxmox VE $pve_version detected"
         
         # Check Proxmox version (minimum recommended 7.0)
         if (( $(echo "$pve_version < 7.0" | bc -l) )); then
-            log "WARN" "Proxmox VE $pve_version is older than the recommended version 7.0. Some features may not work properly."
+            log_warn "Proxmox VE $pve_version is older than the recommended version 7.0. Some features may not work properly."
         fi
         return 0
     else
-        log "WARN" "Proxmox VE not detected. Some features may not be available."
+        log_warn "Proxmox VE not detected. Some features may not be available."
         
         # Ask to continue if run interactively
         if [ -t 0 ]; then
             read -p "Continue without Proxmox VE? [y/N] " -n 1 -r
             echo
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                log "INFO" "Installation cancelled by user."
+                log_info "Installation cancelled by user."
                 exit 0
             fi
         fi
@@ -171,33 +171,33 @@ setup_repository() {
     local repo_url="https://github.com/binghzal/homelab.git"
     local repo_dir="/opt/homelab"
     
-    log "INFO" "Setting up repository..."
+    log_info "Setting up repository..."
     
     if [ ! -d "$repo_dir" ]; then
         mkdir -p "$repo_dir"
     fi
     
     if [ ! -d "$repo_dir/.git" ]; then
-        log "INFO" "Cloning repository to $repo_dir"
+        log_info "Cloning repository to $repo_dir"
         git clone "$repo_url" "$repo_dir" || {
-            log "ERROR" "Failed to clone repository from $repo_url to $repo_dir"
+            log_error "Failed to clone repository from $repo_url to $repo_dir"
             exit 1
         }
     else
-        log "INFO" "Updating repository in $repo_dir"
+        log_info "Updating repository in $repo_dir"
         git -C "$repo_dir" fetch
         git -C "$repo_dir" reset --hard origin/main || {
-            log "ERROR" "Failed to update repository in $repo_dir"
+            log_error "Failed to update repository in $repo_dir"
             exit 1
         }
     fi
     
     # Set proper permissions for scripts
     chmod -R 750 "$repo_dir/scripts" || {
-        log "WARN" "Failed to set permissions on scripts directory"
+        log_warn "Failed to set permissions on scripts directory"
     }
     
-    log "INFO" "Repository setup complete."
+    log_info "Repository setup complete."
     return 0
 }
 
@@ -207,12 +207,12 @@ setup_config() {
     local user_config="$config_dir/user.conf"
     local system_config="$config_dir/system.conf"
     
-    log "INFO" "Setting up configuration..."
+    log_info "Setting up configuration..."
     
     if [ ! -d "$config_dir" ]; then
         mkdir -p "$config_dir"
         chmod 750 "$config_dir"
-        log "INFO" "Created config directory: $config_dir"
+        log_info "Created config directory: $config_dir"
     fi
     
     # Create user config if it doesn't exist
@@ -240,7 +240,7 @@ REPO_BRANCH=main
 AUTO_UPDATE=true
 EOF
         chmod 640 "$user_config"
-        log "INFO" "Created user config: $user_config"
+        log_info "Created user config: $user_config"
     fi
     
     # Create system config if it doesn't exist
@@ -260,10 +260,10 @@ OS_VERSION=$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
 PROXMOX_DETECTED=$(command -v pveversion >/dev/null 2>&1 && echo "true" || echo "false")
 EOF
         chmod 640 "$system_config"
-        log "INFO" "Created system config: $system_config"
+        log_info "Created system config: $system_config"
     fi
     
-    log "INFO" "Configuration setup complete."
+    log_info "Configuration setup complete."
     return 0
 }
 
@@ -281,7 +281,7 @@ setup_service() {
     fi
     
     if [ "$auto_update" = "true" ]; then
-        log "INFO" "Setting up auto-update service..."
+        log_info "Setting up auto-update service..."
         
         # Create service file
         cat > "$service_file" << EOF
@@ -318,9 +318,9 @@ EOF
         systemctl enable homelab-updater.timer
         systemctl start homelab-updater.timer
         
-        log "INFO" "Auto-update service configured and enabled."
+        log_info "Auto-update service configured and enabled."
     else
-        log "INFO" "Auto-update disabled in configuration. Skipping service setup."
+        log_info "Auto-update disabled in configuration. Skipping service setup."
     fi
     
     return 0
@@ -328,7 +328,7 @@ EOF
 
 # Main function - ties everything together
 main() {
-    log "INFO" "Starting Proxmox Template Creator installation..."
+    log_info "Starting Proxmox Template Creator installation..."
     
     check_root
     check_os_compatibility
@@ -338,7 +338,7 @@ main() {
     setup_config
     setup_service
     
-    log "INFO" "Installation complete! Launching main controller..."
+    log_info "Installation complete! Launching main controller..."
     /opt/homelab/scripts/main.sh
     
     exit 0

@@ -1,910 +1,869 @@
 #!/bin/bash
-# Enhanced Testing Framework for Proxmox Template Creator
-# Comprehensive testing with unit, integration, performance, security, and E2E testing
-# Supports CI/CD integration, automated reporting, and multiple execution modes
+# Enhanced Testing Framework for Homelab Project
+# Comprehensive testing framework with unit, integration, performance, security, and E2E testing
+# Version: 1.0.0
 
 set -euo pipefail
 
 # === Configuration ===
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-readonly TEST_RESULTS_DIR="${PROJECT_ROOT}/test-results"
-readonly TEST_REPORTS_DIR="${TEST_RESULTS_DIR}/reports"
-readonly TEST_LOGS_DIR="${TEST_RESULTS_DIR}/logs"
-readonly TEST_COVERAGE_DIR="${TEST_RESULTS_DIR}/coverage"
-readonly TEST_PERFORMANCE_DIR="${TEST_RESULTS_DIR}/performance"
+readonly TESTS_DIR="$PROJECT_ROOT/tests"
+readonly REPORTS_DIR="$PROJECT_ROOT/test_reports"
+readonly TEMP_DIR="/tmp/homelab_tests_$$"
+readonly TEST_CONFIG_FILE="$PROJECT_ROOT/test_config.json"
 
-# Test execution configuration
-TEST_MODE="all"           # all, unit, integration, performance, security, e2e
-OUTPUT_FORMAT="console"   # console, json, html, junit
-PARALLEL_TESTS=false
-VERBOSE_MODE=false
-CI_MODE=false
-PERFORMANCE_BENCHMARKS=true
-COVERAGE_ANALYSIS=true
-SECURITY_SCANNING=true
+# Test execution parameters
+readonly DEFAULT_TIMEOUT=300
+readonly PARALLEL_JOBS=4
+readonly PERFORMANCE_ITERATIONS=5
 
-# Performance thresholds (in seconds unless otherwise specified)
-readonly BOOTSTRAP_TIME_THRESHOLD=30
-readonly TEMPLATE_CREATE_TIME_THRESHOLD=300
-readonly MODULE_LOAD_TIME_THRESHOLD=5
-readonly MEMORY_USAGE_THRESHOLD_MB=512
+# Test result tracking
+declare -g TOTAL_TESTS=0
+declare -g PASSED_TESTS=0
+declare -g FAILED_TESTS=0
+declare -g SKIPPED_TESTS=0
+declare -g TEST_START_TIME=""
+declare -g TEST_SUITE=""
+declare -g VERBOSE_MODE=false
+declare -g QUIET_MODE=false
+declare -g DRY_RUN=false
+declare -g STOP_ON_FAIL=false
 
-# Test counters and results
-declare -A TEST_RESULTS=(
-    [total]=0
-    [passed]=0
-    [failed]=0
-    [skipped]=0
-    [warnings]=0
-)
+# Test categories
+declare -ga TEST_CATEGORIES=("unit" "integration" "performance" "security" "e2e")
+declare -ga ENABLED_CATEGORIES=()
 
-declare -A TEST_CATEGORIES=(
-    [unit]=0
-    [integration]=0
-    [performance]=0
-    [security]=0
-    [e2e]=0
-)
-
-declare -a FAILED_TESTS=()
-declare -a WARNING_TESTS=()
+# Output formats
+declare -g OUTPUT_FORMAT="console"  # console, json, html, junit
+declare -g REPORT_FILE=""
 
 # === Logging and Output ===
 setup_logging() {
-    mkdir -p "$TEST_LOGS_DIR"
-    export LOG_FILE="${TEST_LOGS_DIR}/test_framework_$(date +%Y%m%d_%H%M%S).log"
+    local log_level="${HL_LOG_LEVEL:-INFO}"
     export LOG_FILE_ALREADY_SET_EXTERNALLY="true"
-    export HL_LOG_LEVEL="${HL_LOG_LEVEL:-INFO}"
+    export LOG_FILE="$TEMP_DIR/test_framework.log"
+    export HL_LOG_LEVEL="$log_level"
     
     # Source centralized logging if available
-    if [[ -f "${SCRIPT_DIR}/lib/logging.sh" ]]; then
-        source "${SCRIPT_DIR}/lib/logging.sh"
+    if [[ -f "$SCRIPT_DIR/lib/logging.sh" ]]; then
+        source "$SCRIPT_DIR/lib/logging.sh"
     else
         # Fallback logging functions
-        log_info() { echo "[INFO] $*" | tee -a "$LOG_FILE"; }
-        log_warn() { echo "[WARN] $*" | tee -a "$LOG_FILE"; }
-        log_error() { echo "[ERROR] $*" | tee -a "$LOG_FILE"; }
-        log_debug() { [[ "${HL_LOG_LEVEL:-INFO}" == "DEBUG" ]] && echo "[DEBUG] $*" | tee -a "$LOG_FILE"; }
+        log_info() { echo -e "\033[32m[INFO]\033[0m $*" | tee -a "$LOG_FILE"; }
+        log_warn() { echo -e "\033[33m[WARN]\033[0m $*" | tee -a "$LOG_FILE"; }
+        log_error() { echo -e "\033[31m[ERROR]\033[0m $*" | tee -a "$LOG_FILE"; }
+        log_debug() { [[ "$log_level" == "DEBUG" ]] && echo -e "\033[36m[DEBUG]\033[0m $*" | tee -a "$LOG_FILE"; }
     fi
 }
 
-# === Test Utilities ===
-assert_success() {
-    local description="$1"
-    shift
+# === Test Infrastructure ===
+setup_test_environment() {
+    log_info "Setting up test environment..."
     
-    if "$@" >/dev/null 2>&1; then
-        record_test_result "PASS" "$description"
+    # Create necessary directories
+    mkdir -p "$TEMP_DIR" "$TESTS_DIR" "$REPORTS_DIR"
+    
+    # Initialize test tracking
+    TEST_START_TIME=$(date '+%s')
+    
+    # Create test configuration if it doesn't exist
+    if [[ ! -f "$TEST_CONFIG_FILE" ]]; then
+        create_default_test_config
+    fi
+    
+    # Set up cleanup trap
+    trap cleanup_test_environment EXIT INT TERM
+    
+    log_info "Test environment ready: $TEMP_DIR"
+}
+
+cleanup_test_environment() {
+    log_info "Cleaning up test environment..."
+    
+    # Generate final report
+    generate_test_report
+    
+    # Clean up temporary files
+    if [[ -d "$TEMP_DIR" ]] && [[ "$TEMP_DIR" != "/" ]]; then
+        rm -rf "$TEMP_DIR"
+    fi
+    
+    log_info "Test cleanup complete"
+}
+
+create_default_test_config() {
+    cat > "$TEST_CONFIG_FILE" << 'EOF'
+{
+  "test_settings": {
+    "timeout": 300,
+    "parallel_jobs": 4,
+    "performance_iterations": 5,
+    "retry_count": 2
+  },
+  "test_categories": {
+    "unit": {
+      "enabled": true,
+      "timeout": 60,
+      "parallel": true
+    },
+    "integration": {
+      "enabled": true,
+      "timeout": 180,
+      "parallel": false
+    },
+    "performance": {
+      "enabled": true,
+      "timeout": 300,
+      "iterations": 5,
+      "thresholds": {
+        "memory_mb": 1024,
+        "cpu_percent": 80,
+        "disk_io_mb": 100
+      }
+    },
+    "security": {
+      "enabled": true,
+      "timeout": 240,
+      "tools": ["shellcheck", "bandit", "trivy"]
+    },
+    "e2e": {
+      "enabled": false,
+      "timeout": 600,
+      "requires_infrastructure": true
+    }
+  },
+  "environments": {
+    "ci": {
+      "categories": ["unit", "integration", "security"],
+      "parallel": true,
+      "output_format": "junit"
+    },
+    "local": {
+      "categories": ["unit", "integration", "performance"],
+      "parallel": false,
+      "output_format": "console"
+    },
+    "full": {
+      "categories": ["unit", "integration", "performance", "security", "e2e"],
+      "parallel": false,
+      "output_format": "html"
+    }
+  }
+}
+EOF
+    log_info "Created default test configuration: $TEST_CONFIG_FILE"
+}
+
+# === Test Assertion Framework ===
+assert_true() {
+    local condition="$1"
+    local description="${2:-Assertion failed}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
+    
+    if eval "$condition" 2>/dev/null; then
+        pass_test "$description" "$line_number"
         return 0
     else
-        record_test_result "FAIL" "$description" "Command failed: $*"
+        fail_test "$description" "$line_number" "Condition '$condition' evaluated to false"
         return 1
     fi
 }
 
-assert_output_contains() {
-    local expected="$1"
-    local description="$2"
-    shift 2
+assert_false() {
+    local condition="$1"
+    local description="${2:-Assertion failed}"
+    local line_number="${BASH_LINENO[0]}"
     
-    local output
-    if output=$("$@" 2>&1); then
-        if [[ "$output" == *"$expected"* ]]; then
-            record_test_result "PASS" "$description"
-            return 0
-        else
-            record_test_result "FAIL" "$description" "Output doesn't contain '$expected'. Got: $output"
-            return 1
-        fi
+    ((TOTAL_TESTS++))
+    
+    if ! eval "$condition" 2>/dev/null; then
+        pass_test "$description" "$line_number"
+        return 0
     else
-        record_test_result "FAIL" "$description" "Command failed: $*"
+        fail_test "$description" "$line_number" "Condition '$condition' evaluated to true"
+        return 1
+    fi
+}
+
+assert_equals() {
+    local expected="$1"
+    local actual="$2"
+    local description="${3:-Values should be equal}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
+    
+    if [[ "$expected" == "$actual" ]]; then
+        pass_test "$description" "$line_number"
+        return 0
+    else
+        fail_test "$description" "$line_number" "Expected: '$expected', Actual: '$actual'"
+        return 1
+    fi
+}
+
+assert_not_equals() {
+    local expected="$1"
+    local actual="$2"
+    local description="${3:-Values should not be equal}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
+    
+    if [[ "$expected" != "$actual" ]]; then
+        pass_test "$description" "$line_number"
+        return 0
+    else
+        fail_test "$description" "$line_number" "Expected '$expected' != '$actual'"
+        return 1
+    fi
+}
+
+assert_contains() {
+    local substring="$1"
+    local string="$2"
+    local description="${3:-String should contain substring}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
+    
+    if [[ "$string" == *"$substring"* ]]; then
+        pass_test "$description" "$line_number"
+        return 0
+    else
+        fail_test "$description" "$line_number" "String '$string' does not contain '$substring'"
         return 1
     fi
 }
 
 assert_file_exists() {
     local file_path="$1"
-    local description="${2:-File exists: $file_path}"
+    local description="${2:-File should exist: $file_path}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
     
     if [[ -f "$file_path" ]]; then
-        record_test_result "PASS" "$description"
+        pass_test "$description" "$line_number"
         return 0
     else
-        record_test_result "FAIL" "$description" "File not found: $file_path"
+        fail_test "$description" "$line_number" "File does not exist: $file_path"
         return 1
     fi
 }
 
-assert_dir_exists() {
-    local dir_path="$1"
-    local description="${2:-Directory exists: $dir_path}"
+assert_command_success() {
+    local command="$1"
+    local description="${2:-Command should succeed: $command}"
+    local line_number="${BASH_LINENO[0]}"
     
-    if [[ -d "$dir_path" ]]; then
-        record_test_result "PASS" "$description"
-        return 0
-    else
-        record_test_result "FAIL" "$description" "Directory not found: $dir_path"
-        return 1
-    fi
-}
-
-assert_performance_threshold() {
-    local actual_time="$1"
-    local threshold="$2"
-    local description="$3"
+    ((TOTAL_TESTS++))
     
-    if (( $(echo "$actual_time <= $threshold" | bc -l) )); then
-        record_test_result "PASS" "$description (${actual_time}s <= ${threshold}s)"
+    local output
+    local exit_code
+    
+    if output=$(eval "$command" 2>&1); then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
+    
+    if [[ $exit_code -eq 0 ]]; then
+        pass_test "$description" "$line_number"
         return 0
     else
-        record_test_result "WARN" "$description (${actual_time}s > ${threshold}s)" "Performance threshold exceeded"
+        fail_test "$description" "$line_number" "Command failed with exit code $exit_code: $output"
         return 1
     fi
 }
 
-record_test_result() {
-    local status="$1"
-    local description="$2"
+assert_command_fails() {
+    local command="$1"
+    local description="${2:-Command should fail: $command}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((TOTAL_TESTS++))
+    
+    local output
+    local exit_code
+    
+    if output=$(eval "$command" 2>&1); then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
+    
+    if [[ $exit_code -ne 0 ]]; then
+        pass_test "$description" "$line_number"
+        return 0
+    else
+        fail_test "$description" "$line_number" "Command succeeded when it should have failed: $output"
+        return 1
+    fi
+}
+
+# === Test Result Tracking ===
+pass_test() {
+    local description="$1"
+    local line_number="${2:-}"
+    
+    ((PASSED_TESTS++))
+    
+    if [[ "$VERBOSE_MODE" == "true" ]] || [[ "$QUIET_MODE" == "false" ]]; then
+        echo -e "\033[32m✓ PASS\033[0m [$TEST_SUITE:$line_number] $description"
+    fi
+    
+    log_test_result "PASS" "$description" "$line_number"
+}
+
+fail_test() {
+    local description="$1"
+    local line_number="${2:-}"
     local details="${3:-}"
     
-    ((TEST_RESULTS[total]++))
+    ((FAILED_TESTS++))
     
-    case "$status" in
-        PASS)
-            ((TEST_RESULTS[passed]++))
-            if [[ "$VERBOSE_MODE" == true || "$CI_MODE" == false ]]; then
-                echo "✅ PASS: $description"
-            fi
-            log_info "PASS: $description"
-            ;;
-        FAIL)
-            ((TEST_RESULTS[failed]++))
-            echo "❌ FAIL: $description"
-            [[ -n "$details" ]] && echo "   Details: $details"
-            log_error "FAIL: $description - $details"
-            FAILED_TESTS+=("$description")
-            ;;
-        WARN)
-            ((TEST_RESULTS[warnings]++))
-            echo "⚠️  WARN: $description"
-            [[ -n "$details" ]] && echo "   Details: $details"
-            log_warn "WARN: $description - $details"
-            WARNING_TESTS+=("$description")
-            ;;
-        SKIP)
-            ((TEST_RESULTS[skipped]++))
-            echo "⏭️  SKIP: $description"
-            [[ -n "$details" ]] && echo "   Reason: $details"
-            log_info "SKIP: $description - $details"
-            ;;
-    esac
+    echo -e "\033[31m✗ FAIL\033[0m [$TEST_SUITE:$line_number] $description"
+    [[ -n "$details" ]] && echo -e "    \033[31mDetails:\033[0m $details"
+    
+    log_test_result "FAIL" "$description" "$line_number" "$details"
+    
+    if [[ "$STOP_ON_FAIL" == "true" ]]; then
+        log_error "Stopping on first failure as requested"
+        exit 1
+    fi
 }
 
-measure_execution_time() {
-    local start_time=$(date +%s.%N)
-    "$@"
-    local end_time=$(date +%s.%N)
-    echo "$(echo "$end_time - $start_time" | bc -l)"
+skip_test() {
+    local description="$1"
+    local reason="${2:-No reason provided}"
+    local line_number="${BASH_LINENO[0]}"
+    
+    ((SKIPPED_TESTS++))
+    
+    if [[ "$VERBOSE_MODE" == "true" ]]; then
+        echo -e "\033[33m○ SKIP\033[0m [$TEST_SUITE:$line_number] $description ($reason)"
+    fi
+    
+    log_test_result "SKIP" "$description" "$line_number" "$reason"
 }
 
-# === Unit Tests ===
-run_unit_tests() {
-    echo "🧪 Running Unit Tests..."
-    ((TEST_CATEGORIES[unit]++))
+log_test_result() {
+    local result="$1"
+    local description="$2"
+    local line_number="${3:-}"
+    local details="${4:-}"
     
-    # Test bootstrap functions
-    test_bootstrap_functions
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local log_entry="[$timestamp] [$result] [$TEST_SUITE:$line_number] $description"
+    [[ -n "$details" ]] && log_entry="$log_entry | $details"
     
-    # Test template functions
-    test_template_functions
-    
-    # Test configuration functions
-    test_configuration_functions
-    
-    # Test logging functions
-    test_logging_functions
-    
-    # Test utility functions
-    test_utility_functions
+    echo "$log_entry" >> "$TEMP_DIR/test_results.log"
 }
 
-test_bootstrap_functions() {
-    echo "  Testing bootstrap functions..."
+# === Test Execution Engine ===
+run_test_suite() {
+    local suite_name="$1"
+    local suite_file="$2"
     
-    if [[ -f "${SCRIPT_DIR}/bootstrap.sh" ]]; then
-        # Source bootstrap without executing main logic
-        source "${SCRIPT_DIR}/bootstrap.sh" --source-only 2>/dev/null || {
-            # If source-only flag doesn't exist, test without sourcing
-            assert_output_contains "Proxmox Template Creator" "Bootstrap script displays banner" \
-                bash "${SCRIPT_DIR}/bootstrap.sh" --help
-        }
-        
-        # Test function existence
-        if declare -f check_root >/dev/null 2>&1; then
-            assert_success "check_root function exists" declare -f check_root
-        fi
-        
-        if declare -f check_os_compatibility >/dev/null 2>&1; then
-            assert_success "check_os_compatibility function exists" declare -f check_os_compatibility
-        fi
+    TEST_SUITE="$suite_name"
+    log_info "Running test suite: $suite_name"
+    
+    local suite_start_time=$(date '+%s')
+    local suite_tests_before=$TOTAL_TESTS
+    
+    # Source and execute the test suite
+    if [[ -f "$suite_file" ]]; then
+        source "$suite_file"
     else
-        record_test_result "SKIP" "Bootstrap tests" "bootstrap.sh not found"
-    fi
-}
-
-test_template_functions() {
-    echo "  Testing template functions..."
-    
-    if [[ -f "${SCRIPT_DIR}/template.sh" ]]; then
-        # Test template script loads without errors
-        assert_success "Template script syntax check" bash -n "${SCRIPT_DIR}/template.sh"
-        
-        # Test help output
-        assert_output_contains "template" "Template script shows help" \
-            bash "${SCRIPT_DIR}/template.sh" --help 2>/dev/null || true
-            
-    else
-        record_test_result "SKIP" "Template tests" "template.sh not found"
-    fi
-}
-
-test_configuration_functions() {
-    echo "  Testing configuration functions..."
-    
-    if [[ -f "${SCRIPT_DIR}/config.sh" ]]; then
-        # Test config script loads without errors
-        assert_success "Config script syntax check" bash -n "${SCRIPT_DIR}/config.sh"
-        
-        # Test configuration directory creation
-        local test_config_dir="/tmp/test_homelab_config_$$"
-        mkdir -p "$test_config_dir"
-        assert_dir_exists "$test_config_dir" "Test config directory created"
-        rm -rf "$test_config_dir"
-        
-    else
-        record_test_result "SKIP" "Configuration tests" "config.sh not found"
-    fi
-}
-
-test_logging_functions() {
-    echo "  Testing logging functions..."
-    
-    if [[ -f "${SCRIPT_DIR}/lib/logging.sh" ]]; then
-        # Source and test logging functions
-        local test_log_file="/tmp/test_logging_$$.log"
-        export LOG_FILE="$test_log_file"
-        export LOG_FILE_ALREADY_SET_EXTERNALLY="true"
-        
-        source "${SCRIPT_DIR}/lib/logging.sh"
-        
-        # Test logging functions exist
-        assert_success "log_info function exists" declare -f log_info
-        assert_success "log_warn function exists" declare -f log_warn
-        assert_success "log_error function exists" declare -f log_error
-        assert_success "log_debug function exists" declare -f log_debug
-        
-        # Test actual logging
-        log_info "Test log message"
-        assert_file_exists "$test_log_file" "Log file created"
-        
-        if [[ -f "$test_log_file" ]]; then
-            assert_output_contains "Test log message" "Log message written" cat "$test_log_file"
-        fi
-        
-        rm -f "$test_log_file"
-    else
-        record_test_result "SKIP" "Logging tests" "logging.sh not found"
-    fi
-}
-
-test_utility_functions() {
-    echo "  Testing utility functions..."
-    
-    # Test basic shell utilities
-    assert_success "bc calculator available" which bc
-    assert_success "curl available" which curl
-    assert_success "git available" which git
-    
-    # Test whiptail for UI
-    if which whiptail >/dev/null 2>&1; then
-        assert_success "whiptail available for UI" which whiptail
-    else
-        record_test_result "WARN" "whiptail not available" "UI features may not work"
-    fi
-}
-
-# === Integration Tests ===
-run_integration_tests() {
-    echo "🔗 Running Integration Tests..."
-    ((TEST_CATEGORIES[integration]++))
-    
-    test_module_integration
-    test_configuration_integration
-    test_logging_integration
-    test_workflow_integration
-}
-
-test_module_integration() {
-    echo "  Testing module integration..."
-    
-    # Test main.sh can load and list modules
-    if [[ -f "${SCRIPT_DIR}/main.sh" ]]; then
-        assert_success "Main script syntax check" bash -n "${SCRIPT_DIR}/main.sh"
-        
-        # Test module discovery
-        if bash "${SCRIPT_DIR}/main.sh" --list-modules >/dev/null 2>&1; then
-            assert_success "Module discovery works" bash "${SCRIPT_DIR}/main.sh" --list-modules
-        else
-            record_test_result "SKIP" "Module discovery test" "main.sh doesn't support --list-modules"
-        fi
-    fi
-}
-
-test_configuration_integration() {
-    echo "  Testing configuration integration..."
-    
-    # Test configuration system integration
-    local test_config_dir="/tmp/test_homelab_integration_$$"
-    mkdir -p "$test_config_dir"
-    
-    # Test config creation and loading
-    if [[ -f "${SCRIPT_DIR}/config.sh" ]]; then
-        local config_output
-        if config_output=$(timeout 10 bash "${SCRIPT_DIR}/config.sh" --test 2>&1 || true); then
-            if [[ "$config_output" == *"config"* || "$config_output" == *"Config"* ]]; then
-                assert_success "Configuration system responds" true
-            else
-                record_test_result "SKIP" "Config integration test" "No recognizable config output"
-            fi
-        else
-            record_test_result "SKIP" "Config integration test" "Config script timeout or error"
-        fi
+        log_error "Test suite file not found: $suite_file"
+        return 1
     fi
     
-    rm -rf "$test_config_dir"
+    local suite_end_time=$(date '+%s')
+    local suite_duration=$((suite_end_time - suite_start_time))
+    local suite_tests_count=$((TOTAL_TESTS - suite_tests_before))
+    
+    log_info "Suite $suite_name completed: $suite_tests_count tests in ${suite_duration}s"
 }
 
-test_logging_integration() {
-    echo "  Testing logging integration..."
+run_test_category() {
+    local category="$1"
     
-    # Test logging integration across modules
-    local test_log_file="/tmp/test_integration_logging_$$.log"
-    export LOG_FILE="$test_log_file"
-    export LOG_FILE_ALREADY_SET_EXTERNALLY="true"
+    log_info "Running $category tests..."
     
-    # Test that modules can use logging
-    if [[ -f "${SCRIPT_DIR}/lib/logging.sh" ]]; then
-        source "${SCRIPT_DIR}/lib/logging.sh"
-        log_info "Integration test message"
-        
-        if [[ -f "$test_log_file" ]]; then
-            assert_output_contains "Integration test message" "Cross-module logging works" cat "$test_log_file"
-        fi
-    fi
-    
-    rm -f "$test_log_file"
-}
-
-test_workflow_integration() {
-    echo "  Testing workflow integration..."
-    
-    # Test complete workflow simulation
-    local workflow_test_dir="/tmp/test_workflow_$$"
-    mkdir -p "$workflow_test_dir"
-    
-    # Simulate a complete workflow without actual deployment
-    if [[ -f "${SCRIPT_DIR}/main.sh" ]]; then
-        # Test that main script can handle test mode
-        local main_output
-        if main_output=$(timeout 15 bash "${SCRIPT_DIR}/main.sh" --help 2>&1 || true); then
-            if [[ "$main_output" == *"help"* || "$main_output" == *"usage"* || "$main_output" == *"Template Creator"* ]]; then
-                assert_success "Main workflow help accessible" true
-            else
-                record_test_result "SKIP" "Workflow test" "No recognizable help output"
-            fi
-        else
-            record_test_result "SKIP" "Workflow test" "Main script timeout"
-        fi
-    fi
-    
-    rm -rf "$workflow_test_dir"
-}
-
-# === Performance Tests ===
-run_performance_tests() {
-    echo "⚡ Running Performance Tests..."
-    ((TEST_CATEGORIES[performance]++))
-    
-    test_bootstrap_performance
-    test_module_load_performance
-    test_memory_usage
-    test_disk_usage
-}
-
-test_bootstrap_performance() {
-    echo "  Testing bootstrap performance..."
-    
-    if [[ -f "${SCRIPT_DIR}/bootstrap.sh" ]]; then
-        local execution_time
-        execution_time=$(measure_execution_time bash -n "${SCRIPT_DIR}/bootstrap.sh")
-        assert_performance_threshold "$execution_time" "1.0" "Bootstrap syntax check performance"
-        
-        # Record performance metrics
-        echo "bootstrap_syntax_check:$execution_time" >> "${TEST_PERFORMANCE_DIR}/metrics.txt"
-    fi
-}
-
-test_module_load_performance() {
-    echo "  Testing module load performance..."
-    
-    local modules=("main.sh" "template.sh" "config.sh" "containers.sh")
-    
-    for module in "${modules[@]}"; do
-        if [[ -f "${SCRIPT_DIR}/$module" ]]; then
-            local execution_time
-            execution_time=$(measure_execution_time bash -n "${SCRIPT_DIR}/$module")
-            assert_performance_threshold "$execution_time" "$MODULE_LOAD_TIME_THRESHOLD" "Module $module load performance"
-            
-            echo "${module}_load_time:$execution_time" >> "${TEST_PERFORMANCE_DIR}/metrics.txt"
-        fi
-    done
-}
-
-test_memory_usage() {
-    echo "  Testing memory usage..."
-    
-    # Monitor memory usage during test execution
-    local initial_memory
-    initial_memory=$(free -m | awk 'NR==2{printf "%.2f", $3}')
-    
-    # Run a sample operation
-    if [[ -f "${SCRIPT_DIR}/main.sh" ]]; then
-        bash -n "${SCRIPT_DIR}/main.sh" >/dev/null 2>&1 || true
-    fi
-    
-    local final_memory
-    final_memory=$(free -m | awk 'NR==2{printf "%.2f", $3}')
-    
-    local memory_diff
-    memory_diff=$(echo "$final_memory - $initial_memory" | bc -l)
-    
-    echo "memory_usage_mb:$memory_diff" >> "${TEST_PERFORMANCE_DIR}/metrics.txt"
-    
-    if (( $(echo "$memory_diff <= $MEMORY_USAGE_THRESHOLD_MB" | bc -l) )); then
-        record_test_result "PASS" "Memory usage within threshold (${memory_diff}MB <= ${MEMORY_USAGE_THRESHOLD_MB}MB)"
-    else
-        record_test_result "WARN" "Memory usage exceeds threshold (${memory_diff}MB > ${MEMORY_USAGE_THRESHOLD_MB}MB)"
-    fi
-}
-
-test_disk_usage() {
-    echo "  Testing disk usage..."
-    
-    local project_size
-    project_size=$(du -sm "$PROJECT_ROOT" 2>/dev/null | cut -f1 || echo "0")
-    
-    echo "project_size_mb:$project_size" >> "${TEST_PERFORMANCE_DIR}/metrics.txt"
-    
-    if (( project_size <= 100 )); then
-        record_test_result "PASS" "Project disk usage reasonable (${project_size}MB <= 100MB)"
-    else
-        record_test_result "WARN" "Project disk usage high (${project_size}MB > 100MB)"
-    fi
-}
-
-# === Security Tests ===
-run_security_tests() {
-    echo "🔒 Running Security Tests..."
-    ((TEST_CATEGORIES[security]++))
-    
-    test_script_permissions
-    test_secure_practices
-    test_input_validation
-    test_credential_handling
-}
-
-test_script_permissions() {
-    echo "  Testing script permissions..."
-    
-    # Check that scripts have appropriate permissions
-    while IFS= read -r -d '' script; do
-        local perms
-        perms=$(stat -c "%a" "$script")
-        
-        if [[ "$perms" =~ ^[67][0-7][0-7]$ ]]; then
-            record_test_result "PASS" "Script permissions appropriate: $script ($perms)"
-        else
-            record_test_result "WARN" "Script permissions may be too permissive: $script ($perms)"
-        fi
-    done < <(find "$SCRIPT_DIR" -name "*.sh" -print0)
-}
-
-test_secure_practices() {
-    echo "  Testing secure coding practices..."
-    
-    # Check for potential security issues in scripts
-    local security_issues=0
-    
-    while IFS= read -r -d '' script; do
-        # Check for eval usage
-        if grep -q "eval" "$script"; then
-            record_test_result "WARN" "eval usage found in $script" "Potential security risk"
-            ((security_issues++))
-        fi
-        
-        # Check for unquoted variables
-        if grep -E '\$[A-Za-z_][A-Za-z0-9_]*[^"]' "$script" | grep -v "^\s*#" | head -1 >/dev/null; then
-            record_test_result "WARN" "Potentially unquoted variables in $script" "May cause security issues"
-            ((security_issues++))
-        fi
-        
-    done < <(find "$SCRIPT_DIR" -name "*.sh" -print0)
-    
-    if [[ $security_issues -eq 0 ]]; then
-        record_test_result "PASS" "No obvious security issues found"
-    fi
-}
-
-test_input_validation() {
-    echo "  Testing input validation..."
-    
-    # Test that scripts handle invalid input gracefully
-    local scripts=("main.sh" "template.sh" "config.sh")
-    
-    for script in "${scripts[@]}"; do
-        if [[ -f "${SCRIPT_DIR}/$script" ]]; then
-            # Test with invalid arguments
-            if timeout 5 bash "${SCRIPT_DIR}/$script" --invalid-argument >/dev/null 2>&1; then
-                record_test_result "WARN" "$script may not validate arguments properly"
-            else
-                record_test_result "PASS" "$script handles invalid arguments appropriately"
-            fi
-        fi
-    done
-}
-
-test_credential_handling() {
-    echo "  Testing credential handling..."
-    
-    # Check for hardcoded credentials or secrets
-    local credential_issues=0
-    
-    while IFS= read -r -d '' script; do
-        # Look for potential hardcoded credentials
-        if grep -iE "(password|passwd|secret|key|token).*=" "$script" | grep -v "^\s*#" | head -1 >/dev/null; then
-            local findings
-            findings=$(grep -iE "(password|passwd|secret|key|token).*=" "$script" | grep -v "^\s*#" | head -3)
-            record_test_result "WARN" "Potential credentials found in $script" "$findings"
-            ((credential_issues++))
-        fi
-        
-    done < <(find "$SCRIPT_DIR" -name "*.sh" -print0)
-    
-    if [[ $credential_issues -eq 0 ]]; then
-        record_test_result "PASS" "No hardcoded credentials detected"
-    fi
-}
-
-# === End-to-End Tests ===
-run_e2e_tests() {
-    echo "🎯 Running End-to-End Tests..."
-    ((TEST_CATEGORIES[e2e]++))
-    
-    test_complete_workflow
-    test_error_recovery
-    test_cleanup_procedures
-}
-
-test_complete_workflow() {
-    echo "  Testing complete workflow simulation..."
-    
-    # Simulate a complete user workflow without actual deployment
-    local e2e_test_dir="/tmp/test_e2e_$$"
-    mkdir -p "$e2e_test_dir"
-    
-    # Test bootstrap → main → module selection workflow
-    if [[ -f "${SCRIPT_DIR}/bootstrap.sh" && -f "${SCRIPT_DIR}/main.sh" ]]; then
-        # Test bootstrap can complete syntax check
-        assert_success "E2E: Bootstrap syntax validation" bash -n "${SCRIPT_DIR}/bootstrap.sh"
-        
-        # Test main script can be invoked
-        assert_success "E2E: Main script syntax validation" bash -n "${SCRIPT_DIR}/main.sh"
-        
-        # Test template module workflow
-        if [[ -f "${SCRIPT_DIR}/template.sh" ]]; then
-            assert_success "E2E: Template module syntax validation" bash -n "${SCRIPT_DIR}/template.sh"
-        fi
-    else
-        record_test_result "SKIP" "E2E workflow test" "Required scripts not found"
-    fi
-    
-    rm -rf "$e2e_test_dir"
-}
-
-test_error_recovery() {
-    echo "  Testing error recovery..."
-    
-    # Test that scripts handle errors gracefully
-    local recovery_test_dir="/tmp/test_recovery_$$"
-    mkdir -p "$recovery_test_dir"
-    
-    # Create conditions that should trigger error handling
-    export HOMELAB_TEST_RECOVERY="true"
-    
-    # Test with insufficient permissions (simulate)
-    if [[ -f "${SCRIPT_DIR}/main.sh" ]]; then
-        # Scripts should handle errors gracefully
-        local error_output
-        if error_output=$(bash "${SCRIPT_DIR}/main.sh" --help 2>&1 | head -10); then
-            record_test_result "PASS" "Error recovery: Scripts handle error conditions"
-        else
-            record_test_result "WARN" "Error recovery: Scripts may not handle errors gracefully"
-        fi
-    fi
-    
-    unset HOMELAB_TEST_RECOVERY
-    rm -rf "$recovery_test_dir"
-}
-
-test_cleanup_procedures() {
-    echo "  Testing cleanup procedures..."
-    
-    # Test that temporary files and resources are cleaned up
-    local cleanup_test_dir="/tmp/test_cleanup_$$"
-    mkdir -p "$cleanup_test_dir"
-    
-    # Simulate operations that create temporary files
-    local temp_files_before
-    temp_files_before=$(ls /tmp/test_* 2>/dev/null | wc -l || echo "0")
-    
-    # Run some operations
-    if [[ -f "${SCRIPT_DIR}/main.sh" ]]; then
-        bash -n "${SCRIPT_DIR}/main.sh" >/dev/null 2>&1 || true
-    fi
-    
-    local temp_files_after
-    temp_files_after=$(ls /tmp/test_* 2>/dev/null | wc -l || echo "0")
-    
-    if [[ $temp_files_after -le $temp_files_before ]]; then
-        record_test_result "PASS" "Cleanup: No excessive temporary files created"
-    else
-        record_test_result "WARN" "Cleanup: Temporary files may not be cleaned up properly"
-    fi
-    
-    rm -rf "$cleanup_test_dir"
-}
-
-# === Test Coverage Analysis ===
-run_coverage_analysis() {
-    if [[ "$COVERAGE_ANALYSIS" != true ]]; then
+    local category_dir="$TESTS_DIR/$category"
+    if [[ ! -d "$category_dir" ]]; then
+        log_warn "No tests found for category: $category"
         return 0
     fi
     
-    echo "📊 Running Coverage Analysis..."
+    # Find and run all test files in the category
+    local test_files
+    mapfile -t test_files < <(find "$category_dir" -name "test_*.sh" -type f)
     
-    mkdir -p "$TEST_COVERAGE_DIR"
+    if [[ ${#test_files[@]} -eq 0 ]]; then
+        log_warn "No test files found in category: $category"
+        return 0
+    fi
     
-    # Analyze script coverage
-    local total_scripts=0
-    local tested_scripts=0
-    
-    while IFS= read -r -d '' script; do
-        ((total_scripts++))
-        local script_name
-        script_name=$(basename "$script")
-        
-        # Check if script was tested
-        if grep -q "$script_name" "$LOG_FILE" 2>/dev/null; then
-            ((tested_scripts++))
-        fi
-    done < <(find "$SCRIPT_DIR" -name "*.sh" -print0)
-    
-    local coverage_percentage
-    coverage_percentage=$(echo "scale=2; $tested_scripts * 100 / $total_scripts" | bc -l)
-    
-    echo "script_coverage_percentage:$coverage_percentage" >> "${TEST_COVERAGE_DIR}/coverage.txt"
-    echo "scripts_total:$total_scripts" >> "${TEST_COVERAGE_DIR}/coverage.txt"
-    echo "scripts_tested:$tested_scripts" >> "${TEST_COVERAGE_DIR}/coverage.txt"
-    
-    echo "📊 Test Coverage: ${coverage_percentage}% (${tested_scripts}/${total_scripts} scripts)"
+    for test_file in "${test_files[@]}"; do
+        local suite_name="$category/$(basename "$test_file" .sh)"
+        run_test_suite "$suite_name" "$test_file"
+    done
 }
 
-# === Reporting ===
-generate_reports() {
-    echo "📋 Generating Test Reports..."
+# === Performance Testing ===
+benchmark_command() {
+    local command="$1"
+    local description="${2:-Performance benchmark}"
+    local iterations="${3:-$PERFORMANCE_ITERATIONS}"
     
-    mkdir -p "$TEST_REPORTS_DIR"
+    log_info "Benchmarking: $description ($iterations iterations)"
+    
+    local total_time=0
+    local min_time=999999
+    local max_time=0
+    local successful_runs=0
+    
+    for ((i=1; i<=iterations; i++)); do
+        local start_time=$(date '+%s%3N')
+        
+        if eval "$command" >/dev/null 2>&1; then
+            local end_time=$(date '+%s%3N')
+            local duration=$((end_time - start_time))
+            
+            total_time=$((total_time + duration))
+            successful_runs=$((successful_runs + 1))
+            
+            if [[ $duration -lt $min_time ]]; then
+                min_time=$duration
+            fi
+            
+            if [[ $duration -gt $max_time ]]; then
+                max_time=$duration
+            fi
+            
+            log_debug "Iteration $i: ${duration}ms"
+        else
+            log_warn "Iteration $i failed"
+        fi
+    done
+    
+    if [[ $successful_runs -gt 0 ]]; then
+        local avg_time=$((total_time / successful_runs))
+        
+        log_info "Benchmark results for '$description':"
+        log_info "  Successful runs: $successful_runs/$iterations"
+        log_info "  Average time: ${avg_time}ms"
+        log_info "  Min time: ${min_time}ms"
+        log_info "  Max time: ${max_time}ms"
+        
+        # Save benchmark results
+        echo "$(date '+%Y-%m-%d %H:%M:%S'),$description,$successful_runs,$iterations,$avg_time,$min_time,$max_time" >> "$TEMP_DIR/benchmark_results.csv"
+        
+        return 0
+    else
+        log_error "All benchmark iterations failed for: $description"
+        return 1
+    fi
+}
+
+monitor_system_resources() {
+    local duration="${1:-60}"
+    local interval="${2:-5}"
+    
+    log_info "Monitoring system resources for ${duration}s (interval: ${interval}s)"
+    
+    local monitor_file="$TEMP_DIR/resource_monitor.log"
+    echo "timestamp,cpu_percent,memory_mb,disk_io_mb" > "$monitor_file"
+    
+    local end_time=$(($(date '+%s') + duration))
+    
+    while [[ $(date '+%s') -lt $end_time ]]; do
+        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+        local cpu_percent=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
+        local memory_mb=$(free -m | awk 'NR==2{printf "%.1f", $3}')
+        local disk_io_mb=$(iostat -d 1 1 2>/dev/null | awk 'END{print $3+$4}' || echo "0")
+        
+        echo "$timestamp,$cpu_percent,$memory_mb,$disk_io_mb" >> "$monitor_file"
+        
+        sleep "$interval"
+    done
+    
+    log_info "Resource monitoring complete: $monitor_file"
+}
+
+# === Security Testing ===
+run_security_scan() {
+    local target="${1:-$PROJECT_ROOT}"
+    
+    log_info "Running security scans on: $target"
+    
+    # ShellCheck for shell script analysis
+    if command -v shellcheck >/dev/null 2>&1; then
+        log_info "Running ShellCheck..."
+        local shellcheck_output="$TEMP_DIR/shellcheck_results.txt"
+        
+        find "$target" -name "*.sh" -type f -exec shellcheck {} \; > "$shellcheck_output" 2>&1
+        
+        if [[ -s "$shellcheck_output" ]]; then
+            log_warn "ShellCheck found issues:"
+            cat "$shellcheck_output"
+        else
+            log_info "ShellCheck: No issues found"
+        fi
+    else
+        log_warn "ShellCheck not available, skipping shell script analysis"
+    fi
+    
+    # Check for common security issues
+    security_check_passwords "$target"
+    security_check_permissions "$target"
+    security_check_secrets "$target"
+}
+
+security_check_passwords() {
+    local target="$1"
+    
+    log_info "Checking for hardcoded passwords..."
+    
+    local patterns=(
+        "password="
+        "passwd="
+        "pwd="
+        "secret="
+        "key="
+        "token="
+        "auth="
+    )
+    
+    local findings=0
+    
+    for pattern in "${patterns[@]}"; do
+        local matches
+        mapfile -t matches < <(grep -r -i "$pattern" "$target" --include="*.sh" --include="*.conf" --include="*.json" 2>/dev/null || true)
+        
+        if [[ ${#matches[@]} -gt 0 ]]; then
+            for match in "${matches[@]}"; do
+                log_warn "Potential hardcoded credential: $match"
+                ((findings++))
+            done
+        fi
+    done
+    
+    if [[ $findings -eq 0 ]]; then
+        log_info "No hardcoded credentials found"
+    else
+        log_warn "Found $findings potential credential issues"
+    fi
+}
+
+security_check_permissions() {
+    local target="$1"
+    
+    log_info "Checking file permissions..."
+    
+    # Check for world-writable files
+    local world_writable
+    mapfile -t world_writable < <(find "$target" -type f -perm -002 2>/dev/null || true)
+    
+    if [[ ${#world_writable[@]} -gt 0 ]]; then
+        log_warn "World-writable files found:"
+        printf '%s\n' "${world_writable[@]}"
+    else
+        log_info "No world-writable files found"
+    fi
+    
+    # Check for executable scripts without proper shebang
+    local scripts_without_shebang
+    mapfile -t scripts_without_shebang < <(find "$target" -name "*.sh" -type f -executable ! -exec head -1 {} \; -quit 2>/dev/null | grep -v '^#!' || true)
+    
+    if [[ ${#scripts_without_shebang[@]} -gt 0 ]]; then
+        log_warn "Executable scripts without shebang:"
+        printf '%s\n' "${scripts_without_shebang[@]}"
+    fi
+}
+
+security_check_secrets() {
+    local target="$1"
+    
+    log_info "Checking for exposed secrets..."
+    
+    # Common secret patterns
+    local secret_patterns=(
+        "[0-9a-f]{32}"  # MD5 hashes
+        "[0-9a-f]{40}"  # SHA1 hashes
+        "[0-9a-f]{64}"  # SHA256 hashes
+        "AKIA[0-9A-Z]{16}"  # AWS Access Key
+        "-----BEGIN [A-Z ]+-----"  # Private keys
+    )
+    
+    local findings=0
+    
+    for pattern in "${secret_patterns[@]}"; do
+        local matches
+        mapfile -t matches < <(grep -rE "$pattern" "$target" --include="*.sh" --include="*.conf" --include="*.json" 2>/dev/null || true)
+        
+        if [[ ${#matches[@]} -gt 0 ]]; then
+            for match in "${matches[@]}"; do
+                log_warn "Potential secret found: $match"
+                ((findings++))
+            done
+        fi
+    done
+    
+    if [[ $findings -eq 0 ]]; then
+        log_info "No exposed secrets found"
+    else
+        log_warn "Found $findings potential secret exposures"
+    fi
+}
+
+# === Report Generation ===
+generate_test_report() {
+    local end_time=$(date '+%s')
+    local total_duration=$((end_time - TEST_START_TIME))
     
     case "$OUTPUT_FORMAT" in
-        json)
-            generate_json_report
+        "console")
+            generate_console_report "$total_duration"
             ;;
-        html)
-            generate_html_report
+        "json")
+            generate_json_report "$total_duration"
             ;;
-        junit)
-            generate_junit_report
+        "html")
+            generate_html_report "$total_duration"
+            ;;
+        "junit")
+            generate_junit_report "$total_duration"
             ;;
         *)
-            generate_console_report
+            log_warn "Unknown output format: $OUTPUT_FORMAT, using console"
+            generate_console_report "$total_duration"
             ;;
     esac
+}
+
+generate_console_report() {
+    local duration="$1"
+    
+    echo ""
+    echo "=========================================="
+    echo "           TEST EXECUTION SUMMARY"
+    echo "=========================================="
+    echo "Total Tests:     $TOTAL_TESTS"
+    echo "Passed:          $PASSED_TESTS"
+    echo "Failed:          $FAILED_TESTS"
+    echo "Skipped:         $SKIPPED_TESTS"
+    echo "Duration:        ${duration}s"
+    echo "Success Rate:    $(( TOTAL_TESTS > 0 ? (PASSED_TESTS * 100) / TOTAL_TESTS : 0 ))%"
+    echo "=========================================="
+    
+    if [[ $FAILED_TESTS -gt 0 ]]; then
+        echo ""
+        echo "FAILED TESTS:"
+        grep "\[FAIL\]" "$TEMP_DIR/test_results.log" 2>/dev/null || true
+    fi
+    
+    if [[ -f "$TEMP_DIR/benchmark_results.csv" ]]; then
+        echo ""
+        echo "BENCHMARK RESULTS:"
+        column -t -s',' "$TEMP_DIR/benchmark_results.csv"
+    fi
 }
 
 generate_json_report() {
-    local json_file="${TEST_REPORTS_DIR}/test_results.json"
+    local duration="$1"
+    local report_file="${REPORT_FILE:-$REPORTS_DIR/test_report_$(date '+%Y%m%d_%H%M%S').json}"
     
-    cat > "$json_file" << EOF
+    cat > "$report_file" << EOF
 {
-  "timestamp": "$(date -Iseconds)",
-  "execution_time": "$execution_duration",
-  "summary": {
-    "total": ${TEST_RESULTS[total]},
-    "passed": ${TEST_RESULTS[passed]},
-    "failed": ${TEST_RESULTS[failed]},
-    "skipped": ${TEST_RESULTS[skipped]},
-    "warnings": ${TEST_RESULTS[warnings]}
+  "test_run": {
+    "start_time": "$(date -d @$TEST_START_TIME '+%Y-%m-%d %H:%M:%S')",
+    "end_time": "$(date '+%Y-%m-%d %H:%M:%S')",
+    "duration_seconds": $duration,
+    "environment": "$(uname -a)",
+    "categories": $(printf '%s\n' "${ENABLED_CATEGORIES[@]}" | jq -R . | jq -s .)
   },
-  "categories": {
-    "unit": ${TEST_CATEGORIES[unit]},
-    "integration": ${TEST_CATEGORIES[integration]},
-    "performance": ${TEST_CATEGORIES[performance]},
-    "security": ${TEST_CATEGORIES[security]},
-    "e2e": ${TEST_CATEGORIES[e2e]}
+  "results": {
+    "total": $TOTAL_TESTS,
+    "passed": $PASSED_TESTS,
+    "failed": $FAILED_TESTS,
+    "skipped": $SKIPPED_TESTS,
+    "success_rate": $(( TOTAL_TESTS > 0 ? (PASSED_TESTS * 100) / TOTAL_TESTS : 0 ))
   },
-  "failed_tests": [
-$(printf '    "%s"' "${FAILED_TESTS[@]}" | sed 's/^/    /' | tr '\n' ',' | sed 's/,$//')
-  ],
-  "warning_tests": [
-$(printf '    "%s"' "${WARNING_TESTS[@]}" | sed 's/^/    /' | tr '\n' ',' | sed 's/,$//')
+  "test_details": [
+$(if [[ -f "$TEMP_DIR/test_results.log" ]]; then
+    awk -F'[][]' '
+    {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $4)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $6)
+        printf "    {\"timestamp\":\"%s\",\"result\":\"%s\",\"suite\":\"%s\",\"description\":\"%s\"}", $2, $4, $6, $8
+        if (NR < total_lines) printf ","
+        printf "\n"
+    }' total_lines=$(wc -l < "$TEMP_DIR/test_results.log") "$TEMP_DIR/test_results.log"
+fi)
   ]
 }
 EOF
     
-    echo "📄 JSON report generated: $json_file"
+    log_info "JSON report generated: $report_file"
 }
 
 generate_html_report() {
-    local html_file="${TEST_REPORTS_DIR}/test_results.html"
+    local duration="$1"
+    local report_file="${REPORT_FILE:-$REPORTS_DIR/test_report_$(date '+%Y%m%d_%H%M%S').html}"
     
-    cat > "$html_file" << 'EOF'
+    cat > "$report_file" << EOF
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Homelab Test Results</title>
+    <title>Homelab Test Report</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
-        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-        .metric { background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #007bff; }
-        .metric.passed { border-left-color: #28a745; }
-        .metric.failed { border-left-color: #dc3545; }
-        .metric.warnings { border-left-color: #ffc107; }
-        .metric h3 { margin: 0; font-size: 2em; }
-        .metric p { margin: 5px 0 0; color: #666; }
-        .section { margin-bottom: 30px; }
-        .test-list { background: #f8f9fa; padding: 15px; border-radius: 8px; }
-        .test-item { padding: 8px; margin: 4px 0; border-radius: 4px; }
-        .test-item.passed { background: #d4edda; color: #155724; }
-        .test-item.failed { background: #f8d7da; color: #721c24; }
-        .test-item.warning { background: #fff3cd; color: #856404; }
-        .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { background: #f0f0f0; padding: 20px; border-radius: 5px; }
+        .summary { display: flex; justify-content: space-around; margin: 20px 0; }
+        .metric { text-align: center; }
+        .metric h3 { margin: 0; }
+        .passed { color: #28a745; }
+        .failed { color: #dc3545; }
+        .skipped { color: #ffc107; }
+        .test-results { margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .pass { background-color: #d4edda; }
+        .fail { background-color: #f8d7da; }
+        .skip { background-color: #fff3cd; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🏠 Homelab Test Results</h1>
-            <p>Test execution completed on $(date)</p>
+    <div class="header">
+        <h1>Homelab Test Report</h1>
+        <p>Generated: $(date)</p>
+        <p>Duration: ${duration}s</p>
+        <p>Categories: $(IFS=', '; echo "${ENABLED_CATEGORIES[*]}")</p>
+    </div>
+    
+    <div class="summary">
+        <div class="metric">
+            <h3>$TOTAL_TESTS</h3>
+            <p>Total Tests</p>
         </div>
-        
-        <div class="summary">
-            <div class="metric">
-                <h3>${TEST_RESULTS[total]}</h3>
-                <p>Total Tests</p>
-            </div>
-            <div class="metric passed">
-                <h3>${TEST_RESULTS[passed]}</h3>
-                <p>Passed</p>
-            </div>
-            <div class="metric failed">
-                <h3>${TEST_RESULTS[failed]}</h3>
-                <p>Failed</p>
-            </div>
-            <div class="metric warnings">
-                <h3>${TEST_RESULTS[warnings]}</h3>
-                <p>Warnings</p>
-            </div>
+        <div class="metric passed">
+            <h3>$PASSED_TESTS</h3>
+            <p>Passed</p>
         </div>
-        
-        <div class="section">
-            <h2>Test Categories</h2>
-            <div class="test-list">
-                <div class="test-item">Unit Tests: ${TEST_CATEGORIES[unit]}</div>
-                <div class="test-item">Integration Tests: ${TEST_CATEGORIES[integration]}</div>
-                <div class="test-item">Performance Tests: ${TEST_CATEGORIES[performance]}</div>
-                <div class="test-item">Security Tests: ${TEST_CATEGORIES[security]}</div>
-                <div class="test-item">End-to-End Tests: ${TEST_CATEGORIES[e2e]}</div>
-            </div>
+        <div class="metric failed">
+            <h3>$FAILED_TESTS</h3>
+            <p>Failed</p>
         </div>
-        
-        <div class="footer">
-            <p>Generated by Homelab Enhanced Testing Framework</p>
+        <div class="metric skipped">
+            <h3>$SKIPPED_TESTS</h3>
+            <p>Skipped</p>
         </div>
+        <div class="metric">
+            <h3>$(( TOTAL_TESTS > 0 ? (PASSED_TESTS * 100) / TOTAL_TESTS : 0 ))%</h3>
+            <p>Success Rate</p>
+        </div>
+    </div>
+    
+    <div class="test-results">
+        <h2>Test Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Result</th>
+                    <th>Suite</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+$(if [[ -f "$TEMP_DIR/test_results.log" ]]; then
+    while IFS= read -r line; do
+        if [[ $line =~ \[([^]]+)\]\ \[([^]]+)\]\ \[([^]]+)\]\ (.+) ]]; then
+            timestamp="${BASH_REMATCH[1]}"
+            result="${BASH_REMATCH[2]}"
+            suite="${BASH_REMATCH[3]}"
+            description="${BASH_REMATCH[4]}"
+            
+            case "$result" in
+                "PASS") css_class="pass" ;;
+                "FAIL") css_class="fail" ;;
+                "SKIP") css_class="skip" ;;
+                *) css_class="" ;;
+            esac
+            
+            echo "                <tr class=\"$css_class\">"
+            echo "                    <td>$timestamp</td>"
+            echo "                    <td>$result</td>"
+            echo "                    <td>$suite</td>"
+            echo "                    <td>$description</td>"
+            echo "                </tr>"
+        fi
+    done < "$TEMP_DIR/test_results.log"
+fi)
+            </tbody>
+        </table>
     </div>
 </body>
 </html>
 EOF
     
-    echo "📄 HTML report generated: $html_file"
+    log_info "HTML report generated: $report_file"
 }
 
 generate_junit_report() {
-    local junit_file="${TEST_REPORTS_DIR}/junit_results.xml"
+    local duration="$1"
+    local report_file="${REPORT_FILE:-$REPORTS_DIR/junit_report_$(date '+%Y%m%d_%H%M%S').xml}"
     
-    cat > "$junit_file" << EOF
+    cat > "$report_file" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="Homelab Tests" tests="${TEST_RESULTS[total]}" failures="${TEST_RESULTS[failed]}" errors="0" skipped="${TEST_RESULTS[skipped]}" time="$execution_duration">
+<testsuites name="Homelab Tests" tests="$TOTAL_TESTS" failures="$FAILED_TESTS" skipped="$SKIPPED_TESTS" time="$duration">
+    <testsuite name="AllTests" tests="$TOTAL_TESTS" failures="$FAILED_TESTS" skipped="$SKIPPED_TESTS" time="$duration">
+$(if [[ -f "$TEMP_DIR/test_results.log" ]]; then
+    while IFS= read -r line; do
+        if [[ $line =~ \[([^]]+)\]\ \[([^]]+)\]\ \[([^]]+)\]\ (.+) ]]; then
+            timestamp="${BASH_REMATCH[1]}"
+            result="${BASH_REMATCH[2]}"
+            suite="${BASH_REMATCH[3]}"
+            description="${BASH_REMATCH[4]}"
+            
+            echo "        <testcase name=\"$description\" classname=\"$suite\" time=\"0\">"
+            
+            case "$result" in
+                "FAIL")
+                    echo "            <failure message=\"Test failed\">$description</failure>"
+                    ;;
+                "SKIP")
+                    echo "            <skipped message=\"Test skipped\">$description</skipped>"
+                    ;;
+            esac
+            
+            echo "        </testcase>"
+        fi
+    done < "$TEMP_DIR/test_results.log"
+fi)
+    </testsuite>
+</testsuites>
 EOF
     
-    # Add test cases (simplified)
-    for test in "${FAILED_TESTS[@]}"; do
-        echo "  <testcase name=\"$test\" classname=\"Homelab\">" >> "$junit_file"
-        echo "    <failure message=\"Test failed\">$test</failure>" >> "$junit_file"
-        echo "  </testcase>" >> "$junit_file"
-    done
-    
-    echo "</testsuite>" >> "$junit_file"
-    
-    echo "📄 JUnit report generated: $junit_file"
-}
-
-generate_console_report() {
-    echo ""
-    echo "=================================="
-    echo "🏠 HOMELAB TEST RESULTS SUMMARY"
-    echo "=================================="
-    echo "Timestamp: $(date)"
-    echo "Execution Time: ${execution_duration}s"
-    echo ""
-    echo "📊 Test Summary:"
-    echo "  Total Tests:  ${TEST_RESULTS[total]}"
-    echo "  ✅ Passed:    ${TEST_RESULTS[passed]}"
-    echo "  ❌ Failed:    ${TEST_RESULTS[failed]}"
-    echo "  ⚠️  Warnings:  ${TEST_RESULTS[warnings]}"
-    echo "  ⏭️  Skipped:   ${TEST_RESULTS[skipped]}"
-    echo ""
-    
-    if [[ ${#FAILED_TESTS[@]} -gt 0 ]]; then
-        echo "❌ Failed Tests:"
-        for test in "${FAILED_TESTS[@]}"; do
-            echo "  - $test"
-        done
-        echo ""
-    fi
-    
-    if [[ ${#WARNING_TESTS[@]} -gt 0 ]]; then
-        echo "⚠️  Warning Tests:"
-        for test in "${WARNING_TESTS[@]}"; do
-            echo "  - $test"
-        done
-        echo ""
-    fi
-    
-    echo "📁 Test artifacts saved to: $TEST_RESULTS_DIR"
-    echo "📄 Detailed logs: $LOG_FILE"
+    log_info "JUnit report generated: $report_file"
 }
 
 # === CI/CD Integration ===
-generate_github_workflow() {
-    local workflow_dir="${PROJECT_ROOT}/.github/workflows"
-    mkdir -p "$workflow_dir"
+generate_github_actions_workflow() {
+    local workflow_file="$PROJECT_ROOT/.github/workflows/tests.yml"
     
-    cat > "${workflow_dir}/test.yml" << 'EOF'
+    mkdir -p "$(dirname "$workflow_file")"
+    
+    cat > "$workflow_file" << 'EOF'
 name: Homelab Tests
 
 on:
@@ -917,184 +876,292 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
-    steps:
-    - uses: actions/checkout@v3
+    strategy:
+      matrix:
+        test-category: [unit, integration, security]
     
-    - name: Setup test environment
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up test environment
       run: |
         sudo apt-get update
-        sudo apt-get install -y bc curl git whiptail
+        sudo apt-get install -y shellcheck
     
     - name: Run tests
       run: |
         chmod +x scripts/test_framework.sh
-        sudo scripts/test_framework.sh --mode all --output-format junit --ci-mode
+        ./scripts/test_framework.sh --category ${{ matrix.test-category }} --output junit --report-file test-results-${{ matrix.test-category }}.xml
     
     - name: Upload test results
       uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: test-results
-        path: test-results/
+        name: test-results-${{ matrix.test-category }}
+        path: test-results-${{ matrix.test-category }}.xml
     
     - name: Publish test results
-      uses: EnricoMi/publish-unit-test-result-action@v2
+      uses: dorny/test-reporter@v1
       if: always()
       with:
-        files: test-results/reports/junit_results.xml
+        name: Test Results (${{ matrix.test-category }})
+        path: test-results-${{ matrix.test-category }}.xml
+        reporter: java-junit
 EOF
     
-    echo "🚀 GitHub Actions workflow generated: ${workflow_dir}/test.yml"
+    log_info "GitHub Actions workflow generated: $workflow_file"
+}
+
+# === Command Line Interface ===
+show_help() {
+    cat << 'EOF'
+Enhanced Testing Framework for Homelab Project
+
+USAGE:
+    test_framework.sh [OPTIONS]
+
+OPTIONS:
+    -c, --category CATEGORY     Run specific test category (unit|integration|performance|security|e2e)
+    -a, --all                   Run all enabled test categories
+    -e, --environment ENV       Use predefined environment (ci|local|full)
+    -f, --format FORMAT         Output format (console|json|html|junit)
+    -r, --report-file FILE      Specify report file path
+    -v, --verbose               Enable verbose output
+    -q, --quiet                 Suppress non-essential output
+    -d, --dry-run               Show what would be executed without running tests
+    -s, --stop-on-fail          Stop execution on first test failure
+    -p, --parallel              Enable parallel test execution where supported
+    -t, --timeout SECONDS       Set test timeout (default: 300)
+    -j, --jobs NUMBER           Number of parallel jobs (default: 4)
+    --benchmark COMMAND         Run performance benchmark for command
+    --monitor DURATION          Monitor system resources for duration (seconds)
+    --security-scan PATH        Run security scan on specified path
+    --generate-workflow         Generate GitHub Actions workflow file
+    --setup-tests               Set up test environment and create sample tests
+    -h, --help                  Show this help message
+
+EXAMPLES:
+    # Run all unit tests
+    ./test_framework.sh --category unit
+
+    # Run integration tests with HTML report
+    ./test_framework.sh --category integration --format html
+
+    # Run full test suite for CI
+    ./test_framework.sh --environment ci
+
+    # Benchmark a command
+    ./test_framework.sh --benchmark "sleep 1"
+
+    # Monitor system resources
+    ./test_framework.sh --monitor 60
+
+    # Run security scan
+    ./test_framework.sh --security-scan /path/to/code
+
+CONFIGURATION:
+    Test configuration is stored in test_config.json and can be customized
+    to define test categories, timeouts, thresholds, and environments.
+
+EOF
+}
+
+setup_sample_tests() {
+    log_info "Setting up sample test structure..."
+    
+    # Create test directories
+    for category in "${TEST_CATEGORIES[@]}"; do
+        mkdir -p "$TESTS_DIR/$category"
+        
+        # Create sample test file
+        cat > "$TESTS_DIR/$category/test_sample.sh" << EOF
+#!/bin/bash
+# Sample $category test
+
+test_${category}_sample() {
+    TEST_SUITE="${category}_sample"
+    
+    assert_true "true" "Sample assertion that should pass"
+    assert_equals "hello" "hello" "Sample equality test"
+    assert_file_exists "/etc/passwd" "System file should exist"
+    
+    if command -v ls >/dev/null 2>&1; then
+        assert_command_success "ls /" "List root directory"
+    else
+        skip_test "ls command not available" "Command not found"
+    fi
+}
+
+# Execute the test function
+test_${category}_sample
+EOF
+        
+        chmod +x "$TESTS_DIR/$category/test_sample.sh"
+        log_info "Created sample test: $TESTS_DIR/$category/test_sample.sh"
+    done
+    
+    log_info "Sample test structure created successfully"
 }
 
 # === Main Execution ===
-show_usage() {
-    cat << EOF
-Enhanced Testing Framework for Homelab Project
-
-Usage: $0 [OPTIONS]
-
-Options:
-  --mode MODE           Test mode: all, unit, integration, performance, security, e2e (default: all)
-  --output-format FMT   Output format: console, json, html, junit (default: console)
-  --parallel            Run tests in parallel where possible
-  --verbose             Enable verbose output
-  --ci-mode             Enable CI/CD mode (non-interactive)
-  --no-performance      Skip performance tests
-  --no-coverage         Skip coverage analysis
-  --no-security         Skip security tests
-  --generate-workflow   Generate GitHub Actions workflow
-  --help                Show this help message
-
-Examples:
-  $0                                    # Run all tests with console output
-  $0 --mode unit --verbose             # Run only unit tests with verbose output
-  $0 --mode all --output-format html   # Run all tests and generate HTML report
-  $0 --ci-mode --output-format junit   # CI/CD mode with JUnit output
-
-EOF
-}
-
-parse_arguments() {
+main() {
+    # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --mode)
-                TEST_MODE="$2"
+            -c|--category)
+                ENABLED_CATEGORIES+=("$2")
                 shift 2
                 ;;
-            --output-format)
+            -a|--all)
+                ENABLED_CATEGORIES=("${TEST_CATEGORIES[@]}")
+                shift
+                ;;
+            -e|--environment)
+                load_environment_config "$2"
+                shift 2
+                ;;
+            -f|--format)
                 OUTPUT_FORMAT="$2"
                 shift 2
                 ;;
-            --parallel)
-                PARALLEL_TESTS=true
-                shift
+            -r|--report-file)
+                REPORT_FILE="$2"
+                shift 2
                 ;;
-            --verbose)
+            -v|--verbose)
                 VERBOSE_MODE=true
                 shift
                 ;;
-            --ci-mode)
-                CI_MODE=true
-                VERBOSE_MODE=false
+            -q|--quiet)
+                QUIET_MODE=true
                 shift
                 ;;
-            --no-performance)
-                PERFORMANCE_BENCHMARKS=false
+            -d|--dry-run)
+                DRY_RUN=true
                 shift
                 ;;
-            --no-coverage)
-                COVERAGE_ANALYSIS=false
+            -s|--stop-on-fail)
+                STOP_ON_FAIL=true
                 shift
                 ;;
-            --no-security)
-                SECURITY_SCANNING=false
+            -p|--parallel)
+                # Parallel execution flag (implementation depends on category)
                 shift
+                ;;
+            -t|--timeout)
+                # Timeout configuration (stored for use in test execution)
+                shift 2
+                ;;
+            -j|--jobs)
+                # Parallel jobs configuration
+                shift 2
+                ;;
+            --benchmark)
+                setup_logging
+                setup_test_environment
+                benchmark_command "$2" "Custom benchmark"
+                exit $?
+                ;;
+            --monitor)
+                setup_logging
+                setup_test_environment
+                monitor_system_resources "$2"
+                exit $?
+                ;;
+            --security-scan)
+                setup_logging
+                setup_test_environment
+                run_security_scan "$2"
+                exit $?
                 ;;
             --generate-workflow)
-                generate_github_workflow
-                exit 0
+                generate_github_actions_workflow
+                exit $?
                 ;;
-            --help)
-                show_usage
+            --setup-tests)
+                setup_logging
+                setup_test_environment
+                setup_sample_tests
+                exit $?
+                ;;
+            -h|--help)
+                show_help
                 exit 0
                 ;;
             *)
-                echo "Unknown option: $1"
-                show_usage
+                log_error "Unknown option: $1"
+                show_help
                 exit 1
                 ;;
         esac
     done
-}
-
-main() {
-    local start_time=$(date +%s.%N)
     
-    # Parse command line arguments
-    parse_arguments "$@"
+    # Set default category if none specified
+    if [[ ${#ENABLED_CATEGORIES[@]} -eq 0 ]]; then
+        ENABLED_CATEGORIES=("unit")
+        log_info "No category specified, defaulting to unit tests"
+    fi
     
-    # Setup environment
+    # Initialize test environment
     setup_logging
-    mkdir -p "$TEST_RESULTS_DIR" "$TEST_REPORTS_DIR" "$TEST_LOGS_DIR" "$TEST_COVERAGE_DIR" "$TEST_PERFORMANCE_DIR"
+    setup_test_environment
     
-    # Initialize performance metrics file
-    echo "# Performance Metrics - $(date)" > "${TEST_PERFORMANCE_DIR}/metrics.txt"
-    
-    echo "🏠 Enhanced Testing Framework for Homelab Project"
-    echo "Mode: $TEST_MODE | Output: $OUTPUT_FORMAT | CI: $CI_MODE"
-    echo ""
-    
-    # Run tests based on mode
-    case "$TEST_MODE" in
-        unit)
-            run_unit_tests
-            ;;
-        integration)
-            run_integration_tests
-            ;;
-        performance)
-            [[ "$PERFORMANCE_BENCHMARKS" == true ]] && run_performance_tests
-            ;;
-        security)
-            [[ "$SECURITY_SCANNING" == true ]] && run_security_tests
-            ;;
-        e2e)
-            run_e2e_tests
-            ;;
-        all)
-            run_unit_tests
-            run_integration_tests
-            [[ "$PERFORMANCE_BENCHMARKS" == true ]] && run_performance_tests
-            [[ "$SECURITY_SCANNING" == true ]] && run_security_tests
-            run_e2e_tests
-            ;;
-        *)
-            echo "Invalid test mode: $TEST_MODE"
-            show_usage
-            exit 1
-            ;;
-    esac
-    
-    # Generate coverage analysis
-    [[ "$COVERAGE_ANALYSIS" == true ]] && run_coverage_analysis
-    
-    # Calculate execution time
-    local end_time=$(date +%s.%N)
-    execution_duration=$(echo "$end_time - $start_time" | bc -l)
-    
-    # Generate reports
-    generate_reports
-    
-    # Exit with appropriate code
-    if [[ ${TEST_RESULTS[failed]} -eq 0 ]]; then
-        echo "🎉 All tests completed successfully!"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "DRY RUN: Would execute the following test categories:"
+        printf '  - %s\n' "${ENABLED_CATEGORIES[@]}"
         exit 0
-    else
-        echo "💥 Some tests failed. Check the reports for details."
+    fi
+    
+    # Execute tests for each enabled category
+    for category in "${ENABLED_CATEGORIES[@]}"; do
+        if [[ " ${TEST_CATEGORIES[*]} " =~ " $category " ]]; then
+            run_test_category "$category"
+        else
+            log_error "Invalid test category: $category"
+            log_info "Available categories: ${TEST_CATEGORIES[*]}"
+            exit 1
+        fi
+    done
+    
+    # Return appropriate exit code
+    if [[ $FAILED_TESTS -gt 0 ]]; then
         exit 1
+    else
+        exit 0
     fi
 }
 
-# Execute main function with all arguments
-main "$@"
+load_environment_config() {
+    local env="$1"
+    
+    if [[ -f "$TEST_CONFIG_FILE" ]] && command -v jq >/dev/null 2>&1; then
+        local env_config=$(jq -r ".environments.$env // empty" "$TEST_CONFIG_FILE")
+        
+        if [[ -n "$env_config" && "$env_config" != "null" ]]; then
+            # Parse environment configuration
+            local categories
+            mapfile -t categories < <(echo "$env_config" | jq -r '.categories[]? // empty')
+            ENABLED_CATEGORIES=("${categories[@]}")
+            
+            local format=$(echo "$env_config" | jq -r '.output_format // "console"')
+            OUTPUT_FORMAT="$format"
+            
+            log_info "Loaded environment configuration: $env"
+        else
+            log_warn "Environment configuration not found: $env"
+        fi
+    else
+        log_warn "Cannot load environment config (missing jq or config file)"
+    fi
+}
+
+# Source test utilities if available
+if [[ -f "$SCRIPT_DIR/test_utilities.sh" ]]; then
+    source "$SCRIPT_DIR/test_utilities.sh"
+fi
+
+# Execute main function if script is run directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

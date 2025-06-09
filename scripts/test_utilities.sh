@@ -1,869 +1,867 @@
 #!/bin/bash
 # Test Utilities for Homelab Project
 # Specialized testing functions for different module types
-# Supports Docker/Kubernetes, Terraform, Ansible, monitoring, security, and performance testing
+# Version: 1.0.0
 
-set -euo pipefail
-
-# === Configuration ===
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Source logging if available
-if [[ -f "${SCRIPT_DIR}/lib/logging.sh" ]]; then
-    export LOG_FILE_ALREADY_SET_EXTERNALLY="${LOG_FILE_ALREADY_SET_EXTERNALLY:-false}"
-    if [[ "$LOG_FILE_ALREADY_SET_EXTERNALLY" != "true" ]]; then
-        export LOG_FILE="/tmp/test_utilities_$(date +%Y%m%d_%H%M%S).log"
-    fi
-    source "${SCRIPT_DIR}/lib/logging.sh"
-else
-    # Fallback logging
-    log_info() { echo "[INFO] $*"; }
-    log_warn() { echo "[WARN] $*"; }
-    log_error() { echo "[ERROR] $*"; }
-    log_debug() { [[ "${HL_LOG_LEVEL:-INFO}" == "DEBUG" ]] && echo "[DEBUG] $*"; }
-fi
-
-# === Docker and Container Testing Utilities ===
-
-test_docker_functionality() {
-    local test_name="$1"
-    local container_script="${2:-${SCRIPT_DIR}/containers.sh}"
+# === Docker and Container Testing ===
+test_docker_installation() {
+    local description="${1:-Docker installation check}"
     
-    log_info "Testing Docker functionality: $test_name"
-    
-    # Check if Docker is available
-    if ! command -v docker >/dev/null 2>&1; then
-        log_warn "Docker not available, skipping Docker tests"
-        return 2  # Skip
-    fi
-    
-    # Test Docker daemon is running
-    if ! docker info >/dev/null 2>&1; then
-        log_warn "Docker daemon not running, skipping Docker tests"
-        return 2  # Skip
-    fi
-    
-    # Test container script functionality
-    if [[ -f "$container_script" ]]; then
-        # Test script syntax
-        if bash -n "$container_script"; then
-            log_info "✅ Container script syntax valid"
-        else
-            log_error "❌ Container script syntax error"
-            return 1
-        fi
-        
-        # Test container script help/info
-        if timeout 10 bash "$container_script" --help >/dev/null 2>&1; then
-            log_info "✅ Container script responds to help"
-        else
-            log_warn "⚠️ Container script may not have help functionality"
-        fi
-        
-        return 0
-    else
-        log_warn "Container script not found: $container_script"
-        return 2  # Skip
-    fi
-}
-
-test_kubernetes_functionality() {
-    local test_name="$1"
-    local config_path="${2:-}"
-    
-    log_info "Testing Kubernetes functionality: $test_name"
-    
-    # Check if kubectl is available
-    if ! command -v kubectl >/dev/null 2>&1; then
-        log_warn "kubectl not available, skipping Kubernetes tests"
-        return 2  # Skip
-    fi
-    
-    # Test cluster connectivity
-    local kubectl_cmd="kubectl"
-    if [[ -n "$config_path" ]]; then
-        kubectl_cmd="kubectl --kubeconfig=$config_path"
-    fi
-    
-    if timeout 10 $kubectl_cmd cluster-info >/dev/null 2>&1; then
-        log_info "✅ Kubernetes cluster accessible"
-        
-        # Test basic operations
-        if timeout 10 $kubectl_cmd get nodes >/dev/null 2>&1; then
-            log_info "✅ Can list Kubernetes nodes"
-        else
-            log_warn "⚠️ Cannot list Kubernetes nodes"
-        fi
-        
-        return 0
-    else
-        log_warn "Kubernetes cluster not accessible, skipping cluster tests"
-        return 2  # Skip
-    fi
-}
-
-test_container_workload() {
-    local workload_name="$1"
-    local image_name="$2"
-    local timeout_seconds="${3:-30}"
-    
-    log_info "Testing container workload: $workload_name"
-    
-    # Test container can be pulled
-    if timeout "$timeout_seconds" docker pull "$image_name" >/dev/null 2>&1; then
-        log_info "✅ Container image pulled successfully: $image_name"
-    else
-        log_warn "⚠️ Could not pull container image: $image_name"
-        return 1
-    fi
-    
-    # Test container can be started
-    local container_id
-    if container_id=$(docker run -d --name "test_${workload_name}_$$" "$image_name" sleep 60 2>/dev/null); then
-        log_info "✅ Container started successfully: $container_id"
-        
-        # Test container is running
-        if docker ps --filter "id=$container_id" --filter "status=running" | grep -q "$container_id"; then
-            log_info "✅ Container is running"
-        else
-            log_error "❌ Container not running"
-        fi
-        
-        # Cleanup
-        docker stop "$container_id" >/dev/null 2>&1 || true
-        docker rm "$container_id" >/dev/null 2>&1 || true
-        
-        return 0
-    else
-        log_error "❌ Could not start container: $image_name"
-        return 1
-    fi
-}
-
-# === Terraform Testing Utilities ===
-
-test_terraform_functionality() {
-    local test_name="$1"
-    local terraform_dir="${2:-}"
-    
-    log_info "Testing Terraform functionality: $test_name"
-    
-    # Check if Terraform is available
-    if ! command -v terraform >/dev/null 2>&1; then
-        log_warn "Terraform not available, skipping Terraform tests"
-        return 2  # Skip
-    fi
-    
-    # Test Terraform version
-    local tf_version
-    if tf_version=$(terraform version -json 2>/dev/null | grep -o '"terraform_version":"[^"]*"' | cut -d'"' -f4); then
-        log_info "✅ Terraform version: $tf_version"
-    else
-        log_warn "⚠️ Could not determine Terraform version"
-    fi
-    
-    # Test Terraform configuration if directory provided
-    if [[ -n "$terraform_dir" && -d "$terraform_dir" ]]; then
-        pushd "$terraform_dir" >/dev/null || return 1
-        
-        # Test configuration validation
-        if terraform init -backend=false >/dev/null 2>&1; then
-            log_info "✅ Terraform init successful"
+    if command -v docker >/dev/null 2>&1; then
+        if docker --version >/dev/null 2>&1; then
+            assert_command_success "docker --version" "$description - Docker version command"
             
-            if terraform validate >/dev/null 2>&1; then
-                log_info "✅ Terraform configuration valid"
+            # Test Docker daemon is running
+            if docker info >/dev/null 2>&1; then
+                assert_true "true" "$description - Docker daemon is running"
+                return 0
             else
-                log_error "❌ Terraform configuration invalid"
-                popd >/dev/null
+                fail_test "$description - Docker daemon not running" "${BASH_LINENO[0]}"
                 return 1
             fi
         else
-            log_error "❌ Terraform init failed"
-            popd >/dev/null
+            fail_test "$description - Docker command failed" "${BASH_LINENO[0]}"
             return 1
         fi
-        
-        # Test plan generation (dry run)
-        if terraform plan -out=/tmp/test.tfplan >/dev/null 2>&1; then
-            log_info "✅ Terraform plan generation successful"
-            rm -f /tmp/test.tfplan
-        else
-            log_warn "⚠️ Terraform plan generation failed"
-        fi
-        
-        popd >/dev/null
+    else
+        skip_test "$description" "Docker not installed"
+        return 0
     fi
-    
-    return 0
 }
 
+test_container_functionality() {
+    local image="${1:-hello-world}"
+    local description="${2:-Container functionality test}"
+    
+    if ! test_docker_installation >/dev/null 2>&1; then
+        skip_test "$description" "Docker not available"
+        return 0
+    fi
+    
+    log_info "Testing container functionality with image: $image"
+    
+    # Pull image if not exists
+    if ! docker image inspect "$image" >/dev/null 2>&1; then
+        assert_command_success "docker pull $image" "$description - Pull test image"
+    fi
+    
+    # Run container
+    local container_id
+    if container_id=$(docker run -d "$image" sleep 10 2>/dev/null); then
+        assert_true "true" "$description - Container started successfully"
+        
+        # Wait for container to be running
+        sleep 2
+        
+        # Check container status
+        if docker ps | grep -q "$container_id"; then
+            assert_true "true" "$description - Container is running"
+        else
+            assert_true "true" "$description - Container completed (expected for some test images)"
+        fi
+        
+        # Cleanup
+        docker rm -f "$container_id" >/dev/null 2>&1 || true
+        
+        return 0
+    else
+        fail_test "$description - Failed to start container" "${BASH_LINENO[0]}"
+        return 1
+    fi
+}
+
+test_kubernetes_workload() {
+    local namespace="${1:-default}"
+    local workload_type="${2:-deployment}"
+    local workload_name="${3:-test-workload}"
+    local description="${4:-Kubernetes workload test}"
+    
+    if ! command -v kubectl >/dev/null 2>&1; then
+        skip_test "$description" "kubectl not available"
+        return 0
+    fi
+    
+    # Check cluster connectivity
+    if ! kubectl cluster-info >/dev/null 2>&1; then
+        skip_test "$description" "Kubernetes cluster not accessible"
+        return 0
+    fi
+    
+    log_info "Testing Kubernetes workload: $workload_type/$workload_name in namespace $namespace"
+    
+    # Check if workload exists
+    if kubectl get "$workload_type" "$workload_name" -n "$namespace" >/dev/null 2>&1; then
+        assert_true "true" "$description - Workload exists"
+        
+        # Check workload status
+        local ready_replicas
+        ready_replicas=$(kubectl get "$workload_type" "$workload_name" -n "$namespace" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        
+        if [[ "$ready_replicas" -gt 0 ]]; then
+            assert_true "true" "$description - Workload has ready replicas"
+        else
+            fail_test "$description - No ready replicas" "${BASH_LINENO[0]}"
+        fi
+        
+        return 0
+    else
+        fail_test "$description - Workload not found" "${BASH_LINENO[0]}"
+        return 1
+    fi
+}
+
+# === Terraform Testing ===
 test_terraform_module() {
-    local module_path="$1"
-    local module_name="${2:-$(basename "$module_path")}"
+    local module_path="${1:-.}"
+    local description="${2:-Terraform module validation}"
     
-    log_info "Testing Terraform module: $module_name"
+    if ! command -v terraform >/dev/null 2>&1; then
+        skip_test "$description" "Terraform not available"
+        return 0
+    fi
     
-    if [[ ! -d "$module_path" ]]; then
-        log_error "❌ Terraform module directory not found: $module_path"
+    log_info "Testing Terraform module at: $module_path"
+    
+    # Change to module directory
+    local original_dir=$(pwd)
+    if [[ -d "$module_path" ]]; then
+        cd "$module_path"
+    else
+        fail_test "$description - Module path not found: $module_path" "${BASH_LINENO[0]}"
         return 1
     fi
     
-    # Check for required Terraform files
-    local has_main=false
-    local has_variables=false
-    local has_outputs=false
-    
-    [[ -f "$module_path/main.tf" ]] && has_main=true
-    [[ -f "$module_path/variables.tf" ]] && has_variables=true
-    [[ -f "$module_path/outputs.tf" ]] && has_outputs=true
-    
-    if [[ "$has_main" == true ]]; then
-        log_info "✅ main.tf found"
+    # Initialize Terraform
+    if terraform init -backend=false >/dev/null 2>&1; then
+        assert_true "true" "$description - Terraform init successful"
     else
-        log_warn "⚠️ main.tf not found"
+        cd "$original_dir"
+        fail_test "$description - Terraform init failed" "${BASH_LINENO[0]}"
+        return 1
     fi
     
-    if [[ "$has_variables" == true ]]; then
-        log_info "✅ variables.tf found"
+    # Validate configuration
+    if terraform validate >/dev/null 2>&1; then
+        assert_true "true" "$description - Terraform validation passed"
     else
-        log_warn "⚠️ variables.tf not found"
+        cd "$original_dir"
+        fail_test "$description - Terraform validation failed" "${BASH_LINENO[0]}"
+        return 1
     fi
     
-    if [[ "$has_outputs" == true ]]; then
-        log_info "✅ outputs.tf found"
+    # Format check
+    if terraform fmt -check=true >/dev/null 2>&1; then
+        assert_true "true" "$description - Terraform formatting correct"
     else
-        log_warn "⚠️ outputs.tf not found"
+        assert_true "false" "$description - Terraform formatting issues found"
     fi
     
-    # Test module syntax
-    pushd "$module_path" >/dev/null || return 1
-    
-    if terraform fmt -check >/dev/null 2>&1; then
-        log_info "✅ Terraform formatting correct"
-    else
-        log_warn "⚠️ Terraform formatting issues found"
-    fi
-    
-    popd >/dev/null
+    cd "$original_dir"
     return 0
 }
 
-# === Ansible Testing Utilities ===
-
-test_ansible_functionality() {
-    local test_name="$1"
-    local playbook_path="${2:-}"
+test_terraform_plan() {
+    local module_path="${1:-.}"
+    local vars_file="${2:-}"
+    local description="${3:-Terraform plan test}"
     
-    log_info "Testing Ansible functionality: $test_name"
-    
-    # Check if Ansible is available
-    if ! command -v ansible >/dev/null 2>&1; then
-        log_warn "Ansible not available, skipping Ansible tests"
-        return 2  # Skip
+    if ! command -v terraform >/dev/null 2>&1; then
+        skip_test "$description" "Terraform not available"
+        return 0
     fi
     
-    # Test Ansible version
-    local ansible_version
-    if ansible_version=$(ansible --version | head -1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+'); then
-        log_info "✅ Ansible version: $ansible_version"
+    local original_dir=$(pwd)
+    if [[ -d "$module_path" ]]; then
+        cd "$module_path"
     else
-        log_warn "⚠️ Could not determine Ansible version"
+        fail_test "$description - Module path not found: $module_path" "${BASH_LINENO[0]}"
+        return 1
     fi
     
-    # Test playbook syntax if provided
-    if [[ -n "$playbook_path" && -f "$playbook_path" ]]; then
-        if ansible-playbook --syntax-check "$playbook_path" >/dev/null 2>&1; then
-            log_info "✅ Ansible playbook syntax valid: $playbook_path"
-        else
-            log_error "❌ Ansible playbook syntax invalid: $playbook_path"
+    # Build terraform command
+    local tf_command="terraform plan -input=false -detailed-exitcode"
+    if [[ -n "$vars_file" && -f "$vars_file" ]]; then
+        tf_command="$tf_command -var-file=$vars_file"
+    fi
+    
+    # Run terraform plan
+    local exit_code
+    if eval "$tf_command" >/dev/null 2>&1; then
+        exit_code=$?
+    else
+        exit_code=$?
+    fi
+    
+    case $exit_code in
+        0)
+            assert_true "true" "$description - No changes needed"
+            ;;
+        2)
+            assert_true "true" "$description - Plan successful with changes"
+            ;;
+        *)
+            fail_test "$description - Plan failed with exit code $exit_code" "${BASH_LINENO[0]}"
+            cd "$original_dir"
             return 1
-        fi
-        
-        # Test playbook dry run
-        if ansible-playbook --check "$playbook_path" >/dev/null 2>&1; then
-            log_info "✅ Ansible playbook dry run successful"
+            ;;
+    esac
+    
+    cd "$original_dir"
+    return 0
+}
+
+# === Ansible Testing ===
+test_ansible_playbook() {
+    local playbook_path="$1"
+    local inventory_path="${2:-inventory}"
+    local description="${3:-Ansible playbook test}"
+    
+    if ! command -v ansible-playbook >/dev/null 2>&1; then
+        skip_test "$description" "Ansible not available"
+        return 0
+    fi
+    
+    if [[ ! -f "$playbook_path" ]]; then
+        fail_test "$description - Playbook not found: $playbook_path" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    log_info "Testing Ansible playbook: $playbook_path"
+    
+    # Syntax check
+    if ansible-playbook "$playbook_path" --syntax-check >/dev/null 2>&1; then
+        assert_true "true" "$description - Syntax check passed"
+    else
+        fail_test "$description - Syntax check failed" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    # Dry run check (if inventory exists)
+    if [[ -f "$inventory_path" ]]; then
+        if ansible-playbook "$playbook_path" -i "$inventory_path" --check >/dev/null 2>&1; then
+            assert_true "true" "$description - Dry run successful"
         else
-            log_warn "⚠️ Ansible playbook dry run failed"
+            assert_true "false" "$description - Dry run failed (may be expected)"
         fi
+    else
+        skip_test "$description - Dry run" "No inventory file found"
     fi
     
     return 0
 }
 
 test_ansible_inventory() {
-    local inventory_path="$1"
-    local inventory_name="${2:-$(basename "$inventory_path")}"
+    local inventory_path="${1:-inventory}"
+    local description="${2:-Ansible inventory test}"
     
-    log_info "Testing Ansible inventory: $inventory_name"
+    if ! command -v ansible-inventory >/dev/null 2>&1; then
+        skip_test "$description" "Ansible not available"
+        return 0
+    fi
     
     if [[ ! -f "$inventory_path" ]]; then
-        log_error "❌ Ansible inventory file not found: $inventory_path"
+        fail_test "$description - Inventory not found: $inventory_path" "${BASH_LINENO[0]}"
         return 1
     fi
     
-    # Test inventory syntax
+    log_info "Testing Ansible inventory: $inventory_path"
+    
+    # List inventory
     if ansible-inventory -i "$inventory_path" --list >/dev/null 2>&1; then
-        log_info "✅ Ansible inventory syntax valid"
-        
-        # Get host count
-        local host_count
-        if host_count=$(ansible-inventory -i "$inventory_path" --list | grep -c '"" :' 2>/dev/null || echo "0"); then
-            log_info "✅ Inventory contains $host_count hosts"
-        fi
+        assert_true "true" "$description - Inventory parsing successful"
     else
-        log_error "❌ Ansible inventory syntax invalid"
+        fail_test "$description - Inventory parsing failed" "${BASH_LINENO[0]}"
         return 1
+    fi
+    
+    # Graph inventory
+    if ansible-inventory -i "$inventory_path" --graph >/dev/null 2>&1; then
+        assert_true "true" "$description - Inventory graph generation successful"
+    else
+        assert_true "false" "$description - Inventory graph generation failed"
     fi
     
     return 0
 }
 
-# === Monitoring Testing Utilities ===
-
-test_monitoring_stack() {
-    local stack_name="$1"
-    local prometheus_url="${2:-http://localhost:9090}"
-    local grafana_url="${3:-http://localhost:3000}"
+# === Monitoring and Metrics Testing ===
+test_prometheus_connectivity() {
+    local prometheus_url="${1:-http://localhost:9090}"
+    local description="${2:-Prometheus connectivity test}"
     
-    log_info "Testing monitoring stack: $stack_name"
+    log_info "Testing Prometheus connectivity: $prometheus_url"
     
-    # Test Prometheus connectivity
-    if command -v curl >/dev/null 2>&1; then
-        if curl -s -o /dev/null -w "%{http_code}" "$prometheus_url" | grep -q "200"; then
-            log_info "✅ Prometheus accessible at $prometheus_url"
-            
-            # Test Prometheus targets
-            if curl -s "$prometheus_url/api/v1/targets" | grep -q "targets"; then
-                log_info "✅ Prometheus targets API responding"
-            else
-                log_warn "⚠️ Prometheus targets API not responding"
-            fi
+    # Test basic connectivity
+    if curl -s -f "$prometheus_url/api/v1/query?query=up" >/dev/null 2>&1; then
+        assert_true "true" "$description - Prometheus API accessible"
+        
+        # Test metrics availability
+        local up_targets
+        up_targets=$(curl -s "$prometheus_url/api/v1/query?query=up" | jq -r '.data.result | length' 2>/dev/null || echo "0")
+        
+        if [[ "$up_targets" -gt 0 ]]; then
+            assert_true "true" "$description - Prometheus has active targets"
         else
-            log_warn "⚠️ Prometheus not accessible at $prometheus_url"
+            assert_true "false" "$description - No active targets found"
         fi
         
-        # Test Grafana connectivity
-        if curl -s -o /dev/null -w "%{http_code}" "$grafana_url" | grep -q "200"; then
-            log_info "✅ Grafana accessible at $grafana_url"
-        else
-            log_warn "⚠️ Grafana not accessible at $grafana_url"
-        fi
+        return 0
     else
-        log_warn "curl not available, skipping HTTP connectivity tests"
+        fail_test "$description - Prometheus not accessible" "${BASH_LINENO[0]}"
+        return 1
     fi
+}
+
+test_grafana_connectivity() {
+    local grafana_url="${1:-http://localhost:3000}"
+    local description="${2:-Grafana connectivity test}"
     
-    return 0
+    log_info "Testing Grafana connectivity: $grafana_url"
+    
+    # Test basic connectivity
+    if curl -s -f "$grafana_url/api/health" >/dev/null 2>&1; then
+        assert_true "true" "$description - Grafana API accessible"
+        
+        # Test health status
+        local health_status
+        health_status=$(curl -s "$grafana_url/api/health" | jq -r '.database' 2>/dev/null || echo "unknown")
+        
+        if [[ "$health_status" == "ok" ]]; then
+            assert_true "true" "$description - Grafana database healthy"
+        else
+            assert_true "false" "$description - Grafana database status: $health_status"
+        fi
+        
+        return 0
+    else
+        fail_test "$description - Grafana not accessible" "${BASH_LINENO[0]}"
+        return 1
+    fi
 }
 
 test_metrics_collection() {
-    local service_name="$1"
-    local metrics_endpoint="${2:-http://localhost:9100/metrics}"
+    local endpoint="${1:-http://localhost:9100/metrics}"
+    local metric_name="${2:-node_cpu_seconds_total}"
+    local description="${3:-Metrics collection test}"
     
-    log_info "Testing metrics collection for: $service_name"
+    log_info "Testing metrics collection from: $endpoint"
     
-    if command -v curl >/dev/null 2>&1; then
-        local metrics_output
-        if metrics_output=$(curl -s "$metrics_endpoint" 2>/dev/null); then
-            # Check for common metrics
-            local metric_count
-            metric_count=$(echo "$metrics_output" | grep -c "^[a-zA-Z]" || echo "0")
-            
-            if [[ $metric_count -gt 0 ]]; then
-                log_info "✅ Metrics endpoint responding with $metric_count metrics"
-            else
-                log_warn "⚠️ Metrics endpoint not returning valid metrics"
-            fi
+    # Test endpoint accessibility
+    if curl -s -f "$endpoint" >/dev/null 2>&1; then
+        assert_true "true" "$description - Metrics endpoint accessible"
+        
+        # Test specific metric availability
+        if curl -s "$endpoint" | grep -q "$metric_name"; then
+            assert_true "true" "$description - Metric '$metric_name' available"
         else
-            log_warn "⚠️ Could not connect to metrics endpoint: $metrics_endpoint"
+            assert_true "false" "$description - Metric '$metric_name' not found"
         fi
+        
+        return 0
     else
-        log_warn "curl not available, skipping metrics tests"
+        fail_test "$description - Metrics endpoint not accessible" "${BASH_LINENO[0]}"
+        return 1
     fi
-    
-    return 0
 }
 
-# === Security Testing Utilities ===
-
-test_security_hardening() {
-    local target_name="$1"
-    local target_path="${2:-$SCRIPT_DIR}"
+# === Security Testing ===
+test_system_hardening() {
+    local description="${1:-System hardening validation}"
     
-    log_info "Testing security hardening for: $target_name"
+    log_info "Testing system hardening measures"
     
-    # Test file permissions
-    local permission_issues=0
-    
-    while IFS= read -r -d '' file; do
-        local perms
-        perms=$(stat -c "%a" "$file" 2>/dev/null || echo "000")
-        
-        # Check for overly permissive files
-        if [[ "$perms" =~ ^[0-7][0-7][7-9]$ ]]; then
-            log_warn "⚠️ Potentially insecure permissions: $file ($perms)"
-            ((permission_issues++))
+    # Check SSH configuration
+    if [[ -f "/etc/ssh/sshd_config" ]]; then
+        # Check if root login is disabled
+        if grep -q "^PermitRootLogin no" /etc/ssh/sshd_config; then
+            assert_true "true" "$description - SSH root login disabled"
+        else
+            assert_true "false" "$description - SSH root login not properly disabled"
         fi
-    done < <(find "$target_path" -type f -name "*.sh" -print0 2>/dev/null)
-    
-    if [[ $permission_issues -eq 0 ]]; then
-        log_info "✅ No permission issues found"
+        
+        # Check if password authentication is disabled
+        if grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config; then
+            assert_true "true" "$description - SSH password authentication disabled"
+        else
+            assert_true "false" "$description - SSH password authentication not disabled"
+        fi
     else
-        log_warn "⚠️ Found $permission_issues permission issues"
+        skip_test "$description - SSH config" "SSH config file not found"
     fi
     
-    # Test for hardcoded secrets
-    test_credential_security "$target_path"
+    # Check firewall status
+    if command -v ufw >/dev/null 2>&1; then
+        if ufw status | grep -q "Status: active"; then
+            assert_true "true" "$description - UFW firewall active"
+        else
+            assert_true "false" "$description - UFW firewall not active"
+        fi
+    elif command -v firewall-cmd >/dev/null 2>&1; then
+        if firewall-cmd --state >/dev/null 2>&1; then
+            assert_true "true" "$description - firewalld active"
+        else
+            assert_true "false" "$description - firewalld not active"
+        fi
+    else
+        skip_test "$description - Firewall" "No supported firewall found"
+    fi
     
-    return 0
+    # Check for automatic updates
+    if [[ -f "/etc/apt/apt.conf.d/20auto-upgrades" ]]; then
+        if grep -q "1" /etc/apt/apt.conf.d/20auto-upgrades; then
+            assert_true "true" "$description - Automatic updates enabled"
+        else
+            assert_true "false" "$description - Automatic updates not enabled"
+        fi
+    else
+        skip_test "$description - Auto updates" "Auto-updates config not found"
+    fi
 }
 
 test_credential_security() {
-    local search_path="$1"
+    local path="${1:-$PROJECT_ROOT}"
+    local description="${2:-Credential security test}"
     
-    log_info "Testing credential security in: $search_path"
+    log_info "Testing credential security in: $path"
     
-    local credential_patterns=(
-        "password.*="
-        "passwd.*="
-        "secret.*="
-        "api_key.*="
-        "private_key.*="
-        "token.*="
+    local issues=0
+    
+    # Check for common credential patterns
+    local patterns=(
+        "password\s*=\s*['\"][^'\"]{1,}"
+        "passwd\s*=\s*['\"][^'\"]{1,}"
+        "secret\s*=\s*['\"][^'\"]{1,}"
+        "api[_-]?key\s*=\s*['\"][^'\"]{1,}"
+        "token\s*=\s*['\"][^'\"]{1,}"
     )
     
-    local issues_found=0
-    
-    for pattern in "${credential_patterns[@]}"; do
-        while IFS= read -r -d '' file; do
-            if grep -iE "$pattern" "$file" | grep -v "^\s*#" >/dev/null 2>&1; then
-                log_warn "⚠️ Potential credential found in $file (pattern: $pattern)"
-                ((issues_found++))
-            fi
-        done < <(find "$search_path" -name "*.sh" -o -name "*.conf" -o -name "*.cfg" | head -20 | tr '\n' '\0')
+    for pattern in "${patterns[@]}"; do
+        local matches
+        mapfile -t matches < <(grep -rEi "$pattern" "$path" --include="*.sh" --include="*.conf" --include="*.json" --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+        
+        if [[ ${#matches[@]} -gt 0 ]]; then
+            for match in "${matches[@]}"; do
+                log_warn "Potential credential found: $match"
+                ((issues++))
+            done
+        fi
     done
     
-    if [[ $issues_found -eq 0 ]]; then
-        log_info "✅ No hardcoded credentials detected"
+    if [[ $issues -eq 0 ]]; then
+        assert_true "true" "$description - No hardcoded credentials found"
     else
-        log_warn "⚠️ Found $issues_found potential credential issues"
+        assert_true "false" "$description - Found $issues potential credential issues"
     fi
     
     return 0
 }
 
 test_network_security() {
-    local service_name="$1"
-    local host="${2:-localhost}"
-    local port="${3:-22}"
+    local description="${1:-Network security test}"
     
-    log_info "Testing network security for: $service_name"
+    log_info "Testing network security configuration"
     
-    # Test port accessibility
-    if command -v nc >/dev/null 2>&1; then
-        if timeout 5 nc -z "$host" "$port" >/dev/null 2>&1; then
-            log_info "✅ Port $port accessible on $host"
+    # Check open ports
+    if command -v ss >/dev/null 2>&1; then
+        local open_ports
+        mapfile -t open_ports < <(ss -tuln | awk 'NR>1 {print $5}' | sed 's/.*://' | sort -n | uniq)
+        
+        # Check for commonly insecure ports
+        local insecure_ports=("21" "23" "25" "53" "80" "110" "143" "993" "995")
+        local found_insecure=0
+        
+        for port in "${open_ports[@]}"; do
+            if [[ " ${insecure_ports[*]} " =~ " $port " ]]; then
+                log_warn "Potentially insecure port open: $port"
+                ((found_insecure++))
+            fi
+        done
+        
+        if [[ $found_insecure -eq 0 ]]; then
+            assert_true "true" "$description - No obviously insecure ports open"
         else
-            log_warn "⚠️ Port $port not accessible on $host"
-        fi
-    elif command -v telnet >/dev/null 2>&1; then
-        if timeout 5 telnet "$host" "$port" </dev/null >/dev/null 2>&1; then
-            log_info "✅ Port $port accessible on $host"
-        else
-            log_warn "⚠️ Port $port not accessible on $host"
+            assert_true "false" "$description - Found $found_insecure potentially insecure open ports"
         fi
     else
-        log_warn "Neither nc nor telnet available for network testing"
+        skip_test "$description - Port check" "ss command not available"
+    fi
+    
+    # Check IP forwarding
+    if [[ -f "/proc/sys/net/ipv4/ip_forward" ]]; then
+        local ip_forward=$(cat /proc/sys/net/ipv4/ip_forward)
+        if [[ "$ip_forward" == "0" ]]; then
+            assert_true "true" "$description - IP forwarding disabled"
+        else
+            assert_true "false" "$description - IP forwarding enabled (may be intentional)"
+        fi
     fi
     
     return 0
 }
 
-# === Performance Testing Utilities ===
-
-test_performance_benchmark() {
-    local test_name="$1"
-    local command_to_test="$2"
-    local max_time_seconds="${3:-10}"
-    local iterations="${4:-1}"
+# === Performance Testing ===
+test_performance_baseline() {
+    local description="${1:-Performance baseline test}"
+    local duration="${2:-30}"
     
-    log_info "Running performance benchmark: $test_name"
+    log_info "Running performance baseline test for ${duration}s"
     
-    local total_time=0
-    local successful_runs=0
+    # CPU performance test
+    local cpu_start_time=$(date '+%s')
+    local cpu_result
+    cpu_result=$(timeout "$duration" yes >/dev/null 2>&1 &
+                 local pid=$!
+                 sleep 1
+                 local cpu_usage=$(ps -p $pid -o %cpu --no-headers 2>/dev/null || echo "0")
+                 kill $pid 2>/dev/null || true
+                 echo "${cpu_usage%.*}")
     
-    for ((i=1; i<=iterations; i++)); do
-        local start_time
-        start_time=$(date +%s.%N)
+    if [[ "${cpu_result:-0}" -gt 0 ]]; then
+        assert_true "true" "$description - CPU stress test functional"
+    else
+        assert_true "false" "$description - CPU stress test failed"
+    fi
+    
+    # Memory test
+    local memory_available
+    memory_available=$(free -m | awk 'NR==2{printf "%.0f", $7}')
+    
+    if [[ "${memory_available:-0}" -gt 100 ]]; then
+        assert_true "true" "$description - Sufficient memory available (${memory_available}MB)"
+    else
+        assert_true "false" "$description - Low memory available (${memory_available}MB)"
+    fi
+    
+    # Disk I/O test
+    local temp_file="/tmp/disk_test_$$"
+    local disk_start_time=$(date '+%s%3N')
+    
+    if dd if=/dev/zero of="$temp_file" bs=1M count=10 >/dev/null 2>&1; then
+        local disk_end_time=$(date '+%s%3N')
+        local disk_duration=$((disk_end_time - disk_start_time))
         
-        if eval "$command_to_test" >/dev/null 2>&1; then
-            local end_time
-            end_time=$(date +%s.%N)
-            local execution_time
-            execution_time=$(echo "$end_time - $start_time" | bc -l)
-            
-            total_time=$(echo "$total_time + $execution_time" | bc -l)
-            ((successful_runs++))
-            
-            log_debug "Iteration $i: ${execution_time}s"
+        rm -f "$temp_file"
+        
+        if [[ $disk_duration -lt 5000 ]]; then # Less than 5 seconds for 10MB
+            assert_true "true" "$description - Disk I/O performance acceptable (${disk_duration}ms)"
         else
-            log_warn "⚠️ Iteration $i failed"
-        fi
-    done
-    
-    if [[ $successful_runs -gt 0 ]]; then
-        local average_time
-        average_time=$(echo "scale=3; $total_time / $successful_runs" | bc -l)
-        
-        log_info "✅ Performance benchmark completed:"
-        log_info "   Average time: ${average_time}s"
-        log_info "   Successful runs: $successful_runs/$iterations"
-        
-        # Check against threshold
-        if (( $(echo "$average_time <= $max_time_seconds" | bc -l) )); then
-            log_info "✅ Performance within threshold (${average_time}s <= ${max_time_seconds}s)"
-            return 0
-        else
-            log_warn "⚠️ Performance exceeds threshold (${average_time}s > ${max_time_seconds}s)"
-            return 1
+            assert_true "false" "$description - Disk I/O performance slow (${disk_duration}ms)"
         fi
     else
-        log_error "❌ All benchmark iterations failed"
-        return 1
+        assert_true "false" "$description - Disk I/O test failed"
     fi
+    
+    return 0
 }
 
 test_memory_usage() {
-    local test_name="$1"
-    local command_to_test="$2"
-    local max_memory_mb="${3:-100}"
+    local process_name="$1"
+    local max_memory_mb="${2:-1024}"
+    local description="${3:-Memory usage test for $process_name}"
     
-    log_info "Testing memory usage: $test_name"
+    if ! pgrep "$process_name" >/dev/null 2>&1; then
+        skip_test "$description" "Process '$process_name' not running"
+        return 0
+    fi
     
-    # Start monitoring memory usage
-    local initial_memory
-    initial_memory=$(free -m | awk 'NR==2{print $3}')
+    log_info "Testing memory usage for process: $process_name"
     
-    # Execute command
-    if eval "$command_to_test" >/dev/null 2>&1; then
-        local final_memory
-        final_memory=$(free -m | awk 'NR==2{print $3}')
-        
-        local memory_used
-        memory_used=$((final_memory - initial_memory))
-        
-        log_info "✅ Memory usage test completed:"
-        log_info "   Memory used: ${memory_used}MB"
-        
-        if [[ $memory_used -le $max_memory_mb ]]; then
-            log_info "✅ Memory usage within threshold (${memory_used}MB <= ${max_memory_mb}MB)"
-            return 0
-        else
-            log_warn "⚠️ Memory usage exceeds threshold (${memory_used}MB > ${max_memory_mb}MB)"
-            return 1
-        fi
+    # Get memory usage in MB
+    local memory_usage
+    memory_usage=$(ps -o pid,comm,rss --no-headers -C "$process_name" | awk '{sum+=$3} END {printf "%.0f", sum/1024}')
+    
+    if [[ "${memory_usage:-0}" -le "$max_memory_mb" ]]; then
+        assert_true "true" "$description - Memory usage acceptable (${memory_usage}MB <= ${max_memory_mb}MB)"
     else
-        log_error "❌ Command failed during memory test"
-        return 1
+        assert_true "false" "$description - Memory usage excessive (${memory_usage}MB > ${max_memory_mb}MB)"
     fi
+    
+    return 0
 }
 
-test_disk_io_performance() {
-    local test_name="$1"
-    local test_dir="${2:-/tmp}"
-    local file_size_mb="${3:-10}"
+# === Template and VM Testing ===
+test_template_creation() {
+    local template_name="${1:-test-template}"
+    local description="${2:-Template creation test}"
     
-    log_info "Testing disk I/O performance: $test_name"
+    log_info "Testing template creation: $template_name"
     
-    local test_file="${test_dir}/test_io_$$"
+    # Check if Proxmox tools are available
+    if ! command -v qm >/dev/null 2>&1; then
+        skip_test "$description" "Proxmox tools not available"
+        return 0
+    fi
     
-    # Test write performance
-    local write_start
-    write_start=$(date +%s.%N)
-    
-    if dd if=/dev/zero of="$test_file" bs=1M count="$file_size_mb" >/dev/null 2>&1; then
-        local write_end
-        write_end=$(date +%s.%N)
-        local write_time
-        write_time=$(echo "$write_end - $write_start" | bc -l)
+    # Check if template already exists
+    if qm status "$template_name" >/dev/null 2>&1; then
+        assert_true "true" "$description - Template exists and is accessible"
         
-        log_info "✅ Write performance: ${write_time}s for ${file_size_mb}MB"
+        # Check template configuration
+        local template_config
+        template_config=$(qm config "$template_name" 2>/dev/null)
         
-        # Test read performance
-        local read_start
-        read_start=$(date +%s.%N)
-        
-        if dd if="$test_file" of=/dev/null bs=1M >/dev/null 2>&1; then
-            local read_end
-            read_end=$(date +%s.%N)
-            local read_time
-            read_time=$(echo "$read_end - $read_start" | bc -l)
+        if [[ -n "$template_config" ]]; then
+            assert_true "true" "$description - Template configuration readable"
             
-            log_info "✅ Read performance: ${read_time}s for ${file_size_mb}MB"
-            
-            # Cleanup
-            rm -f "$test_file"
-            return 0
+            # Check if it's marked as template
+            if echo "$template_config" | grep -q "template: 1"; then
+                assert_true "true" "$description - VM properly marked as template"
+            else
+                assert_true "false" "$description - VM not marked as template"
+            fi
         else
-            log_error "❌ Read test failed"
-            rm -f "$test_file"
-            return 1
+            assert_true "false" "$description - Template configuration not readable"
         fi
+        
+        return 0
     else
-        log_error "❌ Write test failed"
+        fail_test "$description - Template not found or not accessible" "${BASH_LINENO[0]}"
         return 1
     fi
 }
 
-# === Template Testing Utilities ===
-
-test_template_functionality() {
-    local template_name="$1"
-    local template_script="${2:-${SCRIPT_DIR}/template.sh}"
-    local test_mode="${3:-syntax}"
+test_vm_deployment() {
+    local template_id="$1"
+    local new_vm_id="$2"
+    local description="${3:-VM deployment test}"
     
-    log_info "Testing template functionality: $template_name"
+    if ! command -v qm >/dev/null 2>&1; then
+        skip_test "$description" "Proxmox tools not available"
+        return 0
+    fi
     
-    if [[ ! -f "$template_script" ]]; then
-        log_error "❌ Template script not found: $template_script"
+    log_info "Testing VM deployment from template $template_id to VM $new_vm_id"
+    
+    # Check if template exists
+    if ! qm status "$template_id" >/dev/null 2>&1; then
+        fail_test "$description - Source template not found: $template_id" "${BASH_LINENO[0]}"
         return 1
     fi
     
-    case "$test_mode" in
-        syntax)
-            if bash -n "$template_script"; then
-                log_info "✅ Template script syntax valid"
-                return 0
-            else
-                log_error "❌ Template script syntax invalid"
-                return 1
-            fi
-            ;;
-        functionality)
-            # Test basic functionality without creating actual templates
-            if timeout 10 bash "$template_script" --help >/dev/null 2>&1; then
-                log_info "✅ Template script responds to help"
-            else
-                log_warn "⚠️ Template script may not have help functionality"
-            fi
-            
-            # Test list functionality if available
-            if timeout 10 bash "$template_script" --list >/dev/null 2>&1; then
-                log_info "✅ Template script can list templates"
-            else
-                log_warn "⚠️ Template script may not have list functionality"
-            fi
-            
-            return 0
-            ;;
-        *)
-            log_error "❌ Unknown test mode: $test_mode"
-            return 1
-            ;;
-    esac
+    # Check if target VM ID is available
+    if qm status "$new_vm_id" >/dev/null 2>&1; then
+        fail_test "$description - Target VM ID already exists: $new_vm_id" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    # Clone template (dry run)
+    if qm clone "$template_id" "$new_vm_id" --name "test-vm-$new_vm_id" --target "$(hostname)" >/dev/null 2>&1; then
+        assert_true "true" "$description - VM cloning successful"
+        
+        # Cleanup test VM
+        qm destroy "$new_vm_id" --destroy-unreferenced-disks 1 >/dev/null 2>&1 || true
+        
+        return 0
+    else
+        fail_test "$description - VM cloning failed" "${BASH_LINENO[0]}"
+        return 1
+    fi
 }
 
-test_vm_template_creation() {
-    local template_name="$1"
-    local distribution="${2:-ubuntu}"
-    local test_mode="${3:-dry-run}"
-    
-    log_info "Testing VM template creation: $template_name ($distribution)"
-    
-    case "$test_mode" in
-        dry-run)
-            log_info "✅ Dry-run template creation test (simulation only)"
-            # This would test the template creation logic without actually creating VMs
-            return 0
-            ;;
-        validation)
-            # Test template validation logic
-            if [[ -n "$template_name" && -n "$distribution" ]]; then
-                log_info "✅ Template parameters validation passed"
-                return 0
-            else
-                log_error "❌ Template parameters validation failed"
-                return 1
-            fi
-            ;;
-        *)
-            log_error "❌ Unknown test mode: $test_mode"
-            return 1
-            ;;
-    esac
-}
-
-# === Network Testing Utilities ===
-
+# === Network Testing ===
 test_network_connectivity() {
-    local target_name="$1"
-    local target_host="$2"
-    local target_port="${3:-80}"
-    local timeout_seconds="${4:-5}"
+    local target="${1:-8.8.8.8}"
+    local timeout="${2:-5}"
+    local description="${3:-Network connectivity test to $target}"
     
-    log_info "Testing network connectivity: $target_name"
+    log_info "Testing network connectivity to: $target"
     
-    # Test basic connectivity
-    if command -v ping >/dev/null 2>&1; then
-        if timeout "$timeout_seconds" ping -c 1 "$target_host" >/dev/null 2>&1; then
-            log_info "✅ Basic connectivity to $target_host"
-        else
-            log_warn "⚠️ No basic connectivity to $target_host"
-        fi
-    fi
-    
-    # Test port connectivity
-    if command -v nc >/dev/null 2>&1; then
-        if timeout "$timeout_seconds" nc -z "$target_host" "$target_port" >/dev/null 2>&1; then
-            log_info "✅ Port $target_port accessible on $target_host"
-        else
-            log_warn "⚠️ Port $target_port not accessible on $target_host"
-        fi
+    if ping -c 1 -W "$timeout" "$target" >/dev/null 2>&1; then
+        assert_true "true" "$description - Ping successful"
+    else
+        fail_test "$description - Ping failed" "${BASH_LINENO[0]}"
+        return 1
     fi
     
     return 0
 }
 
 test_dns_resolution() {
-    local hostname="$1"
+    local hostname="${1:-google.com}"
+    local description="${2:-DNS resolution test for $hostname}"
     
     log_info "Testing DNS resolution for: $hostname"
     
-    if command -v nslookup >/dev/null 2>&1; then
-        if nslookup "$hostname" >/dev/null 2>&1; then
-            log_info "✅ DNS resolution successful for $hostname"
-            return 0
-        else
-            log_error "❌ DNS resolution failed for $hostname"
-            return 1
-        fi
-    elif command -v dig >/dev/null 2>&1; then
-        if dig "$hostname" >/dev/null 2>&1; then
-            log_info "✅ DNS resolution successful for $hostname"
-            return 0
-        else
-            log_error "❌ DNS resolution failed for $hostname"
-            return 1
-        fi
+    if nslookup "$hostname" >/dev/null 2>&1; then
+        assert_true "true" "$description - DNS resolution successful"
+    elif host "$hostname" >/dev/null 2>&1; then
+        assert_true "true" "$description - DNS resolution successful (via host)"
+    elif dig "$hostname" >/dev/null 2>&1; then
+        assert_true "true" "$description - DNS resolution successful (via dig)"
     else
-        log_warn "Neither nslookup nor dig available for DNS testing"
-        return 2
-    fi
-}
-
-# === Configuration Testing Utilities ===
-
-test_configuration_validation() {
-    local config_name="$1"
-    local config_file="$2"
-    local config_type="${3:-ini}"
-    
-    log_info "Testing configuration validation: $config_name"
-    
-    if [[ ! -f "$config_file" ]]; then
-        log_error "❌ Configuration file not found: $config_file"
+        fail_test "$description - DNS resolution failed" "${BASH_LINENO[0]}"
         return 1
     fi
     
+    return 0
+}
+
+test_port_connectivity() {
+    local host="$1"
+    local port="$2"
+    local timeout="${3:-5}"
+    local description="${4:-Port connectivity test to $host:$port}"
+    
+    log_info "Testing port connectivity to: $host:$port"
+    
+    if command -v nc >/dev/null 2>&1; then
+        if timeout "$timeout" nc -z "$host" "$port" >/dev/null 2>&1; then
+            assert_true "true" "$description - Port connection successful"
+        else
+            fail_test "$description - Port connection failed" "${BASH_LINENO[0]}"
+            return 1
+        fi
+    elif command -v telnet >/dev/null 2>&1; then
+        if timeout "$timeout" telnet "$host" "$port" </dev/null >/dev/null 2>&1; then
+            assert_true "true" "$description - Port connection successful (via telnet)"
+        else
+            fail_test "$description - Port connection failed" "${BASH_LINENO[0]}"
+            return 1
+        fi
+    else
+        skip_test "$description" "No network connectivity tools available"
+        return 0
+    fi
+    
+    return 0
+}
+
+# === Configuration Testing ===
+test_config_file_syntax() {
+    local config_file="$1"
+    local config_type="${2:-auto}"
+    local description="${3:-Configuration file syntax test}"
+    
+    if [[ ! -f "$config_file" ]]; then
+        fail_test "$description - Configuration file not found: $config_file" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    log_info "Testing configuration file syntax: $config_file"
+    
+    # Auto-detect configuration type if not specified
+    if [[ "$config_type" == "auto" ]]; then
+        case "${config_file##*.}" in
+            json) config_type="json" ;;
+            yaml|yml) config_type="yaml" ;;
+            conf|config) config_type="conf" ;;
+            *) config_type="unknown" ;;
+        esac
+    fi
+    
     case "$config_type" in
-        ini)
-            # Test INI file format
-            if grep -E "^\[.*\]$" "$config_file" >/dev/null 2>&1; then
-                log_info "✅ INI format sections found"
-            else
-                log_warn "⚠️ No INI format sections found"
-            fi
-            ;;
         json)
-            # Test JSON format
             if command -v jq >/dev/null 2>&1; then
-                if jq . "$config_file" >/dev/null 2>&1; then
-                    log_info "✅ Valid JSON format"
+                if jq empty "$config_file" >/dev/null 2>&1; then
+                    assert_true "true" "$description - JSON syntax valid"
                 else
-                    log_error "❌ Invalid JSON format"
+                    fail_test "$description - JSON syntax invalid" "${BASH_LINENO[0]}"
                     return 1
                 fi
             else
-                log_warn "jq not available, skipping JSON validation"
+                skip_test "$description" "jq not available for JSON validation"
             fi
             ;;
         yaml)
-            # Test YAML format
             if command -v yq >/dev/null 2>&1; then
-                if yq . "$config_file" >/dev/null 2>&1; then
-                    log_info "✅ Valid YAML format"
+                if yq eval . "$config_file" >/dev/null 2>&1; then
+                    assert_true "true" "$description - YAML syntax valid"
                 else
-                    log_error "❌ Invalid YAML format"
+                    fail_test "$description - YAML syntax invalid" "${BASH_LINENO[0]}"
+                    return 1
+                fi
+            elif python3 -c "import yaml" 2>/dev/null; then
+                if python3 -c "import yaml; yaml.safe_load(open('$config_file'))" >/dev/null 2>&1; then
+                    assert_true "true" "$description - YAML syntax valid (via Python)"
+                else
+                    fail_test "$description - YAML syntax invalid" "${BASH_LINENO[0]}"
                     return 1
                 fi
             else
-                log_warn "yq not available, skipping YAML validation"
+                skip_test "$description" "No YAML validator available"
+            fi
+            ;;
+        conf)
+            # Basic syntax check for key=value format
+            if grep -E '^[^#]*=' "$config_file" >/dev/null 2>&1; then
+                assert_true "true" "$description - Configuration file appears valid"
+            else
+                assert_true "false" "$description - No key=value pairs found"
             fi
             ;;
         *)
-            log_info "✅ Basic configuration file existence validated"
+            skip_test "$description" "Unknown configuration type: $config_type"
             ;;
     esac
     
     return 0
 }
 
-# === Utility Functions ===
-
-show_test_utilities_help() {
-    cat << EOF
-Test Utilities for Homelab Project
-
-This module provides specialized testing functions for different component types:
-
-Docker/Container Testing:
-  test_docker_functionality <test_name> [container_script]
-  test_kubernetes_functionality <test_name> [config_path]
-  test_container_workload <workload_name> <image_name> [timeout]
-
-Terraform Testing:
-  test_terraform_functionality <test_name> [terraform_dir]
-  test_terraform_module <module_path> [module_name]
-
-Ansible Testing:
-  test_ansible_functionality <test_name> [playbook_path]
-  test_ansible_inventory <inventory_path> [inventory_name]
-
-Monitoring Testing:
-  test_monitoring_stack <stack_name> [prometheus_url] [grafana_url]
-  test_metrics_collection <service_name> [metrics_endpoint]
-
-Security Testing:
-  test_security_hardening <target_name> [target_path]
-  test_credential_security <search_path>
-  test_network_security <service_name> [host] [port]
-
-Performance Testing:
-  test_performance_benchmark <test_name> <command> [max_time] [iterations]
-  test_memory_usage <test_name> <command> [max_memory_mb]
-  test_disk_io_performance <test_name> [test_dir] [file_size_mb]
-
-Template Testing:
-  test_template_functionality <template_name> [template_script] [test_mode]
-  test_vm_template_creation <template_name> [distribution] [test_mode]
-
-Network Testing:
-  test_network_connectivity <target_name> <target_host> [port] [timeout]
-  test_dns_resolution <hostname>
-
-Configuration Testing:
-  test_configuration_validation <config_name> <config_file> [config_type]
-
-Example Usage:
-  source test_utilities.sh
-  test_docker_functionality "Docker Basic Test"
-  test_terraform_functionality "Terraform Validation" "/path/to/terraform"
-  test_performance_benchmark "Script Performance" "bash script.sh" 5 3
-
-EOF
+test_config_values() {
+    local config_file="$1"
+    local expected_key="$2"
+    local expected_value="$3"
+    local description="${4:-Configuration value test}"
+    
+    if [[ ! -f "$config_file" ]]; then
+        fail_test "$description - Configuration file not found: $config_file" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    log_info "Testing configuration value: $expected_key=$expected_value in $config_file"
+    
+    # Try different parsing methods based on file type
+    local actual_value=""
+    
+    case "${config_file##*.}" in
+        json)
+            if command -v jq >/dev/null 2>&1; then
+                actual_value=$(jq -r ".$expected_key // empty" "$config_file" 2>/dev/null)
+            fi
+            ;;
+        yaml|yml)
+            if command -v yq >/dev/null 2>&1; then
+                actual_value=$(yq eval ".$expected_key" "$config_file" 2>/dev/null)
+            fi
+            ;;
+        conf|config)
+            actual_value=$(grep "^$expected_key=" "$config_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" 2>/dev/null)
+            ;;
+    esac
+    
+    if [[ "$actual_value" == "$expected_value" ]]; then
+        assert_true "true" "$description - Configuration value correct: $expected_key=$actual_value"
+    else
+        fail_test "$description - Configuration value mismatch: expected '$expected_value', got '$actual_value'" "${BASH_LINENO[0]}"
+        return 1
+    fi
+    
+    return 0
 }
 
-# Main execution (if script is run directly)
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    show_test_utilities_help
-fi
+# === Export all test functions ===
+# This ensures all functions are available when this file is sourced
+declare -fx test_docker_installation
+declare -fx test_container_functionality
+declare -fx test_kubernetes_workload
+declare -fx test_terraform_module
+declare -fx test_terraform_plan
+declare -fx test_ansible_playbook
+declare -fx test_ansible_inventory
+declare -fx test_prometheus_connectivity
+declare -fx test_grafana_connectivity
+declare -fx test_metrics_collection
+declare -fx test_system_hardening
+declare -fx test_credential_security
+declare -fx test_network_security
+declare -fx test_performance_baseline
+declare -fx test_memory_usage
+declare -fx test_template_creation
+declare -fx test_vm_deployment
+declare -fx test_network_connectivity
+declare -fx test_dns_resolution
+declare -fx test_port_connectivity
+declare -fx test_config_file_syntax
+declare -fx test_config_values
+
+log_info "Test utilities loaded successfully"

@@ -245,11 +245,12 @@ discover_modules() {
     # Define module metadata
     declare -A MODULE_INFO=(
         ["template.sh"]="VM Templates|Create and manage VM templates|Complete"
-        ["containers.sh"]="Containers|Deploy Docker and Kubernetes workloads|Partial"
-        ["terraform.sh"]="Terraform|Infrastructure as Code automation|Skeleton"
-        ["config.sh"]="Configuration|System and user configuration options|Skeleton"
-        ["monitoring.sh"]="Monitoring|Setup monitoring solutions|Skeleton"
-        ["registry.sh"]="Registry|Container registry management|Skeleton"
+        ["containers.sh"]="Containers|Deploy Docker and Kubernetes workloads|Complete"
+        ["terraform.sh"]="Terraform|Infrastructure as Code automation|Complete"
+        ["config.sh"]="Configuration|System and user configuration options|Complete"
+        ["monitoring.sh"]="Monitoring|Setup monitoring solutions|Complete"
+        ["registry.sh"]="Registry|Container registry management|Complete"
+        ["ansible.sh"]="Ansible|Configuration management automation|Complete"
         ["update.sh"]="Update|Check for and apply updates|Complete"
     )
     

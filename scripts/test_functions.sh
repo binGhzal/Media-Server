@@ -75,7 +75,7 @@ assert_dir_exists() {
 }
 
 run_bootstrap_tests() {
-    log_info "Testing bootstrap.sh functions..."
+    log "INFO" "Testing bootstrap.sh functions..."
     source "$(dirname "$0")/bootstrap.sh"
 
     # Test core functions
@@ -97,7 +97,7 @@ run_bootstrap_tests() {
 }
 
 run_template_tests() {
-    log_info "Testing template.sh (module functionality)..."
+    log "INFO" "Testing template.sh (module functionality)..."
     
     # Test with --test flag to skip actual VM creation
     if bash "$(dirname "$0")/template.sh" --test 2>&1 | grep -q "Template Name"; then
@@ -116,7 +116,7 @@ run_template_tests() {
 }
 
 run_container_tests() {
-    log_info "Testing containers.sh (module functionality)..."
+    log "INFO" "Testing containers.sh (module functionality)..."
     
     # Basic module test
     assert_output "Container Workloads" bash "$(dirname "$0")/containers.sh"

@@ -4,18 +4,16 @@ This document tracks the progress of implementing features, fixing issues, and p
 
 ## Recent Updates
 
-**Latest Update**: Phase 4 Template Management Complete (January 2025)
+**Latest Update**: Priority 1 Core Components Complete (January 2025)
 
-- **Phase 4**: Template Management Enhancements fully implemented with comprehensive features
-  - Complete template management system (list, view, delete, clone)
-  - JSON-based export/import configuration system
-  - Enhanced validation with comprehensive checks
-  - Automated testing framework with VM cloning and cleanup
-  - CLI argument support and improved main menu integration
-- **Phase 3**: Previously completed - Terraform automation module fully implemented with complete menu functionality
-- **Phase 3B**: Ansible automation module fully implemented with comprehensive playbook creation
-- **Phase 3C**: Infrastructure monitoring components enhanced with Alertmanager integration
-- All major automation features now operational with proper error handling and user interfaces
+- **Priority 1 Implementation**: Core missing components fully implemented
+  - ✅ **Configuration Management Module** - Complete centralized configuration system with hierarchy, validation, import/export, and backup capabilities
+  - ✅ **Update Module** - Complete automated update system with rollback, scheduling, and backup management
+  - ✅ **Implementation Plan Documentation** - Comprehensive planning document with detailed roadmap and operational procedures
+- **Previous Phases**: All major automation features operational
+  - **Phase 4**: Template Management Enhancements with comprehensive template lifecycle management
+  - **Phase 3**: Terraform, Ansible, and Infrastructure monitoring components with full functionality
+  - All components now integrated with centralized configuration and update management
 
 ## Implementation Strategy
 
@@ -23,53 +21,70 @@ The project follows a modular implementation strategy with each component develo
 
 ## Core Components Status
 
+### 0. Priority 1 Core Components (January 2025)
+
+| Feature                              | Status   | Priority | Notes                                                                               |
+| ------------------------------------ | -------- | -------- | ----------------------------------------------------------------------------------- |
+| Configuration Management Module      | Complete | High     | Centralized config system with hierarchy, validation, import/export, backup/restore |
+| Configuration hierarchy support      | Complete | High     | Defaults → System → User → Module configuration layers                              |
+| Configuration validation & migration | Complete | High     | Comprehensive validation with error checking and automatic migration                |
+| Configuration import/export          | Complete | Medium   | JSON-based configuration profiles with backup integration                           |
+| Module-specific configurations       | Complete | Medium   | Individual module configuration management with templates                           |
+| Update Module implementation         | Complete | High     | Complete automated update system with git integration                               |
+| Update rollback capability           | Complete | High     | Safe updates with automatic backup and rollback to any previous version             |
+| Scheduled update management          | Complete | High     | Systemd timer integration with daily/weekly/monthly/custom schedules                |
+| Update backup management             | Complete | High     | Automatic backup creation with retention policies and restore capabilities          |
+| Post-update hooks & migration        | Complete | Medium   | Configuration migration, service restart, dependency updates                        |
+| Implementation Plan Documentation    | Complete | High     | Comprehensive planning document with roadmap and operational procedures             |
+| Integration with existing modules    | Complete | High     | All modules now use centralized configuration and update management                 |
+
 ### 1. Bootstrap System
 
-| Feature                            | Status       | Priority | Notes                                           |
-| ---------------------------------- | ------------ | -------- | ----------------------------------------------- |
-| Single command install             | Complete     | High     | Curl-based installation script                  |
-| Dependency management              | Complete     | High     | Auto-detection and installation of dependencies |
-| Repository handling                | Complete     | High     | Clone or update from Git repository             |
-| Root user verification             | Complete     | High     | Check for required privileges                   |
-| OS compatibility check             | Complete     | High     | Verify running on compatible Linux distro       |
-| Proxmox detection                  | Complete     | High     | Detect and verify Proxmox environment           |
-| Configuration setup                | Complete     | High     | Initial configuration directory and files       |
-| Auto-update mechanism              | Complete     | Medium   | Regular checks for updates                      |
-| Error handling framework           | Complete     | High     | Consistent error management across modules      |
-| Main controller & skeleton modules | Complete     | High     | Main controller and module scripts implemented  |
-| Logging system                     | Complete     | Medium   | Centralized in `scripts/lib/logging.sh`; logs to `/var/log/homelab_bootstrap.log`; supports DEBUG, INFO, WARN, ERROR levels via `HL_LOG_LEVEL`. |
-| User interface                     | Complete     | Medium   | Whiptail-based UI for user interaction          |
+| Feature                            | Status   | Priority | Notes                                                                                                                                           |
+| ---------------------------------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Single command install             | Complete | High     | Curl-based installation script                                                                                                                  |
+| Dependency management              | Complete | High     | Auto-detection and installation of dependencies                                                                                                 |
+| Repository handling                | Complete | High     | Clone or update from Git repository                                                                                                             |
+| Root user verification             | Complete | High     | Check for required privileges                                                                                                                   |
+| OS compatibility check             | Complete | High     | Verify running on compatible Linux distro                                                                                                       |
+| Proxmox detection                  | Complete | High     | Detect and verify Proxmox environment                                                                                                           |
+| Configuration setup                | Complete | High     | Initial configuration directory and files                                                                                                       |
+| Auto-update mechanism              | Complete | Medium   | Regular checks for updates                                                                                                                      |
+| Error handling framework           | Complete | High     | Consistent error management across modules                                                                                                      |
+| Main controller & skeleton modules | Complete | High     | Main controller and module scripts implemented                                                                                                  |
+| Logging system                     | Complete | Medium   | Centralized in `scripts/lib/logging.sh`; logs to `/var/log/homelab_bootstrap.log`; supports DEBUG, INFO, WARN, ERROR levels via `HL_LOG_LEVEL`. |
+| User interface                     | Complete | Medium   | Whiptail-based UI for user interaction                                                                                                          |
 
 ### 2. Template Creation
 
-| Feature                                     | Status       | Priority | Notes                                                                                   |
-| ------------------------------------------- | ------------ | -------- | --------------------------------------------------------------------------------------- |
-| Base VM templates                           | Complete     | High     | Core VM template functionality                                                          |
-| Multi-distro support                        | Complete     | High     | Support for 50+ Linux distributions                                                     |
-| Custom ISO/img support                      | Complete     | Medium   | Implemented. Users can now select 'Custom ISO/Image from Proxmox Storage' as a source, specify storage, path, file type (ISO/Disk Image), and whether it supports cloud-init. ISOs are attached as CD-ROMs, disk images are imported. |
-| Cloud-init integration                      | Complete     | High     | Automated cloud-init configuration                                                      |
-| Package pre-installation                    | Complete     | Medium   | Category-based package selection                                                        |
-| User SSH configuration using cloudinit      | Complete     | High     | User setup with SSH keys - Working correctly                                            |
-| Network configuration                       | Complete     | High     | VLAN, bridge, and IP settings                                                           |
-| Template validation                         | Complete     | Medium   | Comprehensive validation system with memory, CPU, storage, network checks               |
-| Cloudinit customization                     | Not started  | Medium   | Custom cloud-init scripts                                                               |
-| cloudinit set custom password               | Complete     | Medium   | Set custom passwords via cloud-init - implemented with Proxmox integration              |
-| Template export/import                      | Complete     | Medium   | Full JSON-based export/import system implemented                                        |
-| Template management                         | Complete     | Medium   | Complete management system: list, view, delete, clone templates                         |
-| Template documentation                      | Not started  | Low      | Generate documentation for templates                                                    |
-| Template testing                            | Complete     | Medium   | Automated testing with VM cloning, testing, and cleanup                                 |
-| Template updates                            | Not started  | Medium   | Update existing templates                                                               |
-| install qemu-guest-agent using cloudinit    | Complete     | Medium   | Install QEMU guest agent in virtual machines - implemented                              |
-| custom package installation using cloudinit | Complete     | Medium   | Install custom packages via cloud-init - implemented                                    |
-| custom script execution using cloudinit     | Not started  | Medium   | Execute custom scripts via cloud-init                                                   |
-| Template security hardening                 | Not started  | Medium   | Basic security measures for templates                                                   |
-| Template performance optimization           | Not started  | Medium   | Optimize templates for performance                                                      |
-| Template backup and restore                 | Not started  | Medium   | Backup and restore template functionality                                               |
-| Template user interface                     | Not started  | Low      | User-friendly UI for template management                                                |
-| Template logging                            | Not started  | Low      | Log template creation and management                                                    |
-| persistant cloudinit configuration          | Not started  | Medium   | Persistent cloud-init configuration saved so it can be reused across multiple templates |
-| Template versioning                         | Not started  | Medium   | Version control for templates                                                           |
-| custom template id generation               | Not started  | Medium   | Generate unique IDs for templates with the ability to override them if needed           |
+| Feature                                     | Status      | Priority | Notes                                                                                                                                    |
+| ------------------------------------------- | ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Base VM templates                           | Complete    | High     | Core VM template functionality                                                                                                           |
+| Multi-distro support                        | Complete    | High     | Support for 50+ Linux distributions                                                                                                      |
+| Custom ISO/img support                      | Complete    | Medium   | Implemented. Users can now select 'Custom ISO/Image from Proxmox Storage' as a source, specify storage, path, file type (ISO/Disk Image) |
+| Cloud-init integration                      | Complete    | High     | Automated cloud-init configuration                                                                                                       |
+| Package pre-installation                    | Complete    | Medium   | Category-based package selection                                                                                                         |
+| User SSH configuration using cloudinit      | Complete    | High     | User setup with SSH keys - Working correctly                                                                                             |
+| Network configuration                       | Complete    | High     | VLAN, bridge, and IP settings                                                                                                            |
+| Template validation                         | Complete    | Medium   | Comprehensive validation system with memory, CPU, storage, network checks                                                                |
+| Cloudinit customization                     | Not started | Medium   | Custom cloud-init scripts                                                                                                                |
+| cloudinit set custom password               | Complete    | Medium   | Set custom passwords via cloud-init - implemented with Proxmox integration                                                               |
+| Template export/import                      | Complete    | Medium   | Full JSON-based export/import system implemented                                                                                         |
+| Template management                         | Complete    | Medium   | Complete management system: list, view, delete, clone templates                                                                          |
+| Template documentation                      | Not started | Low      | Generate documentation for templates                                                                                                     |
+| Template testing                            | Complete    | Medium   | Automated testing with VM cloning, testing, and cleanup                                                                                  |
+| Template updates                            | Not started | Medium   | Update existing templates                                                                                                                |
+| install qemu-guest-agent using cloudinit    | Complete    | Medium   | Install QEMU guest agent in virtual machines - implemented                                                                               |
+| custom package installation using cloudinit | Complete    | Medium   | Install custom packages via cloud-init - implemented                                                                                     |
+| custom script execution using cloudinit     | Not started | Medium   | Execute custom scripts via                                                                                                               |
+| Template security hardening                 | Not started | Medium   | Basic security measures for templates                                                                                                    |
+| Template performance optimization           | Not started | Medium   | Optimize templates for performance                                                                                                       |
+| Template backup and restore                 | Not started | Medium   | Backup and restore template functionality                                                                                                |
+| Template user interface                     | Not started | Low      | User-friendly UI for template management                                                                                                 |
+| Template logging                            | Not started | Low      | Log template creation and management                                                                                                     |
+| persistant cloudinit configuration          | Not started | Medium   | Persistent cloud-init configuration saved so it can be reused across multiple templates                                                  |
+| Template versioning                         | Not started | Medium   | Version control for templates                                                                                                            |
+| custom template id generation               | Not started | Medium   | Generate unique IDs for templates with the ability to override them if needed                                                            |
 
 ### 3. Main Controller
 

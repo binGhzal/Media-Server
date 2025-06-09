@@ -80,7 +80,22 @@ The system consists of the following key components:
    - Manages error handling and logging
 
 3. **Feature Modules**
-   - `template.sh`: VM template creation
+   - `template.sh`: VM template creation. This module handles the creation of Proxmox VM templates through an interactive whiptail UI. It supports two primary sources for templates:
+     - **a) Predefined Cloud Images:**
+       - Users select a distribution (e.g., Ubuntu, Debian, CentOS) and a specific version.
+       - The script automatically downloads the official cloud image for the selected OS.
+       - The image is imported into Proxmox, and cloud-init (if supported by the image and enabled by the user) is configured for user setup, SSH keys, network settings, and package pre-installation.
+     - **b) Custom ISO/Image from Proxmox Storage:**
+       - **UI Flow:**
+         - Users first choose "Custom ISO/Image from Proxmox Storage" as the source type.
+         - They are then prompted to select a Proxmox storage location (filtered to show only storages that allow 'iso' or 'images' content types).
+         - Users input the path to their custom file (e.g., `isos/my-custom.iso` or `images/my-custom.qcow2`) on the selected storage.
+         - They specify whether the file is an "ISO (for CD-ROM install)" or a "Disk Image (qcow2, img, etc.)".
+         - A yes/no prompt asks if the custom source supports standard cloud-init.
+       - **Backend Logic:**
+         - **Disk Image:** The image download step is skipped. The system uses `qm importdisk` to import the specified disk image from `storage:path` to the target storage for the new VM. The disk is then attached (e.g., as `scsi0`) and resized according to user input.
+         - **ISO:** The image download step is skipped. A new blank virtual disk is created for the VM. The selected ISO from `storage:path` is attached to the VM as a CD-ROM drive (e.g., `ide0`). The boot order is set to prioritize the CD-ROM, allowing the user to perform an OS installation manually. The created blank disk is the target for this installation.
+       - **Cloud-init Handling:** If the user indicated that their custom source (either disk image or an OS installed from a custom ISO) supports cloud-init, and they choose to enable it, the standard cloud-init configuration steps (setting up user, SSH keys, network, packages via `qm set`) are applied. Otherwise, these steps are skipped.
    - `containers.sh`: Docker/K8s container workloads
    - `terraform.sh`: Infrastructure as Code integration
    - `config.sh`: Configuration management
@@ -125,7 +140,7 @@ The bootstrap process is designed to provide a seamless initial experience for u
 
    - Check for root privileges using `id -u`
    - Verify operating system compatibility
-   - Set up logging with timestamps and levels
+   - Initialize the centralized logging system from `scripts/lib/logging.sh`, which includes timestamps, configurable levels (DEBUG, INFO, WARN, ERROR via `HL_LOG_LEVEL`), and output to both console and `/var/log/homelab_bootstrap.log`.
 
 2. **Dependency Management**
 
@@ -372,9 +387,12 @@ The system implements comprehensive error handling to ensure resilience and reli
 
 2. **Detailed Logging**
 
-   - Structured log format with timestamps
-   - Multiple log levels (INFO, WARN, ERROR, DEBUG)
-   - Log rotation and management
+   - Logging is handled by `scripts/lib/logging.sh`.
+   - Logs are written to `/var/log/homelab_bootstrap.log`.
+   - Available log levels: DEBUG, INFO, WARN, ERROR.
+   - Verbosity can be controlled by the `HL_LOG_LEVEL` environment variable.
+   - Structured log format with timestamps is used.
+   - Log rotation and management should be considered for long-term maintenance (e.g., using `logrotate`).
 
 3. **State Management**
    - Checkpoints during complex operations

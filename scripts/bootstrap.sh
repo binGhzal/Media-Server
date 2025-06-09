@@ -4,38 +4,38 @@
 
 set -e
 
-# Logging function
-log() {
-    local level="$1"; shift
-    local color=""
-    local reset="\033[0m"
-    case $level in
-        INFO)
-            color="\033[0;32m" # Green
-            ;;
-        WARN)
-            color="\033[0;33m" # Yellow
-            ;;
-        ERROR)
-            color="\033[0;31m" # Red
-            ;;
-        *)
-            color=""
-            ;;
-    esac
-    echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*${reset}"
-}
+# Source logging library
+# Determine script location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+if [ -f "$SCRIPT_DIR/lib/logging.sh" ]; then
+    source "$SCRIPT_DIR/lib/logging.sh"
+else
+    # Fallback basic logging if library not found (should not happen in normal execution)
+    log_info() { echo "[INFO] [bootstrap] $*"; } # Added script name for clarity
+    log_warn() { echo "[WARN] [bootstrap] $*"; } # Added script name for clarity
+    log_error() { echo "[ERROR] [bootstrap] $*"; } # Added script name for clarity
+    log_debug() { echo "[DEBUG] [bootstrap] $*"; } # Added script name for clarity
+    echo "ERROR: logging.sh library not found. Using basic fallback logging." >&2
+    # Define a basic handle_error if logging.sh is not available
+    # This basic version won't know about LOG_FILE from the library.
+    handle_error() {
+        local exit_code=${1:-$?} # Use first arg if provided, else current exit status
+        local line_num=${2:-$LINENO} # Use second arg if provided, else current line number
+        echo "[ERROR] [bootstrap] Error in script on line $line_num with exit code $exit_code." >&2
+        exit "$exit_code"
+    }
+fi
 
-# Error handling function
-handle_error() {
-    local exit_code=$?
-    log_error "An error occurred on line $1 with exit code $exit_code"
-    log_error "Bootstrap failed. Please check the logs and try again."
-    exit $exit_code
-}
+# Initialize logging (call function from the library, if sourced)
+if command -v init_logging >/dev/null 2>&1; then
+    init_logging "Bootstrap"
+else
+    log_info "init_logging function not found. Skipping explicit logging initialization."
+fi
 
-# Set up error trap
-trap 'handle_error $LINENO' ERR
+# Set up error trap to use handle_error from logging.sh (or fallback)
+# Pass exit code ($?) and line number ($LINENO)
+trap 'handle_error $? $LINENO' ERR
 
 # Check root privileges
 check_root() {
@@ -76,47 +76,50 @@ check_os_compatibility() {
 
 # Check and install dependencies
 check_dependencies() {
-    local deps=(curl git whiptail jq wget curl qemu-img)
-    local missing=()
+    local deps_to_check=(curl git whiptail jq wget qemu-img) # Removed duplicate curl
+    local unique_deps=()
+    # Create a unique list of dependencies
+    eval "$(printf "%s\n" "${deps_to_check[@]}" | sort -u | awk '{printf "unique_deps+=(\"%s\")\n", $1}')"
 
-    log_info "Checking dependencies..."
-    for dep in "${deps[@]}"; do
+    log_info "Checking dependencies: ${unique_deps[*]}..."
+    local missing_deps=()
+    for dep in "${unique_deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
-            missing+=("$dep")
+            missing_deps+=("$dep")
         fi
     done
 
-    if [ ${#missing[@]} -gt 0 ]; then
-        log_info "Installing missing dependencies: ${missing[*]}"
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        log_info "Installing missing dependencies: ${missing_deps[*]}"
         
         # Determine package manager
-        if command -v apt >/dev/null 2>&1; then
-            log_info "Using apt package manager"
-            apt update -q
-            apt install -y "${missing[@]}" || {
-                log_error "Failed to install packages with apt"
+        if command -v apt-get >/dev/null 2>&1; then # Changed to apt-get
+            log_info "Using apt-get package manager"
+            apt-get update -qq # Added -qq
+            apt-get install -y -qq "${missing_deps[@]}" || { # Added -qq
+                log_error "Failed to install packages with apt-get."
                 exit 1
             }
         elif command -v dnf >/dev/null 2>&1; then
             log_info "Using dnf package manager"
-            dnf install -y "${missing[@]}" || {
-                log_error "Failed to install packages with dnf"
+            dnf install -y "${missing_deps[@]}" || { # dnf typically doesn't need explicit update first
+                log_error "Failed to install packages with dnf."
                 exit 1
             }
         elif command -v yum >/dev/null 2>&1; then
             log_info "Using yum package manager"
-            yum install -y "${missing[@]}" || {
-                log_error "Failed to install packages with yum"
+            yum install -y "${missing_deps[@]}" || {
+                log_error "Failed to install packages with yum."
                 exit 1
             }
-        elif command -v zypper >/dev/null 2>&1; then
+        elif command -v zypper >/dev/null 2>&1; then # Corrected missing `then` from previous read
             log_info "Using zypper package manager"
-            zypper install -y "${missing[@]}" || {
-                log_error "Failed to install packages with zypper"
+            zypper --non-interactive install "${missing_deps[@]}" || { # Added --non-interactive
+                log_error "Failed to install packages with zypper."
                 exit 1
             }
         else
-            log_error "No supported package manager found. Please install manually: ${missing[*]}"
+            log_error "No supported package manager found. Please install manually: ${missing_deps[*]}"
             exit 1
         fi
         
@@ -154,13 +157,25 @@ check_proxmox() {
         log_warn "Proxmox VE not detected. Some features may not be available."
         
         # Ask to continue if run interactively
-        if [ -t 0 ]; then
-            read -p "Continue without Proxmox VE? [y/N] " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                log_info "Installation cancelled by user."
-                exit 0
+        if [ -t 0 ]; then # Check if stdin is a terminal
+            # Use whiptail for a more consistent UI if available, otherwise fallback to read
+            if command -v whiptail >/dev/null 2>&1; then
+                if whiptail --title "Proxmox Detection" --yesno "Proxmox VE not detected. Some features may not be available. Continue anyway?" 8 78; then
+                    log_info "User chose to continue without Proxmox VE."
+                else
+                    log_info "Installation cancelled by user."
+                    exit 0
+                fi
+            else
+                read -p "Continue without Proxmox VE? [y/N] " -n 1 -r REPLY
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    log_info "Installation cancelled by user."
+                    exit 0
+                fi
             fi
+        else
+            log_warn "Non-interactive mode: Assuming 'yes' to continue without Proxmox VE."
         fi
         return 1
     fi
@@ -179,23 +194,58 @@ setup_repository() {
     
     if [ ! -d "$repo_dir/.git" ]; then
         log_info "Cloning repository to $repo_dir"
-        git clone "$repo_url" "$repo_dir" || {
-            log_error "Failed to clone repository from $repo_url to $repo_dir"
+        git clone --depth 1 "$repo_url" "$repo_dir" || { # Added --depth 1
+            log_error "Failed to clone repository from $repo_url to $repo_dir."
             exit 1
         }
     else
-        log_info "Updating repository in $repo_dir"
-        git -C "$repo_dir" fetch
-        git -C "$repo_dir" reset --hard origin/main || {
-            log_error "Failed to update repository in $repo_dir"
+        log_info "Updating repository in $repo_dir..."
+        # Ensure we are in a git repository before attempting git operations
+        if [ ! -d "$repo_dir/.git" ]; then # This check is a bit redundant given the outer if/else, but good for robustness
+            log_error "$repo_dir is not a git repository. Cannot update. Please check or remove the directory and run again."
+            exit 1
+        fi
+
+        # Stash local changes if any, to prevent conflicts with reset --hard
+        if ! git -C "$repo_dir" diff-index --quiet HEAD --; then
+            log_warn "Local changes detected in $repo_dir. Stashing before update..."
+            if ! git -C "$repo_dir" stash push -u -m "Bootstrap auto-stash"; then
+                log_warn "Failed to stash local changes. Update may fail if there are conflicts."
+            else
+                log_info "Local changes stashed with message 'Bootstrap auto-stash'."
+            fi
+        fi
+
+        git -C "$repo_dir" fetch origin main || {
+            log_error "Failed to fetch from repository in $repo_dir."
+            if git -C "$repo_dir" stash list | grep -q "Bootstrap auto-stash"; then
+                 log_info "Attempting to restore stashed changes due to fetch failure..."
+                 git -C "$repo_dir" stash pop || log_warn "Failed to restore stashed changes. Please check manually: git -C $repo_dir stash list"
+            fi
             exit 1
         }
+        git -C "$repo_dir" reset --hard origin/main || {
+            log_error "Failed to reset repository to origin/main in $repo_dir."
+            if git -C "$repo_dir" stash list | grep -q "Bootstrap auto-stash"; then
+                 log_info "Attempting to restore stashed changes due to reset failure..."
+                 git -C "$repo_dir" stash pop || log_warn "Failed to restore stashed changes. Please check manually: git -C $repo_dir stash list"
+            fi
+            exit 1
+        }
+        # Log if changes were stashed and remain so.
+        if git -C "$repo_dir" stash list | grep -q "Bootstrap auto-stash"; then
+            log_info "Local changes were stashed prior to update and remain stashed. To reapply: git -C $repo_dir stash pop"
+        fi
     fi
     
     # Set proper permissions for scripts
-    chmod -R 750 "$repo_dir/scripts" || {
-        log_warn "Failed to set permissions on scripts directory"
-    }
+    if [ -d "$repo_dir/scripts" ]; then
+        chmod -R u+rwx,g+rx,o-rwx "$repo_dir/scripts" || { # More specific permissions
+            log_warn "Failed to set permissions on scripts directory $repo_dir/scripts. Execution of some scripts might fail."
+        }
+    else
+        log_warn "Scripts directory $repo_dir/scripts not found. Skipping permission settings."
+    fi
     
     log_info "Repository setup complete."
     return 0

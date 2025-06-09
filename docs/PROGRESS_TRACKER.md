@@ -37,7 +37,7 @@ The project follows a modular implementation strategy with each component develo
 | Auto-update mechanism              | Complete     | Medium   | Regular checks for updates                      |
 | Error handling framework           | Complete     | High     | Consistent error management across modules      |
 | Main controller & skeleton modules | Complete     | High     | Main controller and module scripts implemented  |
-| Logging system                     | not complete | Medium   | Basic logging for bootstrap operations          |
+| Logging system                     | Complete     | Medium   | Centralized in `scripts/lib/logging.sh`; logs to `/var/log/homelab_bootstrap.log`; supports DEBUG, INFO, WARN, ERROR levels via `HL_LOG_LEVEL`. |
 | User interface                     | Complete     | Medium   | Whiptail-based UI for user interaction          |
 
 ### 2. Template Creation
@@ -46,7 +46,7 @@ The project follows a modular implementation strategy with each component develo
 | ------------------------------------------- | ------------ | -------- | --------------------------------------------------------------------------------------- |
 | Base VM templates                           | Complete     | High     | Core VM template functionality                                                          |
 | Multi-distro support                        | Complete     | High     | Support for 50+ Linux distributions                                                     |
-| Custom ISO/img support                      | not complete | Medium   | Allow using custom ISO files                                                            |
+| Custom ISO/img support                      | Complete     | Medium   | Implemented. Users can now select 'Custom ISO/Image from Proxmox Storage' as a source, specify storage, path, file type (ISO/Disk Image), and whether it supports cloud-init. ISOs are attached as CD-ROMs, disk images are imported. |
 | Cloud-init integration                      | Complete     | High     | Automated cloud-init configuration                                                      |
 | Package pre-installation                    | Complete     | Medium   | Category-based package selection                                                        |
 | User SSH configuration using cloudinit      | Complete     | High     | User setup with SSH keys - Working correctly                                            |

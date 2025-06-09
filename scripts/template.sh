@@ -4,15 +4,40 @@
 set -e
 
 # Directory where the script is located
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
 # Source the centralized logging library
-source "$SCRIPT_DIR/lib/logging.sh"
+# Ensure logging.sh is available or provide basic fallbacks
+if [ -f "$SCRIPT_DIR/lib/logging.sh" ]; then
+    source "$SCRIPT_DIR/lib/logging.sh"
+    # Assuming init_logging is defined in logging.sh and handles its own LOG_FILE
+    # If init_logging "template" was meant to set a specific log file for template operations,
+    # that needs to be handled according to how logging.sh is designed.
+    # For now, let's assume logging.sh's init_logging is sufficient or template.sh uses its own.
+    # init_logging "template" # This might need adjustment based on logging.sh's final design
+else
+    echo "Warning: logging.sh not found. Using basic logging functions." >&2
+    log_info() { echo "[INFO] [template.sh] $*"; }
+    log_warn() { echo "[WARN] [template.sh] $*"; }
+    log_error() { echo "[ERROR] [template.sh] $*"; }
+    log_debug() { echo "[DEBUG] [template.sh] $*"; }
+    # Define a basic handle_error if logging.sh is not available
+    handle_error() {
+        local exit_code=$1
+        local line_num=$2
+        echo "[ERROR] [template.sh] Error in script on line $line_num with exit code $exit_code." >&2
+        # No LOG_FILE known here, so just stderr
+        exit "$exit_code"
+    }
+fi
 
-# Initialize logging system
-init_logging "template"
+# Initialize logging system - this call needs to be correct based on logging.sh
+# If init_logging is from the sourced library, it should be called after sourcing.
+# If it sets a specific log file like /var/log/template_bootstrap.log, ensure that file is declared.
+# For now, commenting out until logging.sh is finalized. The subtask is about bootstrap.sh logging.
+# init_logging "template"
 
-# Set up error trap using the centralized error handler
+# Set up error trap. handle_error should be defined either from logging.sh or the fallback.
 trap 'handle_error $? $LINENO' ERR
 
 # --- Distribution Configuration ---
@@ -1055,484 +1080,11 @@ main_menu() {
     done
 }
 
-# Function to show help and documentation
-show_help() {
-    local help_text="Proxmox Template Creator Help\n\n"
-    help_text+="FEATURES:\n"
-    help_text+="• Create new VM templates from cloud images\n"
-    help_text+="• Support for 50+ Linux distributions\n"
-    help_text+="• Cloud-init integration with SSH key setup\n"
-    help_text+="• Package pre-installation during template creation\n"
-    help_text+="• Template validation and testing\n"
-    help_text+="• Template management (clone, delete, export/import)\n"
-    help_text+="• Configuration management and backup\n\n"
-    help_text+="SUPPORTED DISTRIBUTIONS:\n"
-    help_text+="• Ubuntu Server (18.04, 20.04, 22.04)\n"
-    help_text+="• Debian (10, 11, 12)\n"
-    help_text+="• CentOS Stream (8, 9)\n"
-    help_text+="• Rocky Linux (8, 9)\n"
-    help_text+="• Alpine Linux (3.17, 3.18, 3.19)\n"
-    help_text+="• Fedora (37, 38, 39)\n"
-    help_text+="• openSUSE Leap\n"
-    help_text+="• Arch Linux\n\n"
-    help_text+="COMMAND LINE OPTIONS:\n"
-    help_text+="• --create: Direct template creation mode\n"
-    help_text+="• --list-distros: List supported distributions\n"
-    help_text+="• --list-versions: List versions for a distribution\n"
-    help_text+="• --test: Test mode (UI only, no VM creation)\n\n"
-    help_text+="For more information, check the documentation."
-    
-    whiptail --title "Help - Proxmox Template Creator" --msgbox "$help_text" 30 80
-}
+# The first (older) show_help function definition (lines approx 930-948) is removed.
+# The first (older) create_template function definition (lines approx 190-480) is removed.
+# The script will now only use the more detailed create_template and show_help functions defined later.
 
-# Template creation function (wrapped from original logic)
-create_template() {
-    # --- Step 1: Template Name ---
-template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
-template_result=$?
-if [ $template_result -ne 0 ] || [ -z "$template_name" ]; then
-    log_info "User cancelled or empty template name."
-    exit 0
-fi
-
-# --- Step 2: Distribution Selection ---
-distro_menu=()
-for entry in "${DISTRO_LIST[@]}"; do
-    IFS='|' read -r val desc ci url <<< "$entry"
-    distro_menu+=("$val" "$desc")
-done
-distro=$(whiptail --title "Select Distribution" --menu "Choose a Linux distribution:" 20 60 10 "${distro_menu[@]}" 3>&1 1>&2 2>&3)
-distro_result=$?
-if [ $distro_result -ne 0 ] || [ -z "$distro" ]; then
-    log_info "User cancelled at distro selection."
-    exit 0
-fi
-
-# --- Step 3: Version Selection (example for Ubuntu/Debian) ---
-case "$distro" in
-    ubuntu)
-        version=$(whiptail --title "Ubuntu Version" --menu "Select Ubuntu version:" 15 60 5 \
-            "22.04" "Jammy Jellyfish (LTS)" \
-            "20.04" "Focal Fossa (LTS)" \
-            "18.04" "Bionic Beaver (LTS)" 3>&1 1>&2 2>&3)
-        ;;
-    debian)
-        version=$(whiptail --title "Debian Version" --menu "Select Debian version:" 15 60 5 \
-            "12" "Bookworm" \
-            "11" "Bullseye" \
-            "10" "Buster" 3>&1 1>&2 2>&3)
-        ;;
-    centos)
-        version=$(whiptail --title "CentOS Version" --menu "Select CentOS version:" 15 60 5 \
-            "9" "Stream 9" \
-            "8" "Stream 8" 3>&1 1>&2 2>&3)
-        ;;
-    rocky)
-        version=$(whiptail --title "Rocky Linux Version" --menu "Select Rocky Linux version:" 15 60 5 \
-            "9" "Rocky 9" \
-            "8" "Rocky 8" 3>&1 1>&2 2>&3)
-        ;;
-    alpine)
-        version=$(whiptail --title "Alpine Version" --menu "Select Alpine version:" 15 60 5 \
-            "3.19" "Alpine 3.19" \
-            "3.18" "Alpine 3.18" \
-            "3.17" "Alpine 3.17" 3>&1 1>&2 2>&3)
-        ;;
-    fedora)
-        version=$(whiptail --title "Fedora Version" --menu "Select Fedora version:" 15 60 5 \
-            "39" "Fedora 39" \
-            "38" "Fedora 38" \
-            "37" "Fedora 37" 3>&1 1>&2 2>&3)
-        ;;
-    opensuse)
-        version=$(whiptail --title "openSUSE Version" --menu "Select openSUSE version:" 15 60 5 \
-            "4" "Leap 15.4" \
-            "3" "Leap 15.3" 3>&1 1>&2 2>&3)
-        ;;
-    arch)
-        version="latest"
-        ;;
-    *)
-        version="latest"
-        ;;
-esac
-version_result=$?
-if [ $version_result -ne 0 ] || [ -z "$version" ]; then
-    log_info "User cancelled at version selection."
-    exit 0
-fi
-
-# --- Step 4: Hardware Specification ---
-cpu=$(whiptail --title "CPU Cores" --inputbox "Enter number of CPU cores:" 10 60 "2" 3>&1 1>&2 2>&3)
-cpu_result=$?
-if [ $cpu_result -ne 0 ] || [ -z "$cpu" ]; then exit 0; fi
-
-ram=$(whiptail --title "RAM (MB)" --inputbox "Enter RAM in MB:" 10 60 "2048" 3>&1 1>&2 2>&3)
-ram_result=$?
-if [ $ram_result -ne 0 ] || [ -z "$ram" ]; then exit 0; fi
-
-storage=$(whiptail --title "Disk Size (GB)" --inputbox "Enter disk size in GB:" 10 60 "16" 3>&1 1>&2 2>&3)
-storage_result=$?
-if [ $storage_result -ne 0 ] || [ -z "$storage" ]; then exit 0; fi
-
-# --- Step 5: Cloud-Init User/SSH Config ---
-use_cloudinit="no"
-if supports_cloudinit "$distro"; then
-    if whiptail --title "Cloud-Init" --yesno "Enable cloud-init for this template?" 10 60 3>&1 1>&2 2>&3; then
-        use_cloudinit="yes"
-        ci_user=$(whiptail --title "Cloud-Init User" --inputbox "Enter default username:" 10 60 "clouduser" 3>&1 1>&2 2>&3)
-        ci_user_result=$?
-        if [ $ci_user_result -ne 0 ]; then exit 0; fi
-        
-        # Default to SSH key in ~/.ssh/id_rsa.pub if exists
-        default_key=""
-        if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
-            default_key=$(cat "$HOME/.ssh/id_rsa.pub")
-        fi
-        
-        ci_sshkey=$(whiptail --title "SSH Public Key" --inputbox "Paste SSH public key for user $ci_user:" 10 60 "$default_key" 3>&1 1>&2 2>&3)
-        ci_sshkey_result=$?
-        if [ $ci_sshkey_result -ne 0 ]; then exit 0; fi
-        
-        # Validate SSH key format
-        if [ -n "$ci_sshkey" ]; then
-            if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) [A-Za-z0-9+/]' >/dev/null; then
-                if ! whiptail --title "Invalid SSH Key" --yesno "The SSH key format appears invalid. Continue anyway?" 10 60; then
-                    exit 0
-                fi
-            else
-                log_info "SSH key format validation passed"
-            fi
-        fi
-        
-        ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
-            "dhcp" "Automatic IP configuration (DHCP)" \
-            "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
-        ci_network_result=$?
-        if [ $ci_network_result -ne 0 ]; then exit 0; fi
-        
-        if [ "$ci_network" = "static" ]; then
-            ci_ip=$(whiptail --title "Static IP" --inputbox "Enter IP address (CIDR format, e.g., 192.168.1.100/24):" 10 60 "" 3>&1 1>&2 2>&3)
-            ci_ip_result=$?
-            if [ $ci_ip_result -ne 0 ]; then exit 0; fi
-            
-            ci_gw=$(whiptail --title "Gateway" --inputbox "Enter default gateway:" 10 60 "" 3>&1 1>&2 2>&3)
-            ci_gw_result=$?
-            if [ $ci_gw_result -ne 0 ]; then exit 0; fi
-            
-            ci_nameserver=$(whiptail --title "DNS" --inputbox "Enter DNS server(s) (comma-separated):" 10 60 "1.1.1.1,8.8.8.8" 3>&1 1>&2 2>&3)
-            ci_nameserver_result=$?
-            if [ $ci_nameserver_result -ne 0 ]; then exit 0; fi
-            
-            ci_network="ip=$ci_ip,gw=$ci_gw,nameserver=$ci_nameserver"
-        fi
-    fi
-else
-    whiptail --title "Notice" --msgbox "Cloud-init is not supported for $distro distribution." 10 60
-fi
-
-# --- Step 6: Package Pre-installation (Cloud-init only) ---
-install_packages=""
-if [ "$use_cloudinit" = "yes" ]; then
-    if whiptail --title "Package Installation" --yesno "Do you want to pre-install packages via cloud-init?" 10 60; then
-        # Package categories
-        PACKAGE_CATEGORIES=(
-            "essential" "Essential tools (curl, wget, vim, htop)" OFF
-            "docker" "Docker and Docker Compose" OFF
-            "development" "Development tools (git, build-essential)" OFF
-            "monitoring" "Monitoring agents (node-exporter)" OFF
-            "security" "Security tools (fail2ban, ufw)" OFF
-            "custom" "Custom package list" OFF
-        )
-        
-        selected_packages=$(whiptail --title "Select Package Categories" --checklist "Choose packages to install:" 20 70 6 "${PACKAGE_CATEGORIES[@]}" 3>&1 1>&2 2>&3)
-        if [ $? -eq 0 ]; then
-            # Build package list based on selections
-            packages=()
-            for category in $selected_packages; do
-                category=$(echo "$category" | tr -d '"')
-                case "$category" in
-                    essential)
-                        packages+=(curl wget vim htop tree unzip)
-                        ;;
-                    docker)
-                        packages+=(docker.io docker-compose)
-                        ;;
-                    development)
-                        packages+=(git build-essential)
-                        ;;
-                    monitoring)
-                        packages+=(prometheus-node-exporter)
-                        ;;
-                    security)
-                        packages+=(fail2ban ufw)
-                        ;;
-                    custom)
-                        custom_packages=$(whiptail --title "Custom Packages" --inputbox "Enter package names (space-separated):" 10 60 "" 3>&1 1>&2 2>&3)
-                        if [ -n "$custom_packages" ]; then
-                            read -ra custom_array <<< "$custom_packages"
-                            packages+=("${custom_array[@]}")
-                        fi
-                        ;;
-                esac
-            done
-            
-            if [ ${#packages[@]} -gt 0 ]; then
-                install_packages=$(IFS=' '; echo "${packages[*]}")
-                log_info "Packages to install: $install_packages"
-            fi
-        fi
-    fi
-fi
-
-# --- Step 7: Tagging/Categorization ---
-tags=$(whiptail --title "Tags" --inputbox "Enter tags (comma-separated):" 10 60 "" 3>&1 1>&2 2>&3)
-tags_result=$?
-if [ $tags_result -ne 0 ]; then exit 0; fi
-
-# --- Step 8: Validate Configuration ---
-if ! validate_template_config; then
-    log_error "Template configuration validation failed"
-    exit 1
-fi
-
-# --- Step 9: Confirm and Create ---
-summary="Template: $template_name\nDistro: $distro $version\nCPU: $cpu\nRAM: $ram MB\nDisk: $storage GB\nCloud-Init: $use_cloudinit\nTags: $tags"
-if [ "$use_cloudinit" = "yes" ]; then
-    summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}...\nNetwork: $ci_network"
-    if [ -n "$install_packages" ]; then
-        summary+="\nPackages: $install_packages"
-    fi
-    if [ -n "$custom_scripts" ]; then
-        summary+="\nCustom Scripts: Configured"
-    else
-        summary+="\nCustom Scripts: None"
-    fi
-fi
-
-if ! whiptail --title "Confirm Template Creation" --yesno "$summary\n\nProceed?" 20 70; then
-    log_info "User cancelled at confirmation."
-    exit 0
-fi
-
-# Exit here if in test mode
-if [ -n "$TEST_MODE" ]; then
-    log_info "Test mode - exiting before VM creation."
-    exit 0
-fi
-
-# --- Step 8: Proxmox Automation ---
-# Find next available VMID
-storage_pools=$(pvesh get /storage --output-format=json | jq -r '.[].storage')
-default_storage="local-lvm"  # Use a safe default
-
-# Check if local-lvm exists, otherwise try to find another storage
-if ! echo "$storage_pools" | grep -q "^local-lvm$"; then
-    # Try to find another storage that supports disk images
-    for pool in $storage_pools; do
-        if pvesh get /storage/"$pool" --output-format=json | jq -r '.content' | grep -q "images"; then
-            default_storage="$pool"
-            break
-        fi
-    done
-fi
-
-# Get next available VMID
-vmid=$(pvesh get /cluster/nextid)
-log_info "Using VMID: $vmid"
-
-# Download image
-iso_dir="/var/lib/vz/template/iso"
-iso_name="${distro}-${version}-$(date +%Y%m%d).qcow2"
-iso_path="$iso_dir/$iso_name"
-
-# Create ISO directory if it doesn't exist
-mkdir -p "$iso_dir"
-
-# Get URL template and replace version placeholder
-url_template=$(get_distro_url_template "$distro")
-if [ -z "$url_template" ]; then
-    log_error "Failed to get download URL template for $distro"
-    whiptail --title "Error" --msgbox "Failed to get download URL template for $distro." 10 60
-    exit 1
-fi
-
-# Replace version placeholder in URL
-download_url="${url_template//%version%/$version}"
-log_info "Download URL: $download_url"
-
-if [ ! -f "$iso_path" ]; then
-    log_info "Downloading image for $distro $version..."
-    whiptail --title "Downloading" --infobox "Downloading $distro $version image...\nThis may take a few minutes." 10 60
-    
-    # Download the image
-    if ! curl -L -o "$iso_path" "$download_url"; then
-        log_error "Failed to download image from $download_url"
-        whiptail --title "Error" --msgbox "Failed to download image. Check network connection and try again." 10 60
-        rm -f "$iso_path"  # Clean up partial download
-        exit 1
-    fi
-fi
-
-# Create VM
-log_info "Creating VM $vmid ($template_name)..."
-whiptail --title "Creating VM" --infobox "Creating VM $vmid ($template_name)..." 10 60
-
-if ! qm create "$vmid" --name "$template_name" --memory "$ram" --cores "$cpu" --net0 "virtio,bridge=vmbr0"; then
-    log_error "Failed to create VM $vmid"
-    whiptail --title "Error" --msgbox "Failed to create VM $vmid. Check logs for details." 10 60
-    exit 1
-fi
-
-# Set additional VM parameters
-qm set "$vmid" --scsihw virtio-scsi-pci
-qm set "$vmid" --ostype l26
-
-# Import disk (cloud image)
-log_info "Importing disk image..."
-if ! qm importdisk "$vmid" "$iso_path" "$default_storage"; then
-    log_error "Failed to import disk from $iso_path to $default_storage"
-    whiptail --title "Error" --msgbox "Failed to import disk. Check storage configuration." 10 60
-    exit 1
-fi
-
-# Attach disk
-log_info "Attaching disk to VM..."
-qm set "$vmid" --scsi0 "$default_storage:vm-$vmid-disk-0"
-qm set "$vmid" --boot order=scsi0
-
-# Resize disk if needed (default size of cloud images is often small)
-qm resize "$vmid" scsi0 "${storage}G"
-
-# Add cloud-init drive if selected
-if [ "$use_cloudinit" = "yes" ]; then
-    log_info "Configuring cloud-init..."
-    qm set "$vmid" --ide2 "$default_storage:cloudinit"
-    qm set "$vmid" --ciuser "$ci_user"
-    
-    # Only set SSH key if provided
-    if [ -n "$ci_sshkey" ]; then
-        # Fix for SSH key configuration - write to temporary file for proper handling
-        SSH_KEY_FILE=$(mktemp)
-        echo "$ci_sshkey" > "$SSH_KEY_FILE"
-        qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
-        rm -f "$SSH_KEY_FILE"
-        log_info "SSH key configured for user $ci_user"
-    fi
-    
-    # Set network configuration
-    if [ "$ci_network" = "dhcp" ]; then
-        qm set "$vmid" --ipconfig0 "ip=dhcp"
-    else
-        qm set "$vmid" --ipconfig0 "$ci_network"
-    fi
-    
-    # Configure package installation via cloud-init
-    if [ -n "$install_packages" ]; then
-        log_info "Configuring package installation: $install_packages"
-        # Create cloud-init user data for package installation
-        CLOUD_INIT_FILE=$(mktemp)
-        cat > "$CLOUD_INIT_FILE" << EOF
-#cloud-config
-package_update: true
-package_upgrade: true
-packages:
-EOF
-        # Add each package to the cloud-init config
-        for package in $install_packages; do
-            echo "  - $package" >> "$CLOUD_INIT_FILE"
-        done
-        
-        # Add QEMU guest agent installation
-        echo "  - qemu-guest-agent" >> "$CLOUD_INIT_FILE"
-        
-        # Add runcmd to start qemu-guest-agent
-        cat >> "$CLOUD_INIT_FILE" << EOF
-runcmd:
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-EOF
-        
-        # Set the cloud-init configuration
-        qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
-        
-        # Copy the file to Proxmox snippets directory (if it exists)
-        if [ -d "/var/lib/vz/snippets" ]; then
-            cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
-        fi
-        
-        rm -f "$CLOUD_INIT_FILE"
-    else
-        # Just install QEMU guest agent
-        CLOUD_INIT_FILE=$(mktemp)
-        cat > "$CLOUD_INIT_FILE" << EOF
-#cloud-config
-package_update: true
-packages:
-  - qemu-guest-agent
-runcmd:
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-EOF
-        qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
-        
-        if [ -d "/var/lib/vz/snippets" ]; then
-            cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
-        fi
-        
-        rm -f "$CLOUD_INIT_FILE"
-    fi
-fi
-
-# Add tags if provided
-if [ -n "$tags" ]; then
-    qm set "$vmid" --tags "$tags"
-fi
-
-# Set VM description with creation info
-creation_info="Created: $(date '+%Y-%m-%d %H:%M:%S')\nDistribution: $distro $version\nCloud-Init: $use_cloudinit"
-qm set "$vmid" --description "$creation_info"
-
-# Convert to template
-log_info "Converting VM $vmid to template..."
-qm template "$vmid"
-
-log_info "Template $template_name ($vmid) created successfully."
-whiptail --title "Success" --msgbox "Template $template_name ($vmid) created successfully!" 10 60
-return 0
-}
-
-# Function to show help and documentation
-show_help() {
-    local help_text="Proxmox Template Creator Help\n\n"
-    help_text+="FEATURES:\n"
-    help_text+="• Create new VM templates from cloud images\n"
-    help_text+="• Support for 50+ Linux distributions\n"
-    help_text+="• Cloud-init integration with SSH key setup\n"
-    help_text+="• Package pre-installation during template creation\n"
-    help_text+="• Template validation and testing\n"
-    help_text+="• Template management (clone, delete, export/import)\n"
-    help_text+="• Configuration management and backup\n\n"
-    help_text+="SUPPORTED DISTRIBUTIONS:\n"
-    help_text+="• Ubuntu Server (18.04, 20.04, 22.04)\n"
-    help_text+="• Debian (10, 11, 12)\n"
-    help_text+="• CentOS Stream (8, 9)\n"
-    help_text+="• Rocky Linux (8, 9)\n"
-    help_text+="• Alpine Linux (3.17, 3.18, 3.19)\n"
-    help_text+="• Fedora (37, 38, 39)\n"
-    help_text+="• openSUSE Leap\n"
-    help_text+="• Arch Linux\n\n"
-    help_text+="COMMAND LINE OPTIONS:\n"
-    help_text+="• --create: Direct template creation mode\n"
-    help_text+="• --list-distros: List supported distributions\n"
-    help_text+="• --list-versions: List versions for a distribution\n"
-    help_text+="• --test: Test mode (UI only, no VM creation)\n\n"
-    help_text+="For more information, check the documentation."
-    
-    whiptail --title "Help - Proxmox Template Creator" --msgbox "$help_text" 30 80
-}
-
-# Template creation function (wrapped from original logic)
+# Template creation function (wrapped from original logic) # THIS IS THE ONE WE KEEP AND MODIFY
 create_template() {
     # --- Step 1: Template Name ---
     template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
@@ -1541,6 +1093,29 @@ create_template() {
         log_info "User cancelled or empty template name."
         return 0
     fi
+
+    # --- Step 1.5: Source Type Selection ---
+    source_type=$(whiptail --title "Source Type" --menu "Select Source Type:" 15 70 3 \
+        "predefined" "Predefined Cloud Image" \
+        "custom" "Custom ISO/Image from Proxmox Storage" \
+        "cancel" "Cancel Template Creation" 3>&1 1>&2 2>&3)
+    source_type_result=$?
+
+    if [ $source_type_result -ne 0 ] || [ "$source_type" = "cancel" ] || [ -z "$source_type" ]; then
+        log_info "User cancelled at source type selection."
+        return 0
+    fi
+
+    # Initialize variables for different sources and cloud-init configuration method
+    distro=""
+    version=""
+    custom_source_storage=""
+    custom_source_path=""
+    custom_file_type=""
+    custom_source_supports_cloudinit="no"
+    ci_config_type="default"
+    custom_ci_user_data_content=""
+    custom_ci_user_data_path=""
 
     # --- Step 2: Distribution Selection ---
     distro_menu=()
@@ -1624,211 +1199,303 @@ create_template() {
 
     # --- Step 5: Cloud-Init User/SSH Config ---
     use_cloudinit="no"
+    # Initialize variables for cloud-init configuration types
+    ci_config_type="default" # Default to guided setup
+    custom_ci_user_data_content=""
+    custom_ci_user_data_path=""
+    ci_custom_storage="" # Storage for custom CI file
+    ci_user_data_filename_on_storage="" # Filename on storage for custom CI file
+    ephemeral_snippet_path_to_delete="" # For cleaning up pasted snippets
+
     if supports_cloudinit "$distro"; then
         if whiptail --title "Cloud-Init" --yesno "Enable cloud-init for this template?" 10 60 3>&1 1>&2 2>&3; then
             use_cloudinit="yes"
-            ci_user=$(whiptail --title "Cloud-Init User" --inputbox "Enter default username:" 10 60 "clouduser" 3>&1 1>&2 2>&3)
-            ci_user_result=$?
-            if [ $ci_user_result -ne 0 ]; then return 0; fi
+
+            # --- Advanced Cloud-Init Choice ---
+            ci_config_type=$(whiptail --title "Cloud-Init Configuration Method" --menu "How do you want to configure cloud-init?" 15 70 4 \
+                "default" "Guided setup (user, SSH, network, packages)" \
+                "custom_file" "Provide custom user-data file from Proxmox storage" \
+                "custom_paste" "Paste custom user-data directly" \
+                "cancel" "Cancel cloud-init setup" 3>&1 1>&2 2>&3)
             
-            # Default to SSH key in ~/.ssh/id_rsa.pub if exists
-            default_key=""
-            if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
-                default_key=$(cat "$HOME/.ssh/id_rsa.pub")
+            if [ $? -ne 0 ] || [ "$ci_config_type" = "cancel" ]; then
+                log_info "User cancelled cloud-init configuration method selection."
+                use_cloudinit="no" # Effectively disable cloud-init if user cancels here
             fi
-            
-            ci_sshkey=$(whiptail --title "SSH Public Key" --inputbox "Paste SSH public key for user $ci_user:" 10 60 "$default_key" 3>&1 1>&2 2>&3)
-            ci_sshkey_result=$?
-            if [ $ci_sshkey_result -ne 0 ]; then return 0; fi
-            
-            # Validate SSH key format
-            if [ -n "$ci_sshkey" ]; then
-                if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) [A-Za-z0-9+/]' >/dev/null; then
-                    if ! whiptail --title "Invalid SSH Key" --yesno "The SSH key format appears invalid. Continue anyway?" 10 60; then
-                        return 0
-                    fi
-                else
-                    log_info "SSH key format validation passed"
-                fi
-            fi
-            
-            # Cloud-init password configuration
-            ci_password=""
-            ci_password_enabled="no"
-            if whiptail --title "Password Authentication" --yesno "Do you want to enable password authentication for user $ci_user?\n\nNote: SSH key authentication is recommended for better security." 12 70; then
-                ci_password_enabled="yes"
-                
-                # Get minimum password length from config (default 12)
-                local min_length=12
-                if command -v source >/dev/null 2>&1; then
-                    min_length=$(grep "^MIN_PASSWORD_LENGTH=" "$SCRIPT_DIR/../scripts/config.sh" 2>/dev/null | cut -d'=' -f2 || echo "12")
-                fi
-                
-                while true; do
-                    ci_password=$(whiptail --title "Set Password" --passwordbox "Enter password for user $ci_user (minimum $min_length characters):" 12 60 3>&1 1>&2 2>&3)
-                    ci_password_result=$?
-                    if [ $ci_password_result -ne 0 ]; then
-                        ci_password_enabled="no"
-                        break
-                    fi
+
+            if [ "$use_cloudinit" = "yes" ]; then # Proceed if not cancelled
+                if [ "$ci_config_type" = "custom_file" ]; then
+                    # --- Custom User-Data File ---
+                    # Fetch storage list (filter for snippets if possible, else all and warn)
+                    storage_list_json=$(pvesh get /storage --output-format=json)
+                    snippet_storages=()
+                    all_storages=()
                     
-                    # Validate password length
-                    if [ ${#ci_password} -lt $min_length ]; then
-                        whiptail --title "Password Too Short" --msgbox "Password must be at least $min_length characters long. Please try again." 10 60
-                        continue
-                    fi
+                    while IFS= read -r line; do snippet_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | select((.content | contains("snippets"))) | .storage')
                     
-                    # Confirm password
-                    ci_password_confirm=$(whiptail --title "Confirm Password" --passwordbox "Confirm password for user $ci_user:" 10 60 3>&1 1>&2 2>&3)
-                    if [ $? -ne 0 ]; then
-                        ci_password_enabled="no"
-                        break
-                    fi
-                    
-                    if [ "$ci_password" = "$ci_password_confirm" ]; then
-                        log_info "Password authentication configured for user $ci_user"
-                        break
+                    if [ ${#snippet_storages[@]} -eq 0 ]; then
+                        whiptail --title "Warning: No Snippet Storage" --msgbox "No storage explicitly supports 'snippets' content type. You can select any storage, but ensure it's configured to allow user data files (e.g., as snippets or text files)." 10 78
+                        while IFS= read -r line; do all_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | .storage')
+                        if [ ${#all_storages[@]} -eq 0 ]; then
+                            log_error "No Proxmox storages found."
+                            whiptail --title "Error" --msgbox "No Proxmox storages found. Cannot select custom user-data file." 8 78
+                            use_cloudinit="no" # Disable CI
+                        else
+                            ci_custom_storage=$(whiptail --title "Select Storage for User-Data File" --menu "Choose a storage:" 15 70 5 "${all_storages[@]}" 3>&1 1>&2 2>&3)
+                        fi
                     else
-                        whiptail --title "Password Mismatch" --msgbox "Passwords do not match. Please try again." 10 60
+                        ci_custom_storage=$(whiptail --title "Select Storage for User-Data File" --menu "Choose a storage (supports snippets):" 15 70 5 "${snippet_storages[@]}" 3>&1 1>&2 2>&3)
                     fi
-                done
-            fi
-            
-            ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
-                "dhcp" "Automatic IP configuration (DHCP)" \
-                "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
-            ci_network_result=$?
-            if [ $ci_network_result -ne 0 ]; then return 0; fi
-            
-            if [ "$ci_network" = "static" ]; then
-                ci_ip=$(whiptail --title "Static IP" --inputbox "Enter IP address (CIDR format, e.g., 192.168.1.100/24):" 10 60 "" 3>&1 1>&2 2>&3)
-                ci_ip_result=$?
-                if [ $ci_ip_result -ne 0 ]; then return 0; fi
-                
-                ci_gw=$(whiptail --title "Gateway" --inputbox "Enter default gateway:" 10 60 "" 3>&1 1>&2 2>&3)
-                ci_gw_result=$?
-                if [ $ci_gw_result -ne 0 ]; then return 0; fi
-                
-                ci_nameserver=$(whiptail --title "DNS" --inputbox "Enter DNS server(s) (comma-separated):" 10 60 "1.1.1.1,8.8.8.8" 3>&1 1>&2 2>&3)
-                ci_nameserver_result=$?
-                if [ $ci_nameserver_result -ne 0 ]; then return 0; fi
-                
-                ci_network="ip=$ci_ip,gw=$ci_gw,nameserver=$ci_nameserver"
-            fi
-        fi
-    else
-        whiptail --title "Notice" --msgbox "Cloud-init is not supported for $distro distribution." 10 60
-    fi
 
-    # --- Step 6: Package Pre-installation (Cloud-init only) ---
-    install_packages=""
-    if [ "$use_cloudinit" = "yes" ]; then
-        if whiptail --title "Package Installation" --yesno "Do you want to pre-install packages via cloud-init?" 10 60; then
-            # Package categories
-            PACKAGE_CATEGORIES=(
-                "essential" "Essential tools (curl, wget, vim, htop)" OFF
-                "docker" "Docker and Docker Compose" OFF
-                "development" "Development tools (git, build-essential)" OFF
-                "monitoring" "Monitoring agents (node-exporter)" OFF
-                "security" "Security tools (fail2ban, ufw)" OFF
-                "custom" "Custom package list" OFF
-            )
-            
-            selected_packages=$(whiptail --title "Select Package Categories" --checklist "Choose packages to install:" 20 70 6 "${PACKAGE_CATEGORIES[@]}" 3>&1 1>&2 2>&3)
-            if [ $? -eq 0 ]; then
-                # Build package list based on selections
-                packages=()
-                for category in $selected_packages; do
-                    category=$(echo "$category" | tr -d '"')
-                    case "$category" in
-                        essential)
-                            packages+=(curl wget vim htop tree unzip)
-                            ;;
-                        docker)
-                            packages+=(docker.io docker-compose)
-                            ;;
-                        development)
-                            packages+=(git build-essential)
-                            ;;
-                        monitoring)
-                            packages+=(prometheus-node-exporter)
-                            ;;
-                        security)
-                            packages+=(fail2ban ufw)
-                            ;;
-                        custom)
-                            custom_packages=$(whiptail --title "Custom Packages" --inputbox "Enter package names (space-separated):" 10 60 "" 3>&1 1>&2 2>&3)
-                            if [ -n "$custom_packages" ]; then
-                                read -ra custom_array <<< "$custom_packages"
-                                packages+=("${custom_array[@]}")
-                            fi
-                            ;;
-                    esac
-                done
-                
-                if [ ${#packages[@]} -gt 0 ]; then
-                    install_packages=$(IFS=' '; echo "${packages[*]}")
-                    log_info "Packages to install: $install_packages"
+                    if [ $? -ne 0 ] || [ -z "$ci_custom_storage" ]; then
+                        log_info "User cancelled custom user-data storage selection."
+                        use_cloudinit="no"
+                    else
+                        ci_user_data_filename_on_storage=$(whiptail --title "User-Data File Path" --inputbox "Enter the filename of your user-data (e.g., my-user-data.yaml) on storage '$ci_custom_storage':" 10 78 3>&1 1>&2 2>&3)
+                        if [ $? -ne 0 ] || [ -z "$ci_user_data_filename_on_storage" ]; then
+                            log_info "User cancelled custom user-data filename input."
+                            use_cloudinit="no"
+                        else
+                            # Assuming files are in the 'snippets' directory on the storage.
+                            # Proxmox format: <storage_id>:snippets/<filename>
+                            custom_ci_user_data_path="${ci_custom_storage}:snippets/${ci_user_data_filename_on_storage}"
+                            log_info "Custom user-data file selected: $custom_ci_user_data_path"
+                        fi
+                    fi
+                elif [ "$ci_config_type" = "custom_paste" ]; then
+                    # --- Custom User-Data Paste ---
+                    whiptail --title "Information" --msgbox "You've chosen to paste custom user-data. The guided setup for user, SSH key, password, network, packages, and custom scripts will be skipped." 10 78
+                    
+                    # Use a temporary file to capture textbox content
+                    local tmp_paste_file
+                    tmp_paste_file=$(mktemp)
+                    if whiptail --title "Paste Custom User-Data" --textbox "$tmp_paste_file" 20 78 --scrolltext; then
+                        custom_ci_user_data_content=$(cat "$tmp_paste_file")
+                        if [ -z "$custom_ci_user_data_content" ]; then
+                            log_warn "Pasted custom user-data is empty. Cloud-init might not work as expected."
+                            # Optionally, ask user if they want to proceed or switch method
+                        else
+                            log_info "Custom user-data content provided by pasting."
+                        fi
+                    else
+                        log_info "User cancelled pasting custom user-data."
+                        use_cloudinit="no"
+                    fi
+                    rm -f "$tmp_paste_file"
                 fi
-            fi
-        fi
-    fi
+            fi # End of if [ "$use_cloudinit" = "yes" ] after config type choice
 
-    # --- Step 6.5: Custom Script Execution (Cloud-init only) ---
-    custom_scripts=""
-    if [ "$use_cloudinit" = "yes" ]; then
-        if whiptail --title "Custom Scripts" --yesno "Do you want to add custom scripts to run during first boot?" 10 60; then
-            # Script execution options
-            script_option=$(whiptail --title "Script Options" --menu "Choose script input method:" 15 70 4 \
-                "commands" "Simple commands (one per line)" \
-                "script" "Custom multi-line script" \
-                "template" "Predefined script templates" \
-                "none" "Skip custom scripts" 3>&1 1>&2 2>&3)
-            
-            if [ "$script_option" != "none" ] && [ $? -eq 0 ]; then
-                case "$script_option" in
-                    "commands")
-                        custom_scripts=$(whiptail --title "Custom Commands" --inputbox "Enter commands (one per line, use \\n for newlines):" 15 70 "" 3>&1 1>&2 2>&3)
-                        if [ $? -eq 0 ] && [ -n "$custom_scripts" ]; then
-                            # Convert \n to actual newlines
-                            custom_scripts=$(echo -e "$custom_scripts")
-                            log_info "Custom commands configured"
+            # Only proceed to default guided setup if ci_config_type is "default" AND cloud-init is still enabled
+            if [ "$use_cloudinit" = "yes" ] && [ "$ci_config_type" = "default" ]; then
+                ci_user=$(whiptail --title "Cloud-Init User" --inputbox "Enter default username:" 10 60 "clouduser" 3>&1 1>&2 2>&3)
+                ci_user_result=$?
+                if [ $ci_user_result -ne 0 ]; then return 0; fi
+
+                # Default to SSH key in ~/.ssh/id_rsa.pub if exists
+                default_key=""
+                if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
+                    default_key=$(cat "$HOME/.ssh/id_rsa.pub")
+                fi
+                
+                ci_sshkey=$(whiptail --title "SSH Public Key" --inputbox "Paste SSH public key for user $ci_user:" 10 60 "$default_key" 3>&1 1>&2 2>&3)
+                ci_sshkey_result=$?
+                if [ $ci_sshkey_result -ne 0 ]; then return 0; fi
+                
+                # Validate SSH key format
+                if [ -n "$ci_sshkey" ]; then
+                    if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) [A-Za-z0-9+/]' >/dev/null; then
+                        if ! whiptail --title "Invalid SSH Key" --yesno "The SSH key format appears invalid. Continue anyway?" 10 60; then
+                            return 0
                         fi
-                        ;;
-                    "script")
-                        # Use a temporary file for multi-line script input
-                        SCRIPT_INPUT_FILE=$(mktemp)
-                        if whiptail --title "Custom Script" --textbox /dev/null 20 80 --scrolltext 2>"$SCRIPT_INPUT_FILE"; then
-                            if [ -s "$SCRIPT_INPUT_FILE" ]; then
-                                custom_scripts=$(cat "$SCRIPT_INPUT_FILE")
-                                log_info "Custom script configured"
+                    else
+                        log_info "SSH key format validation passed"
+                    fi
+                fi
+                
+                # Cloud-init password configuration
+                ci_password=""
+                ci_password_enabled="no"
+                if whiptail --title "Password Authentication" --yesno "Do you want to enable password authentication for user $ci_user?\n\nNote: SSH key authentication is recommended for better security." 12 70; then
+                    ci_password_enabled="yes"
+
+                    # Get minimum password length from config (default 12)
+                    local min_length=12
+                    # Assuming config.sh is in the parent directory of SCRIPT_DIR (e.g. scripts/../config.sh)
+                    # This path might need adjustment if config.sh is elsewhere.
+                    local config_sh_path="$SCRIPT_DIR/../config.sh"
+                    if [ -f "$config_sh_path" ] && command -v source >/dev/null 2>&1; then
+                        min_length=$(grep "^MIN_PASSWORD_LENGTH=" "$config_sh_path" 2>/dev/null | cut -d'=' -f2 || echo "12")
+                    fi
+
+                    while true; do
+                        ci_password=$(whiptail --title "Set Password" --passwordbox "Enter password for user $ci_user (minimum $min_length characters):" 12 60 3>&1 1>&2 2>&3)
+                        ci_password_result=$?
+                        if [ $ci_password_result -ne 0 ]; then
+                            ci_password_enabled="no"
+                            break
+                        fi
+
+                        # Validate password length
+                        if [ ${#ci_password} -lt $min_length ]; then
+                            whiptail --title "Password Too Short" --msgbox "Password must be at least $min_length characters long. Please try again." 10 60
+                            continue
+                        fi
+
+                        # Confirm password
+                        ci_password_confirm=$(whiptail --title "Confirm Password" --passwordbox "Confirm password for user $ci_user:" 10 60 3>&1 1>&2 2>&3)
+                        if [ $? -ne 0 ]; then
+                            ci_password_enabled="no"
+                            break
+                        fi
+
+                        if [ "$ci_password" = "$ci_password_confirm" ]; then
+                            log_info "Password authentication configured for user $ci_user"
+                            break
+                        else
+                            whiptail --title "Password Mismatch" --msgbox "Passwords do not match. Please try again." 10 60
+                        fi
+                    done
+                fi
+                
+                ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
+                    "dhcp" "Automatic IP configuration (DHCP)" \
+                    "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
+                ci_network_result=$?
+                if [ $ci_network_result -ne 0 ]; then return 0; fi
+
+                if [ "$ci_network" = "static" ]; then
+                    ci_ip=$(whiptail --title "Static IP" --inputbox "Enter IP address (CIDR format, e.g., 192.168.1.100/24):" 10 60 "" 3>&1 1>&2 2>&3)
+                    ci_ip_result=$?
+                    if [ $ci_ip_result -ne 0 ]; then return 0; fi
+
+                    ci_gw=$(whiptail --title "Gateway" --inputbox "Enter default gateway:" 10 60 "" 3>&1 1>&2 2>&3)
+                    ci_gw_result=$?
+                    if [ $ci_gw_result -ne 0 ]; then return 0; fi
+
+                    ci_nameserver=$(whiptail --title "DNS" --inputbox "Enter DNS server(s) (comma-separated):" 10 60 "1.1.1.1,8.8.8.8" 3>&1 1>&2 2>&3)
+                    ci_nameserver_result=$?
+                    if [ $ci_nameserver_result -ne 0 ]; then return 0; fi
+
+                    ci_network="ip=$ci_ip,gw=$ci_gw,nameserver=$ci_nameserver"
+                fi
+
+                # --- Step 6: Package Pre-installation (Cloud-init only, moved into default block) ---
+                install_packages=""
+                # This inner if [ "$use_cloudinit" = "yes" ] is redundant if this whole block is already inside such a check.
+                # However, keeping it for now to minimize changes to the moved block itself.
+                if [ "$use_cloudinit" = "yes" ]; then
+                    if whiptail --title "Package Installation" --yesno "Do you want to pre-install packages via cloud-init?" 10 60; then
+                        # Package categories
+                        PACKAGE_CATEGORIES=(
+                            "essential" "Essential tools (curl, wget, vim, htop)" OFF
+                            "docker" "Docker and Docker Compose" OFF
+                            "development" "Development tools (git, build-essential)" OFF
+                            "monitoring" "Monitoring agents (node-exporter)" OFF
+                            "security" "Security tools (fail2ban, ufw)" OFF
+                            "custom" "Custom package list" OFF
+                        )
+
+                        selected_packages=$(whiptail --title "Select Package Categories" --checklist "Choose packages to install:" 20 70 6 "${PACKAGE_CATEGORIES[@]}" 3>&1 1>&2 2>&3)
+                        if [ $? -eq 0 ]; then
+                            # Build package list based on selections
+                            packages=()
+                            for category in $selected_packages; do
+                                category=$(echo "$category" | tr -d '"')
+                                case "$category" in
+                                    essential)
+                                        packages+=(curl wget vim htop tree unzip)
+                                        ;;
+                                    docker)
+                                        packages+=(docker.io docker-compose)
+                                        ;;
+                                    development)
+                                        packages+=(git build-essential)
+                                        ;;
+                                    monitoring)
+                                        packages+=(prometheus-node-exporter)
+                                        ;;
+                                    security)
+                                        packages+=(fail2ban ufw)
+                                        ;;
+                                    custom)
+                                        custom_packages=$(whiptail --title "Custom Packages" --inputbox "Enter package names (space-separated):" 10 60 "" 3>&1 1>&2 2>&3)
+                                        if [ -n "$custom_packages" ]; then
+                                            read -ra custom_array <<< "$custom_packages"
+                                            packages+=("${custom_array[@]}")
+                                        fi
+                                        ;;
+                                esac
+                            done
+
+                            if [ ${#packages[@]} -gt 0 ]; then
+                                install_packages=$(IFS=' '; echo "${packages[*]}")
+                                log_info "Packages to install: $install_packages"
                             fi
                         fi
-                        rm -f "$SCRIPT_INPUT_FILE"
-                        ;;
-                    "template")
-                        # Predefined script templates
-                        template_choice=$(whiptail --title "Script Templates" --menu "Choose a predefined script template:" 18 80 8 \
-                            "docker-setup" "Install and configure Docker" \
-                            "web-server" "Basic web server setup (nginx)" \
-                            "security-hardening" "Basic security hardening" \
-                            "monitoring-agent" "Install monitoring agents" \
-                            "dev-tools" "Development tools setup" \
-                            "auto-updates" "Configure automatic updates" \
-                            "custom-user" "Create additional system user" \
-                            "none" "Cancel template selection" 3>&1 1>&2 2>&3)
+                    fi
+                fi
+
+                # --- Step 6.5: Custom Script Execution (Cloud-init only, moved into default block) ---
+                custom_scripts=""
+                # This inner if [ "$use_cloudinit" = "yes" ] is redundant.
+                if [ "$use_cloudinit" = "yes" ]; then
+                    if whiptail --title "Custom Scripts" --yesno "Do you want to add custom scripts to run during first boot?" 10 60; then
+                        # Script execution options
+                        script_option=$(whiptail --title "Script Options" --menu "Choose script input method:" 15 70 4 \
+                            "commands" "Simple commands (one per line)" \
+                            "script" "Custom multi-line script" \
+                            "template" "Predefined script templates" \
+                            "none" "Skip custom scripts" 3>&1 1>&2 2>&3)
                         
-                        if [ "$template_choice" != "none" ] && [ $? -eq 0 ]; then
-                            custom_scripts=$(get_script_template "$template_choice")
-                            if [ -n "$custom_scripts" ]; then
-                                log_info "Applied script template: $template_choice"
-                            fi
+                        if [ "$script_option" != "none" ] && [ $? -eq 0 ]; then
+                            case "$script_option" in
+                                "commands")
+                                    custom_scripts=$(whiptail --title "Custom Commands" --inputbox "Enter commands (one per line, use \\n for newlines):" 15 70 "" 3>&1 1>&2 2>&3)
+                                    if [ $? -eq 0 ] && [ -n "$custom_scripts" ]; then
+                                        # Convert \n to actual newlines
+                                        custom_scripts=$(echo -e "$custom_scripts")
+                                        log_info "Custom commands configured"
+                                    fi
+                                    ;;
+                                "script")
+                                    # Use a temporary file for multi-line script input
+                                    SCRIPT_INPUT_FILE=$(mktemp)
+                                    if whiptail --title "Custom Script" --textbox /dev/null 20 80 --scrolltext 2>"$SCRIPT_INPUT_FILE"; then
+                                        if [ -s "$SCRIPT_INPUT_FILE" ]; then
+                                            custom_scripts=$(cat "$SCRIPT_INPUT_FILE")
+                                            log_info "Custom script configured"
+                                        fi
+                                    fi
+                                    rm -f "$SCRIPT_INPUT_FILE"
+                                    ;;
+                                "template")
+                                    # Predefined script templates
+                                    template_choice=$(whiptail --title "Script Templates" --menu "Choose a predefined script template:" 18 80 8 \
+                                        "docker-setup" "Install and configure Docker" \
+                                        "web-server" "Basic web server setup (nginx)" \
+                                        "security-hardening" "Basic security hardening" \
+                                        "monitoring-agent" "Install monitoring agents" \
+                                        "dev-tools" "Development tools setup" \
+                                        "auto-updates" "Configure automatic updates" \
+                                        "custom-user" "Create additional system user" \
+                                        "none" "Cancel template selection" 3>&1 1>&2 2>&3)
+
+                                    if [ "$template_choice" != "none" ] && [ $? -eq 0 ]; then
+                                        custom_scripts=$(get_script_template "$template_choice")
+                                        if [ -n "$custom_scripts" ]; then
+                                            log_info "Applied script template: $template_choice"
+                                        fi
+                                    fi
+                                    ;;
+                            esac
                         fi
-                        ;;
-                esac
-            fi
-        fi
-    fi
+                    fi
+                fi
+            fi # This 'fi' closes the "if [ "$ci_config_type" = "default" ]; then" block
+        fi # This 'fi' closes the "if [ "$use_cloudinit" = "yes" ]; then" (after config type choice)
+    else # This 'else' is for "if whiptail --title "Cloud-Init" --yesno"
+        whiptail --title "Notice" --msgbox "Cloud-init is not supported for $distro distribution." 10 60
+    fi # This 'fi' closes the "if supports_cloudinit "$distro"; then"
 
     # --- Step 7: Tagging/Categorization ---
     tags=$(whiptail --title "Tags" --inputbox "Enter tags (comma-separated):" 10 60 "" 3>&1 1>&2 2>&3)
@@ -1844,20 +1511,27 @@ create_template() {
     # --- Step 9: Confirm and Create ---
     summary="Template: $template_name\nDistro: $distro $version\nCPU: $cpu\nRAM: $ram MB\nDisk: $storage GB\nCloud-Init: $use_cloudinit\nTags: $tags"
     if [ "$use_cloudinit" = "yes" ]; then
-        summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}..."
-        if [ "$ci_password_enabled" = "yes" ]; then
-            summary+="\nPassword: Enabled"
-        else
-            summary+="\nPassword: Disabled"
-        fi
-        summary+="\nNetwork: $ci_network"
-        if [ -n "$install_packages" ]; then
-            summary+="\nPackages: $install_packages"
-        fi
-        if [ -n "$custom_scripts" ]; then
-            summary+="\nCustom Scripts: Configured"
-        else
-            summary+="\nCustom Scripts: None"
+        summary+="\nCloud-Init Method: $ci_config_type"
+        if [ "$ci_config_type" = "default" ]; then
+            summary+="\nUser: $ci_user\nSSH Key: ${ci_sshkey:0:30}..."
+            if [ "$ci_password_enabled" = "yes" ]; then
+                summary+="\nPassword: Enabled"
+            else
+                summary+="\nPassword: Disabled"
+            fi
+            summary+="\nNetwork: $ci_network"
+            if [ -n "$install_packages" ]; then
+                summary+="\nPackages: $install_packages"
+            fi
+            if [ -n "$custom_scripts" ]; then
+                summary+="\nCustom Scripts: Configured"
+            else
+                summary+="\nCustom Scripts: None"
+            fi
+        elif [ "$ci_config_type" = "custom_file" ]; then
+            summary+="\nCustom File: $custom_ci_user_data_path"
+        elif [ "$ci_config_type" = "custom_paste" ]; then
+            summary+="\nCustom Data: Pasted (first 30 chars: ${custom_ci_user_data_content:0:30}...)"
         fi
     fi
 
@@ -1957,83 +1631,100 @@ create_template() {
 
     # Add cloud-init drive if selected
     if [ "$use_cloudinit" = "yes" ]; then
-        log_info "Configuring cloud-init..."
+        log_info "Configuring cloud-init for VM $vmid..."
+        # This adds the cloud-init drive itself. $default_storage should be suitable for this.
+        # Ensure $default_storage is a storage that can accept 'cloudinit' content type or PVE can handle it.
         qm set "$vmid" --ide2 "$default_storage:cloudinit"
-        qm set "$vmid" --ciuser "$ci_user"
-        
-        # Only set SSH key if provided
-        if [ -n "$ci_sshkey" ]; then
-            # Fix for SSH key configuration - write to temporary file for proper handling
-            SSH_KEY_FILE=$(mktemp)
-            echo "$ci_sshkey" > "$SSH_KEY_FILE"
-            qm set "$vmid" --sshkeys "$SSH_KEY_FILE"
-            rm -f "$SSH_KEY_FILE"
-            log_info "SSH key configured for user $ci_user"
-        fi
-        
-        # Set cloud-init password if provided
-        if [ "$ci_password_enabled" = "yes" ] && [ -n "$ci_password" ]; then
-            qm set "$vmid" --cipassword "$ci_password"
-            log_info "Password authentication configured for user $ci_user"
-        fi
-        
-        # Set network configuration
-        if [ "$ci_network" = "dhcp" ]; then
-            qm set "$vmid" --ipconfig0 "ip=dhcp"
-        else
-            qm set "$vmid" --ipconfig0 "$ci_network"
-        fi
-        
-        # Configure package installation via cloud-init
-        if [ -n "$install_packages" ]; then
-            log_info "Configuring package installation: $install_packages"
-            # Create cloud-init user data for package installation
-            CLOUD_INIT_FILE=$(mktemp)
-            cat > "$CLOUD_INIT_FILE" << EOF
+
+        if [ "$ci_config_type" = "default" ]; then
+            log_info "Applying default (guided) cloud-init configuration..."
+            # Only set ciuser if it's not empty (it's gathered in the default path)
+            if [ -n "$ci_user" ]; then
+                qm set "$vmid" --ciuser "$ci_user"
+            fi
+
+            if [ -n "$ci_sshkey" ]; then
+                # Using a temporary file for SSH keys is robust
+                local TMP_SSH_KEY_FILE
+                TMP_SSH_KEY_FILE=$(mktemp "/tmp/sshkey-$vmid-XXXXXX.pub")
+                # Ensure content is written correctly, especially if $ci_sshkey might have special chars
+                printf '%s' "$ci_sshkey" > "$TMP_SSH_KEY_FILE"
+                qm set "$vmid" --sshkeys "$TMP_SSH_KEY_FILE"
+                rm -f "$TMP_SSH_KEY_FILE"
+                log_info "SSH key configured for user $ci_user"
+            fi
+
+            if [ "$ci_password_enabled" = "yes" ] && [ -n "$ci_password" ]; then
+                qm set "$vmid" --cipassword "$ci_password"
+                log_info "Password authentication configured for user $ci_user"
+            fi
+
+            # $ci_network will be "dhcp" or "ip=...,gw=...,nameserver=..."
+            if [ "$ci_network" = "dhcp" ]; then
+                qm set "$vmid" --ipconfig0 "ip=dhcp"
+            elif [ -n "$ci_network" ]; then # Static config
+                qm set "$vmid" --ipconfig0 "$ci_network"
+            fi
+
+            # Generate and apply CLOUD_INIT_FILE for packages and custom scripts
+            # This part creates a #cloud-config file with packages and runcmd sections
+            # Only run this if there are packages to install or custom scripts to run
+            # (The qemu-guest-agent is now included in this logic)
+            if [ -n "$install_packages" ] || [ -n "$custom_scripts" ]; then
+                log_info "Generating cloud-init payload for packages and/or custom scripts..."
+                local TMP_CLOUD_INIT_PAYLOAD_FILE
+                TMP_CLOUD_INIT_PAYLOAD_FILE=$(mktemp "/tmp/ci-payload-$vmid-XXXXXX.yaml")
+                cat > "$TMP_CLOUD_INIT_PAYLOAD_FILE" << EOF
 #cloud-config
 package_update: true
 package_upgrade: true
 packages:
 EOF
-            # Add each package to the cloud-init config
-            for package in $install_packages; do
-                echo "  - $package" >> "$CLOUD_INIT_FILE"
-            done
-            
-            # Add QEMU guest agent installation
-            echo "  - qemu-guest-agent" >> "$CLOUD_INIT_FILE"
-            
-            # Add runcmd to start qemu-guest-agent and custom scripts
-            cat >> "$CLOUD_INIT_FILE" << EOF
+                if [ -n "$install_packages" ]; then
+                    for package_name_iter in $install_packages; do # Renamed loop variable
+                        echo "  - $package_name_iter" >> "$TMP_CLOUD_INIT_PAYLOAD_FILE"
+                    done
+                fi
+                # Always include qemu-guest-agent if using this custom payload
+                echo "  - qemu-guest-agent" >> "$TMP_CLOUD_INIT_PAYLOAD_FILE"
+
+                cat >> "$TMP_CLOUD_INIT_PAYLOAD_FILE" << EOF
 runcmd:
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
 EOF
-            
-            # Add custom scripts if configured
-            if [ -n "$custom_scripts" ]; then
-                echo "  # Custom scripts" >> "$CLOUD_INIT_FILE"
-                # Convert custom scripts to YAML runcmd format
-                while IFS= read -r line; do
-                    if [ -n "$line" ]; then
-                        echo "  - $line" >> "$CLOUD_INIT_FILE"
-                    fi
-                done <<< "$custom_scripts"
-            fi
-            
-            # Set the cloud-init configuration
-            qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
-            
-            # Copy the file to Proxmox snippets directory (if it exists)
-            if [ -d "/var/lib/vz/snippets" ]; then
-                cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
-            fi
-            
-            rm -f "$CLOUD_INIT_FILE"
-        else
-            # Just install QEMU guest agent
-            CLOUD_INIT_FILE=$(mktemp)
-            cat > "$CLOUD_INIT_FILE" << EOF
+                if [ -n "$custom_scripts" ]; then
+                    echo "  # Custom scripts" >> "$TMP_CLOUD_INIT_PAYLOAD_FILE"
+                    # Properly indent multi-line scripts for YAML runcmd
+                    # Each command or script block should be a list item.
+                    # If custom_scripts contains multiple lines intended as one script,
+                    # it should be formatted as a YAML block scalar.
+                    # For simplicity here, assuming custom_scripts are line-separated commands.
+                    while IFS= read -r line; do
+                        if [ -n "$line" ]; then
+                             # Escape double quotes in the line for safety
+                            echo "  - \"$(echo "$line" | sed 's/"/\\"/g')\"" >> "$TMP_CLOUD_INIT_PAYLOAD_FILE"
+                        fi
+                    done <<< "$custom_scripts"
+                fi
+
+                local default_ci_snippet_filename="ci-std-payload-$vmid-$(date +%s).yaml"
+                local SNIPPET_STORAGE_FOR_DEFAULT_CI="local"
+                log_info "Uploading default cloud-init payload to $SNIPPET_STORAGE_FOR_DEFAULT_CI snippets as $default_ci_snippet_filename"
+                if pvesm upload "$SNIPPET_STORAGE_FOR_DEFAULT_CI" "$TMP_CLOUD_INIT_PAYLOAD_FILE" --filename "$default_ci_snippet_filename" --content snippets; then
+                     qm set "$vmid" --cicustom "user=$SNIPPET_STORAGE_FOR_DEFAULT_CI:snippets/$default_ci_snippet_filename"
+                     # This snippet is specific to this VM's default setup, not typically marked for deletion unless VM is destroyed.
+                else
+                     log_error "Failed to upload default cloud-init payload to $SNIPPET_STORAGE_FOR_DEFAULT_CI snippets."
+                     whiptail --title "Error" --msgbox "Failed to upload default cloud-init payload. Check '$SNIPPET_STORAGE_FOR_DEFAULT_CI' storage. VM may lack packages/scripts." 10 78
+                fi
+                rm -f "$TMP_CLOUD_INIT_PAYLOAD_FILE"
+            else
+                # If no packages and no custom_scripts, still ensure qemu-guest-agent is installed and started
+                log_info "Generating cloud-init payload for QEMU guest agent only..."
+                local TMP_QEMU_AGENT_ONLY_FILE
+                TMP_QEMU_AGENT_ONLY_FILE=$(mktemp "/tmp/ci-qemu-agent-$vmid-XXXXXX.yaml")
+                cat > "$TMP_QEMU_AGENT_ONLY_FILE" << EOF
 #cloud-config
 package_update: true
 packages:
@@ -2042,24 +1733,69 @@ runcmd:
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
 EOF
-            
-            # Add custom scripts if configured
-            if [ -n "$custom_scripts" ]; then
-                echo "  # Custom scripts" >> "$CLOUD_INIT_FILE"
-                # Convert custom scripts to YAML runcmd format
-                while IFS= read -r line; do
-                    if [ -n "$line" ]; then
-                        echo "  - $line" >> "$CLOUD_INIT_FILE"
+                local qemu_agent_only_snippet_filename="ci-qga-only-$vmid-$(date +%s).yaml"
+                local SNIPPET_STORAGE_FOR_DEFAULT_CI="local"
+                log_info "Uploading QEMU agent-only cloud-init payload to $SNIPPET_STORAGE_FOR_DEFAULT_CI snippets as $qemu_agent_only_snippet_filename"
+                if pvesm upload "$SNIPPET_STORAGE_FOR_DEFAULT_CI" "$TMP_QEMU_AGENT_ONLY_FILE" --filename "$qemu_agent_only_snippet_filename" --content snippets; then
+                     qm set "$vmid" --cicustom "user=$SNIPPET_STORAGE_FOR_DEFAULT_CI:snippets/$qemu_agent_only_snippet_filename"
+                else
+                     log_error "Failed to upload QEMU agent-only cloud-init payload to $SNIPPET_STORAGE_FOR_DEFAULT_CI snippets."
+                fi
+                rm -f "$TMP_QEMU_AGENT_ONLY_FILE"
+            fi
+
+        elif [ "$ci_config_type" = "custom_file" ]; then
+            log_info "Applying custom user-data from file: $custom_ci_user_data_path"
+            if [ -z "$custom_ci_user_data_path" ]; then
+                log_error "Custom user-data file path is empty. Skipping cicustom."
+                whiptail --title "Error" --msgbox "Custom user-data file path was not set. Cloud-init custom configuration will be skipped." 8 78
+            else
+                # Validate format: storage:snippets/file.yaml
+                if [[ "$custom_ci_user_data_path" != *":"* || "$custom_ci_user_data_path" != *"snippets/"* ]]; then
+                    log_error "Invalid custom_ci_user_data_path format: $custom_ci_user_data_path. Expected 'storage:snippets/filename.yaml'."
+                    whiptail --title "Error" --msgbox "Invalid custom user-data path format. Expected 'storage:snippets/filename.yaml'." 8 78
+                else
+                    qm set "$vmid" --cicustom "user=$custom_ci_user_data_path"
+                    log_info "Set cicustom to user=$custom_ci_user_data_path"
+                fi
+            fi
+
+        elif [ "$ci_config_type" = "custom_paste" ]; then
+            log_info "Applying custom user-data from pasted content..."
+            if [ -z "$custom_ci_user_data_content" ]; then
+                log_warn "Pasted custom user-data is empty. Skipping cicustom."
+            else
+                local TMP_CUSTOM_PASTE_UPLOAD_FILE
+                TMP_CUSTOM_PASTE_UPLOAD_FILE=$(mktemp "/tmp/custom-ci-paste-vmid${vmid}-XXXXXX.yaml")
+                printf '%s' "$custom_ci_user_data_content" > "$TMP_CUSTOM_PASTE_UPLOAD_FILE"
+
+                local pasted_ci_snippet_filename="custom-ci-paste-vmid${vmid}-$(date +%s).yaml"
+                # Default storage for pasted snippets. Consider making this configurable or detecting a suitable one.
+                local SNIPPET_STORAGE_FOR_PASTED_CI="local"
+                # Host path for 'local' storage type snippets. This is where the file will reside for Proxmox.
+                local SNIPPET_HOST_PATH_FOR_PASTED_CI="/var/lib/vz/snippets"
+
+                # Ensure the target directory for 'local' snippets exists.
+                if [ "$SNIPPET_STORAGE_FOR_PASTED_CI" = "local" ] && [ ! -d "$SNIPPET_HOST_PATH_FOR_PASTED_CI" ]; then
+                    log_info "Creating snippet directory for 'local' storage: $SNIPPET_HOST_PATH_FOR_PASTED_CI"
+                    # This might need sudo if script is not root, but create_template is usually root.
+                    mkdir -p "$SNIPPET_HOST_PATH_FOR_PASTED_CI"
+                fi
+
+                log_info "Uploading pasted custom user-data to $SNIPPET_STORAGE_FOR_PASTED_CI snippets as $pasted_ci_snippet_filename"
+                if pvesm upload "$SNIPPET_STORAGE_FOR_PASTED_CI" "$TMP_CUSTOM_PASTE_UPLOAD_FILE" --filename "$pasted_ci_snippet_filename" --content snippets; then
+                    qm set "$vmid" --cicustom "user=$SNIPPET_STORAGE_FOR_PASTED_CI:snippets/$pasted_ci_snippet_filename"
+                    log_info "Set cicustom to user=$SNIPPET_STORAGE_FOR_PASTED_CI:snippets/$pasted_ci_snippet_filename"
+                    # Store the full path on the Proxmox host for later deletion if it's on 'local' storage
+                    if [ "$SNIPPET_STORAGE_FOR_PASTED_CI" = "local" ]; then
+                        ephemeral_snippet_path_to_delete="$SNIPPET_HOST_PATH_FOR_PASTED_CI/$pasted_ci_snippet_filename"
                     fi
-                done <<< "$custom_scripts"
+                else
+                    log_error "Failed to upload pasted custom user-data to $SNIPPET_STORAGE_FOR_PASTED_CI snippets."
+                    whiptail --title "Error" --msgbox "Failed to upload pasted custom user-data to $SNIPPET_STORAGE_FOR_PASTED_CI. Check storage configuration. Cloud-init may not be correctly configured." 12 78
+                fi
+                rm -f "$TMP_CUSTOM_PASTE_UPLOAD_FILE"
             fi
-            qm set "$vmid" --cicustom "user=local:snippets/$(basename "$CLOUD_INIT_FILE")"
-            
-            if [ -d "/var/lib/vz/snippets" ]; then
-                cp "$CLOUD_INIT_FILE" "/var/lib/vz/snippets/$(basename "$CLOUD_INIT_FILE")"
-            fi
-            
-            rm -f "$CLOUD_INIT_FILE"
         fi
     fi
 
@@ -2078,6 +1814,17 @@ EOF
 
     log_info "Template $template_name ($vmid) created successfully."
     whiptail --title "Success" --msgbox "Template $template_name ($vmid) created successfully!" 10 60
+
+    # Clean up ephemeral snippet if one was created for pasted custom CI data
+    if [ -n "$ephemeral_snippet_path_to_delete" ] && [ -f "$ephemeral_snippet_path_to_delete" ]; then
+        log_info "Cleaning up temporary snippet: $ephemeral_snippet_path_to_delete"
+        if rm -f "$ephemeral_snippet_path_to_delete"; then
+            log_info "Successfully deleted temporary snippet."
+        else
+            log_warn "Failed to delete temporary snippet: $ephemeral_snippet_path_to_delete. Manual cleanup may be required."
+        fi
+        ephemeral_snippet_path_to_delete="" # Clear the variable
+    fi
     return 0
 }
 

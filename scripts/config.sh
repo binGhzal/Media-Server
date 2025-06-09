@@ -85,7 +85,6 @@ trap 'handle_error $? $LINENO' ERR
 
 # Parse command line arguments
 TEST_MODE=""
-QUIET_MODE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -94,7 +93,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --quiet|-q)
-            QUIET_MODE=1
+            # QUIET_MODE option is deprecated and ignored
             shift
             ;;
         --help|-h)
@@ -364,7 +363,8 @@ backup_config_file() {
 
     local timestamp
     timestamp=$(date '+%Y%m%d_%H%M%S')
-    local backup_file="$BACKUP_DIR/$(basename "$config_file").backup.$timestamp"
+    local backup_file
+    backup_file="$BACKUP_DIR/$(basename "$config_file").backup.$timestamp"
 
     cp "$config_file" "$backup_file"
 
@@ -641,8 +641,8 @@ EOF
 manage_module_config() {
     local module_name="$1"
 
+    # Show available modules if no module name provided
     if [ -z "$module_name" ]; then
-        # Show available modules
         local modules=()
         if [ -d "$MODULE_CONFIG_DIR" ]; then
             for config_file in "$MODULE_CONFIG_DIR"/*.conf; do
@@ -657,7 +657,7 @@ manage_module_config() {
         # Add known modules even if no config exists yet
         local known_modules=("template" "containers" "terraform" "ansible" "monitoring" "registry")
         for module in "${known_modules[@]}"; do
-            if [[ ! " ${modules[*]} " =~ " ${module} " ]]; then
+            if [[ ! " ${modules[*]} " =~ \ ${module}\  ]]; then
                 modules+=("$module")
             fi
         done
@@ -1064,7 +1064,7 @@ main_menu() {
                 reset_config_interactive
                 ;;
             9)
-                manage_module_config
+                manage_module_config ""
                 ;;
             10)
                 view_config_files

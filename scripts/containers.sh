@@ -2081,52 +2081,6 @@ docker_deployment() {
             # Multi-VM deployment
             multi_vm_deployment
             ;;
-        4)
-            # Container management - Enhanced functionality
-            local manage_option
-            manage_option=$(whiptail --title "Container Management" --menu "Choose an option:" 20 70 7 \
-                "1" "List containers (with options)" \
-                "2" "Start containers (multiple methods)" \
-                "3" "Stop containers (safely)" \
-                "4" "Remove containers (with safety)" \
-                "5" "Manage container logs" \
-                "6" "Monitor container health" \
-                "7" "Return to main menu" 3>&1 1>&2 2>&3)
-            
-            case $manage_option in
-                1)
-                    # Enhanced container listing
-                    list_containers
-                    ;;
-                2)
-                    # Enhanced container starting
-                    start_containers
-                    ;;
-                3)
-                    # Enhanced container stopping
-                    stop_containers
-                    ;;
-                4)
-                    # Enhanced container removal
-                    remove_containers
-                    ;;
-                5)
-                    # Enhanced container logs management
-                    manage_container_logs
-                    ;;
-                6)
-                    # Container monitoring/health check
-                    show_container_monitoring
-                    ;;
-                7)
-                    # Return to main menu
-                    return 0
-                    ;;
-                *)
-                    return 1
-                    ;;
-            esac
-            ;;
         *)
             return 1
             ;;

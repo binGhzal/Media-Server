@@ -125,7 +125,7 @@ check_dependencies() {
         
         # Verify installation
         local still_missing=()
-        for dep in "${missing[@]}"; do
+        for dep in "${missing_deps[@]}"; do
             if ! command -v "$dep" >/dev/null 2>&1; then
                 still_missing+=("$dep")
             fi

@@ -30,8 +30,6 @@
 ## Development
 
 - [Contributing](CONTRIBUTING.md)
-- [Development Workflow](README.md#development-workflow)
-- [Directory Structure](README.md#directory-structure)
 
 ## Reference
 

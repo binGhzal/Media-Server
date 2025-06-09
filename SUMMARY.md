@@ -5,6 +5,19 @@
 - [Introduction](README.md)
 - [System Design](docs/SYSTEM_DESIGN.md)
 
+## User Guide
+
+- [Getting Started](docs/GETTING_STARTED.md)
+- [User Manual](docs/USER_MANUAL.md)
+- [Terraform Module](terraform/proxmox-vm/README.md)
+- [Ansible Playbook](ansible/proxmox-vm/README.md)
+- [Kubernetes Operator](kubernetes/operator/README.md)
+- [Container Workloads](docs/CONTAINER_WORKLOADS.md)
+- [Cloud-init Integration](docs/CLOUD_INIT.md)
+- [Testing Framework](docs/TESTING_FRAMEWORK.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [FAQ](docs/FAQ.md)
+
 ## Implementation
 
 - [Progress Tracker](docs/PROGRESS_TRACKER.md)

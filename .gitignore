@@ -12,3 +12,4 @@
 **/*.vault
 **/.ansible
 
+homelab_project_memory.json

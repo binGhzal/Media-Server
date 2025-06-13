@@ -72,7 +72,7 @@ trap cleanup EXIT
 
 # Function to acquire an exclusive lock
 acquire_lock() {
-    if ! (set -o noclobber; > "${LOCK_FILE}") 2>/dev/null; then
+    if ! (set -o noclobber; : > "${LOCK_FILE}") 2>/dev/null; then
         log_error "Another instance of ${SCRIPT_NAME} is already running"
         exit 1
     fi
@@ -196,163 +196,196 @@ initialize() {
     log_info "Initialization completed successfully"
 }
 
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --test)
-            TEST_MODE=1
-            log_info "Test mode enabled - no changes will be made"
-            shift
-            ;;
-        --verbose|-v)
-            LOG_LEVEL="INFO"
-            set_log_level "${LOG_LEVEL}"
-            log_info "Verbose output enabled"
-            shift
-            ;;
-        --debug)
-            LOG_LEVEL="DEBUG"
-            set_log_level "${LOG_LEVEL}"
-            set -x  # Enable debug mode
-            log_debug "Debug mode enabled"
-            shift
-            ;;
-        --config)
-            if [[ -z $2 ]] || [[ $2 == --* ]]; then
-                log_error "--config requires an argument"
-                exit 1
-            fi
-            CONFIG_FILE="$2"
-            log_debug "Using configuration file: ${CONFIG_FILE}"
-            shift 2
-            ;;
-        --log-level)
-            if [[ -z $2 ]] || [[ $2 == --* ]]; then
-                log_error "--log-level requires an argument (debug, info, warning, error, critical)"
-                exit 1
-            fi
-            LOG_LEVEL="$2"
-            if ! set_log_level "${LOG_LEVEL}"; then
-                log_error "Invalid log level: ${LOG_LEVEL}"
-                exit 1
-            fi
-            log_info "Log level set to: ${LOG_LEVEL}"
-            shift 2
-            ;;
-        --help|-h)
-            show_usage
-            ;;
-        --version|--version=*)
-            echo "Proxmox Template Creator v${VERSION}"
-            exit 0
-            ;;
-        --list-modules)
-            # Discover and validate available modules
-            discover_modules() {
-                log_debug "Discovering available modules..."
-
-                local modules=()
-                local module_dirs=(
-                    "${SCRIPT_DIR}/modules"
-                    "${SCRIPT_DIR}/../modules"
-                    "/usr/local/share/proxmox-templates/modules"
-                    "${HOME}/.local/share/proxmox-templates/modules"
-                )
-
-                # Add any additional module directories from environment
-                if [ -n "${PROXMOX_MODULE_PATH:-}" ]; then
-                    IFS=':' read -ra extra_dirs <<< "${PROXMOX_MODULE_PATH}"
-                    for dir in "${extra_dirs[@]}"; do
-                        if [ -d "${dir}" ]; then
-                            module_dirs+=("${dir}")
-                        fi
-                    done
-                fi
-
-                local unique_dirs=()
-                local seen_dirs=()
-
-                # Remove duplicate directories while preserving order
-                for dir in "${module_dirs[@]}"; do
-                    if [[ ! " ${seen_dirs[@]} " =~ " ${dir} " ]]; then
-                        seen_dirs+=("${dir}")
-                        unique_dirs+=("${dir}")
-                    fi
-                done
-
-                # Find all module files in the module directories
-                for dir in "${unique_dirs[@]}"; do
-                    if [ ! -d "${dir}" ]; then
-                        log_debug "Module directory not found: ${dir}"
-                        continue
-                    fi
-
-                    log_debug "Searching for modules in: ${dir}"
-
-                    # Find all .sh files that are executable and not named like *test*
-                    while IFS= read -r -d '' module; do
-                        # Skip files that don't end with .sh or are not executable
-                        if [[ ! "${module}" =~ \.sh$ ]] || [ ! -x "${module}" ]; then
-                            continue
-                        fi
-
-                        # Skip test files
-                        if [[ "${module}" == *test* ]] || [[ "${module}" == *Test* ]]; then
-                            log_debug "Skipping test module: ${module}"
-                            continue
-                        fi
-
-                        # Skip disabled modules (files starting with underscore)
-                        local module_name
-                        module_name=$(basename "${module}")
-                        if [[ "${module_name}" = _* ]]; then
-                            log_debug "Skipping disabled module: ${module}"
-                            continue
-                        fi
-
-                        # Check if module has the required functions
-                        if ! grep -q '^module_' "${module}"; then
-                            log_warning "Module ${module} is missing required module_* functions"
-                            continue
-                        fi
-
-                        # Get module metadata if available
-                        local module_info
-                        module_info=$(
-                            grep -E '^#\s*@(name|description|version|author):' "${module}" 2>/dev/null | \
-                            sed -E 's/^#\s*@(name|description|version|author):\s*//'
-                        )
-
-                        if [ -z "${module_info}" ]; then
-                            log_warning "Module ${module} is missing metadata headers"
-                        fi
-
-                        # Add module to the list
-                        modules+=("${module}")
-                        log_debug "Found module: ${module}"
-
-                    done < <(find "${dir}" -type f -name '*.sh' -print0 2>/dev/null)
-                done
-
-                if [ ${#modules[@]} -eq 0 ]; then
-                    log_warning "No valid modules found in any of the search paths"
+# Function to handle command line arguments
+handle_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --test)
+                TEST_MODE=1
+                log_info "Test mode enabled - no changes will be made"
+                shift
+                ;;
+            --verbose|-v)
+                LOG_LEVEL="INFO"
+                set_log_level "${LOG_LEVEL}"
+                log_info "Verbose output enabled"
+                shift
+                ;;
+            --debug)
+                LOG_LEVEL="DEBUG"
+                set_log_level "${LOG_LEVEL}"
+                set -x  # Enable debug mode
+                log_debug "Debug mode enabled"
+                shift
+                ;;
+            --config)
+                if [[ -z $2 ]] || [[ $2 == --* ]]; then
+                    log_error "--config requires an argument"
                     return 1
                 fi
+                CONFIG_FILE="$2"
+                log_debug "Using configuration file: ${CONFIG_FILE}"
+                shift 2
+                ;;
+            --log-level)
+                if [[ -z $2 ]] || [[ $2 == --* ]]; then
+                    log_error "--log-level requires an argument (debug, info, warning, error, critical)"
+                    return 1
+                fi
+                LOG_LEVEL="$2"
+                if ! set_log_level "${LOG_LEVEL}"; then
+                    log_error "Invalid log level: ${LOG_LEVEL}"
+                    return 1
+                fi
+                log_info "Log level set to: ${LOG_LEVEL}"
+                shift 2
+                ;;
+            --help|-h)
+                show_usage
+                # shellcheck disable=SC2317  # False positive - this return is reachable
+                return 2
+                ;;
+            --version|--version=*)
+                echo "Proxmox Template Creator v${VERSION}"
+                return 2
+                ;;
+            --list-modules)
+                # Define discover_modules function if not already defined
+                if ! declare -f discover_modules >/dev/null; then
+                    discover_modules() {
+                        log_debug "Discovering available modules..."
 
-                log_info "Discovered ${#modules[@]} modules"
+                        local modules=()
+                        local module_dirs=(
+                            "${SCRIPT_DIR}/modules"
+                            "${SCRIPT_DIR}/../modules"
+                            "/usr/local/share/proxmox-templates/modules"
+                            "${HOME}/.local/share/proxmox-templates/modules"
+                        )
 
-                # Return the list of modules as a space-separated string
-                printf '%s\n' "${modules[@]}" | sort -u
-            }
-            discover_modules
-            ;;
-        *)
-            log_error "Unknown option: $1"
-            show_usage
-            exit 1
-            ;;
-    esac
-done
+                        # Add any additional module directories from environment
+                        if [ -n "${PROXMOX_MODULE_PATH:-}" ]; then
+                            IFS=':' read -ra extra_dirs <<< "${PROXMOX_MODULE_PATH}"
+                            for dir in "${extra_dirs[@]}"; do
+                                if [ -d "${dir}" ]; then
+                                    module_dirs+=("${dir}")
+                                fi
+                            done
+                        fi
+
+                        local unique_dirs=()
+                        local seen_dirs=()
+
+                        # Remove duplicate directories while preserving order
+                        for dir in "${module_dirs[@]}"; do
+                            local seen=0
+                            # Check if directory is already in seen_dirs
+                            for seen_dir in "${seen_dirs[@]}"; do
+                                if [ "${seen_dir}" = "${dir}" ]; then
+                                    seen=1
+                                    break
+                                fi
+                            done
+                            if [ "${seen}" -eq 0 ]; then
+                                seen_dirs+=("${dir}")
+                                unique_dirs+=("${dir}")
+                            fi
+                        done
+
+                        # Find all module files in the module directories
+                        for dir in "${unique_dirs[@]}"; do
+                            if [ ! -d "${dir}" ]; then
+                                log_debug "Module directory not found: ${dir}"
+                                continue
+                            fi
+
+                            log_debug "Searching for modules in: ${dir}"
+
+                            # Find all .sh files that are executable and not named like *test*
+                            while IFS= read -r -d '' module; do
+                                # Skip files that don't end with .sh or are not executable
+                                if [[ ! "${module}" =~ \.sh$ ]] || [ ! -x "${module}" ]; then
+                                    continue
+                                fi
+
+                                # Skip test files
+                                if [[ "${module}" == *test* ]] || [[ "${module}" == *Test* ]]; then
+                                    log_debug "Skipping test module: ${module}"
+                                    continue
+                                fi
+
+                                # Skip disabled modules (files starting with underscore)
+                                local module_name
+                                module_name=$(basename "${module}")
+                                if [[ "${module_name}" = _* ]]; then
+                                    log_debug "Skipping disabled module: ${module}"
+                                    continue
+                                fi
+
+                                # Check if module has the required functions
+                                if ! grep -q '^module_' "${module}"; then
+                                    log_warning "Module ${module} is missing required module_* functions"
+                                    continue
+                                fi
+
+                                # Get module metadata if available
+                                local module_info
+                                module_info=$(
+                                    grep -E '^#\s*@(name|description|version|author):' "${module}" 2>/dev/null | \
+                                    sed -E 's/^#\s*@(name|description|version|author):\s*//'
+                                )
+
+                                if [ -z "${module_info}" ]; then
+                                    log_warning "Module ${module} is missing metadata headers"
+                                fi
+
+                                # Add module to the list
+                                modules+=("${module}")
+                                log_debug "Found module: ${module}"
+
+                            done < <(find "${dir}" -type f -name '*.sh' -print0 2>/dev/null)
+                        done
+
+                        if [ ${#modules[@]} -eq 0 ]; then
+                            log_warning "No valid modules found in any of the search paths"
+                            return 1
+                        fi
+
+                        log_info "Discovered ${#modules[@]} modules"
+
+                        # Return the list of modules as a space-separated string
+                        printf '%s\n' "${modules[@]}" | sort -u
+                    }
+                fi
+
+                # Call the function and capture its output
+                if ! discovered_modules=$(discover_modules); then
+                    return 1
+                fi
+                echo "${discovered_modules}"
+                return 2  # Indicate that we should exit after this
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                show_usage
+                # shellcheck disable=SC2317  # False positive - this return is reachable
+                return 1
+                ;;
+        esac
+    done
+    return 0
+}
+
+# Parse command line arguments
+if ! handle_arguments "$@"; then
+    # If handle_arguments returns non-zero, exit with error
+    exit 1
+fi
+
+# If handle_arguments returns 2, it means we should exit successfully (e.g., --help or --version)
+if [ $? -eq 2 ]; then
+    exit 0
+fi
 
 # Configuration management functions
 create_default_config() {
@@ -498,16 +531,25 @@ get_config() {
 
     # Extract the value using a more robust method
     local value
-    if value=$(grep -m 1 -E "^\s*${key}\s*=["\']?([^"\']+)["\']?" "${config_file}" 2>/dev/null); then
+    if value=$(grep -m 1 -E "^[[:space:]]*${key}[[:space:]]*=[\"']?([^\"']+)[\"']?" "${config_file}" 2>/dev/null); then
         # Extract just the value part (after =)
         value=${value#*=}
         # Remove surrounding quotes and trim whitespace
-        value=$(echo "${value}" | sed -e 's/^[[:space:]]*["\']//' -e 's/["\'][[:space:]]*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        value=$(echo "${value}" | {
+            # First remove leading whitespace and quotes
+            sed -e 's/^[[:space:]]*//' \
+                -e 's/^["\x27]//' \
+                -e 's/["\x27][[:space:]]*$//' \
+                -e 's/[[:space:]]*$//'
+        })
 
-        if [[ -n "${value}" ]]; then
+        if [ -n "${value}" ]; then
             # Expand any variables in the value
-            value=$(eval "echo ${value}" 2>/dev/null || echo "${value}")
-            echo "${value}"
+            if [[ "${value}" =~ \$ ]]; then
+                # Use a here-document to safely handle variable expansion
+                value=$(eval "cat <<EOF\n${value}\nEOF\n" 2>/dev/null || echo "${value}")
+            fi
+            printf '%s\n' "${value}"
             return 0
         fi
     fi
@@ -591,23 +633,36 @@ check_dependencies() {
     local missing_commands=()
     local missing_python_modules=()
 
-{{ ... }}
+    # Check for required commands
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "${cmd}" >/dev/null 2>&1; then
+            log_error "Required command not found: ${cmd}"
+            missing_commands+=("${cmd}")
+        fi
+    done
+
+    # Check for required Python modules
+    for module in "${required_python_modules[@]}"; do
+        if ! python3 -c "import ${module}" 2>/dev/null; then
+            log_error "Required Python module not found: ${module}"
+            missing_python_modules+=("${module}")
         fi
     done
 
     # Check for optional but recommended dependencies
     local recommended_commands=(
-        "git"
-        "htop"
-        "iftop"
-        "iotop"
-        "ncdu"
+        git
+        htop
+        iftop
+        iotop
+        ncdu
     )
 
     for cmd in "${recommended_commands[@]}"; do
         if ! command -v "${cmd}" >/dev/null 2>&1; then
             log_info "Recommended command not found (not required): ${cmd}"
-{{ ... }}
+        fi
+    done
 
     if [ ${#missing_commands[@]} -gt 0 ] || [ ${#missing_python_modules[@]} -gt 0 ]; then
         log_warning "Missing ${#missing_commands[@]} commands and ${#missing_python_modules[@]} Python modules"
@@ -619,13 +674,19 @@ check_dependencies() {
             # Install system packages if we can
             if [ ${#missing_commands[@]} -gt 0 ] && command -v apt-get >/dev/null 2>&1; then
                 log_info "Installing system packages..."
-{{ ... }}
-                if ! sudo apt-get update || ! sudo apt-get install -y "${missing_commands[@]}"; then
-                    log_error "Failed to install system packages"
+                log_info "Running apt-get update..."
+                if ! sudo apt-get update; then
+                    log_error "Failed to update package lists"
                     missing_deps=true
                 else
-                    log_info "Successfully installed system packages"
-                    missing_deps=false
+                    log_info "Installing packages: ${missing_commands[*]}"
+                    if ! sudo apt-get install -y "${missing_commands[@]}"; then
+                        log_error "Failed to install system packages"
+                        missing_deps=true
+                    else
+                        log_info "Successfully installed system packages"
+                        missing_deps=false
+                    fi
                 fi
             fi
 

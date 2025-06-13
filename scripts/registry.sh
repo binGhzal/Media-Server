@@ -34,6 +34,7 @@ log() {
 }
 
 # Error handling function
+# shellcheck disable=SC2317  # False positive - this function is used in trap
 handle_error() {
     local exit_code="$1"
     local line_no="$2"

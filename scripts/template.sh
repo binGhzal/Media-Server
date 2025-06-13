@@ -1036,50 +1036,6 @@ if [ -z "$TEST_MODE" ]; then
     check_proxmox
 fi
 
-# Main menu function
-main_menu() {
-    while true; do
-        local choice
-        choice=$(whiptail --title "Proxmox Template Creator" --menu "Select an option:" 20 70 8 \
-            "1" "Create new template" \
-            "2" "List all templates" \
-            "3" "Manage existing templates" \
-            "4" "Validate template" \
-            "5" "Test template" \
-            "6" "Template configuration management" \
-            "7" "Help and documentation" \
-            "8" "Exit" 3>&1 1>&2 2>&3)
-
-        case $choice in
-            1)
-                create_template
-                ;;
-            2)
-                list_templates
-                ;;
-            3)
-                manage_templates
-                ;;
-            4)
-                validate_template
-                ;;
-            5)
-                test_template
-                ;;
-            6)
-                manage_template_config
-                ;;
-            7)
-                show_help
-                ;;
-            8|"")
-                log_info "Exiting template creator"
-                exit 0
-                ;;
-        esac
-    done
-}
-
 # The first (older) show_help function definition (lines approx 930-948) is removed.
 # The first (older) create_template function definition (lines approx 190-480) is removed.
 # The script will now only use the more detailed create_template and show_help functions defined later.
@@ -1447,7 +1403,7 @@ create_template() {
                             "template" "Predefined script templates" \
                             "none" "Skip custom scripts" 3>&1 1>&2 2>&3)
 
-                        if [ "$script_option" != "none" ] && [ $? -eq 0 ]; then
+                        if [ "$script_option" != "none" ] && command -v "$script_option" >/dev/null 2>&1; then
                             case "$script_option" in
                                 "commands")
                                     custom_scripts=$(whiptail --title "Custom Commands" --inputbox "Enter commands (one per line, use \\n for newlines):" 15 70 "" 3>&1 1>&2 2>&3)
@@ -1480,7 +1436,7 @@ create_template() {
                                         "custom-user" "Create additional system user" \
                                         "none" "Cancel template selection" 3>&1 1>&2 2>&3)
 
-                                    if [ "$template_choice" != "none" ] && [ $? -eq 0 ]; then
+                                    if [ "$template_choice" != "none" ] && [ -n "$template_choice" ]; then
                                         custom_scripts=$(get_script_template "$template_choice")
                                         if [ -n "$custom_scripts" ]; then
                                             log_info "Applied script template: $template_choice"

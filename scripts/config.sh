@@ -496,15 +496,19 @@ export_config() {
 EOF
 
     if [ "$include_system" = "true" ] && [ -f "$SYSTEM_CONFIG" ]; then
-        echo "# System Configuration" >> "$output_file"
-        grep -E '^[A-Z_][A-Z0-9_]*=' "$SYSTEM_CONFIG" >> "$output_file"
-        echo "" >> "$output_file"
+        {
+            echo "# System Configuration"
+            grep -E '^[A-Z_][A-Z0-9_]*=' "$SYSTEM_CONFIG"
+            echo ""
+        } >> "$output_file"
     fi
 
     if [ "$include_user" = "true" ] && [ -f "$USER_CONFIG" ]; then
-        echo "# User Configuration" >> "$output_file"
-        grep -E '^[A-Z_][A-Z0-9_]*=' "$USER_CONFIG" >> "$output_file"
-        echo "" >> "$output_file"
+        {
+            echo "# User Configuration"
+            grep -E '^[A-Z_][A-Z0-9_]*=' "$USER_CONFIG"
+            echo ""
+        } >> "$output_file"
     fi
 
     log "INFO" "Configuration exported successfully"

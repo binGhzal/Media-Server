@@ -33,11 +33,13 @@ log() {
     echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*${reset}"
 }
 
-# Error handling function - Fixed unreachable function issue
+# Error handling function
+# shellcheck disable=SC2317  # False positive - this function is used in trap
 handle_error() {
     local exit_code="$1"
     local line_no="$2"
     log "ERROR" "An error occurred on line $line_no with exit code $exit_code"
+    # shellcheck disable=SC2317  # False positive - this is reachable
     if [ -t 0 ]; then  # If running interactively
         whiptail --title "Error" --msgbox "An error occurred. Check the logs for details." 10 60 3>&1 1>&2 2>&3
     fi
@@ -2679,7 +2681,7 @@ EOF
                     ;;
             esac
             ;;
-        4)
+        7)
             # Install Helm and deploy chart
             if ! command -v helm >/dev/null 2>&1; then
                 if (whiptail --title "Helm Installation" --yesno "Helm is not installed. Install it now?" 10 60 3>&1 1>&2 2>&3); then
@@ -2715,11 +2717,11 @@ EOF
                 log "INFO" "Helm chart $chart_name deployed as release $release_name"
             fi
             ;;
-        3)
+        8)
             # Multi-VM deployment
             multi_vm_deployment
             ;;
-        4)
+        9)
             # Container management - Enhanced functionality
             local manage_option
             manage_option=$(whiptail --title "Container Management" --menu "Choose an option:" 20 70 7 \

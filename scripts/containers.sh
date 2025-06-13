@@ -1617,10 +1617,724 @@ Token also saved to: /tmp/dashboard-admin-token.txt" 20 80
     fi
 }
 
+# Function to set up Prometheus and Grafana monitoring stack
+setup_elastic_stack() {
+    log "INFO" "Setting up Elastic Stack (ELK) for log management and analysis..."
+    
+    # Check if running in Kubernetes environment
+    if ! command -v kubectl &> /dev/null; then
+        log "ERROR" "kubectl not found. Please ensure you have a working Kubernetes cluster."
+        return 1
+    fi
+    
+    # Check if Helm is installed
+    if ! command -v helm &> /dev/null; then
+        log "ERROR" "Helm is required for Elastic Stack installation."
+        if whiptail --title "Install Helm?" --yesno "Helm is required for Elastic Stack. Install Helm now?" 10 60; then
+            install_kubernetes_tools
+        else
+            log "ERROR" "Helm installation declined. Cannot proceed with Elastic Stack setup."
+            return 1
+        fi
+    fi
+    
+    # Create logging namespace if it doesn't exist
+    if ! kubectl get namespace logging &> /dev/null; then
+        log "INFO" "Creating logging namespace..."
+        kubectl create namespace logging
+    fi
+    
+    # Add Elastic Helm repository
+    log "INFO" "Adding Elastic Helm repository..."
+    helm repo add elastic https://helm.elastic.co
+    helm repo update
+    
+    # Install Elasticsearch
+    log "INFO" "Installing Elasticsearch..."
+    if ! helm status -n logging elasticsearch &> /dev/null; then
+        # Create storage class for Elasticsearch
+        cat <<EOF | kubectl apply -f -
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: elasticsearch-local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+EOF
+        
+        # Create persistent volumes for Elasticsearch
+        for i in {0..2}; do
+            cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: elasticsearch-pv-$i
+  labels:
+    type: local
+spec:
+  storageClassName: elasticsearch-local-storage
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/elasticsearch-$i"
+  persistentVolumeReclaimPolicy: Retain
+EOF
+        done
+        
+        # Install Elasticsearch with Helm
+        helm install elasticsearch elastic/elasticsearch \
+            --namespace logging \
+            --set replicas=3 \
+            --set minimumMasterNodes=2 \
+            --set volumeClaimTemplate.storageClassName=elasticsearch-local-storage \
+            --set volumeClaimTemplate.resources.requests.storage=10Gi \
+            --set resources.requests.cpu=100m \
+            --set resources.requests.memory=512Mi \
+            --set resources.limits.cpu=1000m \
+            --set resources.limits.memory=2Gi \
+            --set esJavaOpts="-Xms512m -Xmx512m" \
+            --set podSecurityContext.fsGroup=1000 \
+            --set podSecurityContext.runAsUser=1000 \
+            --set podSecurityContext.runAsNonRoot=true
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Elasticsearch"
+            return 1
+        fi
+        
+        # Wait for Elasticsearch to be ready
+        log "INFO" "Waiting for Elasticsearch to be ready..."
+        kubectl wait --for=condition=ready pod -l app=elasticsearch-master -n logging --timeout=300s
+    else
+        log "INFO" "Elasticsearch is already installed. Skipping..."
+    fi
+    
+    # Install Kibana
+    log "INFO" "Installing Kibana..."
+    if ! helm status -n logging kibana &> /dev/null; then
+        helm install kibana elastic/kibana \
+            --namespace logging \
+            --set service.type=LoadBalancer \
+            --set service.port=5601 \
+            --set resources.requests.cpu=100m \
+            --set resources.requests.memory=512Mi \
+            --set resources.limits.cpu=1000m \
+            --set resources.limits.memory=1Gi \
+            --set podSecurityContext.fsGroup=1000 \
+            --set podSecurityContext.runAsUser=1000 \
+            --set podSecurityContext.runAsNonRoot=true
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Kibana"
+            return 1
+        fi
+    else
+        log "INFO" "Kibana is already installed. Skipping..."
+    fi
+    
+    # Install Filebeat
+    log "INFO" "Installing Filebeat for log collection..."
+    if ! helm status -n logging filebeat &> /dev/null; then
+        # Create Filebeat configuration
+        local filebeat_config="
+        filebeat.inputs:
+        - type: container
+          paths:
+            - /var/log/containers/*.log
+          processors:
+            - add_kubernetes_metadata:
+                host: \"\${NODE_NAME}\"
+                matchers:
+                - logs_path:
+                    logs_path: \"/var/log/containers/\"
+        
+        output.elasticsearch:
+          hosts: [\"elasticsearch-master:9200\"]
+          username: \"elastic\"
+          password: \"${ELASTICSEARCH_PASSWORD}\"
+        
+        setup.kibana:
+          host: \"kibana-kibana:5601\"
+        
+        setup.dashboards.enabled: true
+        setup.ilm.enabled: false
+        "
+        
+        # Install Filebeat with Helm
+        helm install filebeat elastic/filebeat \
+            --namespace logging \
+            --set daemonset.enabled=true \
+            --set daemonset.daemonset.filebeatConfig.filebeat.yml="$filebeat_config" \
+            --set daemonset.extraEnvs[0].name=ELASTICSEARCH_PASSWORD \
+            --set daemonset.extraEnvs[0].valueFrom.secretKeyRef.name=elasticsearch-master-credentials \
+            --set daemonset.extraEnvs[0].valueFrom.secretKeyRef.key=password \
+            --set daemonset.extraEnvs[1].name=NODE_NAME \
+            --set daemonset.extraEnvs[1].valueFrom.fieldRef.fieldPath=spec.nodeName \
+            --set daemonset.volumeMounts[0].name=varlog \
+            --set daemonset.volumeMounts[0].mountPath=/var/log \
+            --set daemonset.volumeMounts[0].readOnly=true \
+            --set daemonset.volumes[0].name=varlog \
+            --set daemonset.volumes[0].hostPath.path=/var/log \
+            --set podSecurityContext.fsGroup=0 \
+            --set podSecurityContext.runAsUser=0 \
+            --set podSecurityContext.runAsNonRoot=false
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Filebeat"
+            return 1
+        fi
+    else
+        log "INFO" "Filebeat is already installed. Skipping..."
+    fi
+    
+    # Install Metricbeat
+    log "INFO" "Installing Metricbeat for metrics collection..."
+    if ! helm status -n logging metricbeat &> /dev/null; then
+        # Create Metricbeat configuration
+        local metricbeat_config="
+        metricbeat.modules:
+        - module: kubernetes
+          metricsets:
+            - container
+            - node
+            - pod
+            - system
+            - volume
+          period: 10s
+          hosts: [\"https://${KUBE_STATE_METRICS}:443\"]
+          bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          ssl.certificate_authorities:
+            - /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        
+        output.elasticsearch:
+          hosts: [\"elasticsearch-master:9200\"]
+          username: \"elastic\"
+          password: \"${ELASTICSEARCH_PASSWORD}\"
+        
+        setup.kibana:
+          host: \"kibana-kibana:5601\"
+        
+        setup.dashboards.enabled: true
+        "
+        
+        # Install Metricbeat with Helm
+        helm install metricbeat elastic/metricbeat \
+            --namespace logging \
+            --set daemonset.enabled=true \
+            --set daemonset.daemonset.metricbeatConfig.metricbeat.yml="$metricbeat_config" \
+            --set daemonset.extraEnvs[0].name=ELASTICSEARCH_PASSWORD \
+            --set daemonset.extraEnvs[0].valueFrom.secretKeyRef.name=elasticsearch-master-credentials \
+            --set daemonset.extraEnvs[0].valueFrom.secretKeyRef.key=password \
+            --set daemonset.extraEnvs[1].name=KUBE_STATE_METRICS \
+            --set daemonset.extraEnvs[1].value=kube-state-metrics.kube-system.svc.cluster.local \
+            --set podSecurityContext.fsGroup=0 \
+            --set podSecurityContext.runAsUser=0 \
+            --set podSecurityContext.runAsNonRoot=false
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Metricbeat"
+            return 1
+        fi
+    else
+        log "INFO" "Metricbeat is already installed. Skipping..."
+    fi
+    
+    # Show access information
+    show_elastic_stack_access_info
+}
+
+# Function to display Elastic Stack access information
+show_elastic_stack_access_info() {
+    local kibana_svc=""
+    local elasticsearch_svc=""
+    
+    # Get Kibana service details
+    if kibana_svc=$(kubectl get svc -n logging -l app=kibana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       kibana_svc=$(kubectl get svc -n logging -l app=kibana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        kibana_port=$(kubectl get svc -n logging -l app=kibana -o jsonpath='{.items[0].spec.ports[0].port}')
+        kibana_url="http://$kibana_svc:$kibana_port"
+        log "INFO" "Kibana URL: $kibana_url"
+        log "INFO" "Kibana Username: elastic"
+        log "INFO" "Kibana Password: $(kubectl get secret -n logging elasticsearch-master-credentials -o jsonpath='{.data.password}' | base64 --decode)"
+    fi
+    
+    # Get Elasticsearch service details
+    if elasticsearch_svc=$(kubectl get svc -n logging -l app=elasticsearch-master -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       elasticsearch_svc=$(kubectl get svc -n logging -l app=elasticsearch-master -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        elasticsearch_port=$(kubectl get svc -n logging -l app=elasticsearch-master -o jsonpath='{.items[0].spec.ports[0].port}')
+        elasticsearch_url="http://$elasticsearch_svc:$elasticsearch_port"
+        log "INFO" "Elasticsearch URL: $elasticsearch_url"
+    fi
+    
+    # Display access information in a dialog
+    local message="✅ Elastic Stack (ELK) Installed Successfully!\n\n"
+    
+    if [ -n "$kibana_url" ]; then
+        message+="🔵 Kibana: $kibana_url\n"
+        message+="   Username: elastic\n"
+        message+="   Password: $(kubectl get secret -n logging elasticsearch-master-credentials -o jsonpath='{.data.password}' | base64 --decode)\n\n"
+    fi
+    
+    if [ -n "$elasticsearch_url" ]; then
+        message+="🔵 Elasticsearch: $elasticsearch_url\n\n"
+    fi
+    
+    message+="📊 Pre-configured dashboards have been imported into Kibana.\n\n"
+    message+="To access these services from your local machine, you may need to set up port forwarding or an ingress controller.\n\n"
+    message+="To set up port forwarding, run these commands in separate terminals:\n"
+    message+="  kubectl port-forward -n logging svc/kibana-kibana 5601:5601\n"
+    message+="  kubectl port-forward -n logging svc/elasticsearch-master 9200:9200"
+    
+    whiptail --title "Elastic Stack (ELK) Installed" --msgbox "$message" 25 100
+}
+
+setup_opentelemetry_stack() {
+    log "INFO" "Setting up OpenTelemetry, Loki, and Tempo..."
+    
+    # Check if running in Kubernetes environment
+    if ! command -v kubectl &> /dev/null; then
+        log "ERROR" "kubectl not found. Please ensure you have a working Kubernetes cluster."
+        return 1
+    fi
+    
+    # Check if Helm is installed
+    if ! command -v helm &> /dev/null; then
+        log "ERROR" "Helm is required for OpenTelemetry stack installation."
+        if whiptail --title "Install Helm?" --yesno "Helm is required for OpenTelemetry stack. Install Helm now?" 10 60; then
+            install_kubernetes_tools
+        else
+            log "ERROR" "Helm installation declined. Cannot proceed with OpenTelemetry stack setup."
+            return 1
+        fi
+    fi
+    
+    # Create monitoring namespace if it doesn't exist
+    if ! kubectl get namespace monitoring &> /dev/null; then
+        log "INFO" "Creating monitoring namespace..."
+        kubectl create namespace monitoring
+    fi
+    
+    # Add required Helm repositories
+    log "INFO" "Adding required Helm repositories..."
+    helm repo add grafana https://grafana.github.io/helm-charts
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+    helm repo update
+    
+    # Install Loki for logs
+    log "INFO" "Installing Loki for log aggregation..."
+    if ! helm status -n monitoring loki &> /dev/null; then
+        helm install loki grafana/loki-stack \
+            --namespace monitoring \
+            --set promtail.enabled=true \
+            --set loki.persistence.enabled=true \
+            --set loki.persistence.size=10Gi \
+            --set loki.config.table_manager.retention_deletes_enabled=true \
+            --set loki.config.table_manager.retention_period=720h
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Loki"
+            return 1
+        fi
+    else
+        log "INFO" "Loki is already installed. Skipping..."
+    fi
+    
+    # Install Tempo for traces
+    log "INFO" "Installing Tempo for distributed tracing..."
+    if ! helm status -n monitoring tempo &> /dev/null; then
+        helm install tempo grafana/tempo-distributed \
+            --namespace monitoring \
+            --set memcached.enabled=true \
+            --set memcached-exporter.enabled=true \
+            --set metricsGenerator.enabled=true \
+            --set metricsGenerator.remoteWriteUrl="http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090/api/v1/write" \
+            --set tempo.queryFrontend.jaegerQuery.enabled=true \
+            --set 'tempo.tempo.queryFrontend.jaegerQuery.ingress.enabled=true' \
+            --set 'tempo.tempo.queryFrontend.jaegerQuery.ingress.hostname=tempo.local' \
+            --set 'tempo.tempo.queryFrontend.jaegerQuery.ingress.paths[0]=/'
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Tempo"
+            return 1
+        fi
+    else
+        log "INFO" "Tempo is already installed. Skipping..."
+    fi
+    
+    # Install OpenTelemetry Collector
+    log "INFO" "Installing OpenTelemetry Collector..."
+    if ! helm status -n monitoring opentelemetry-collector &> /dev/null; then
+        # Create a basic configuration for the OpenTelemetry Collector
+        local otel_config="
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+              http:
+        
+        processors:
+          memory_limiter:
+            check_interval: 1s
+            limit_mib: 512
+            spike_limit_mib: 256
+          batch:
+            send_batch_size: 1024
+            timeout: 10s
+        
+        exporters:
+          logging:
+            loglevel: info
+          prometheusremotewrite:
+            endpoint: http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+          loki:
+            endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+          otlp:
+            endpoint: tempo.monitoring.svc.cluster.local:4317
+            tls:
+              insecure: true
+        
+        service:
+          pipelines:
+            traces:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [otlp]
+            metrics:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [prometheusremotewrite]
+            logs:
+              receivers: [otlp]
+              processors: [memory_limiter, batch]
+              exporters: [loki]
+        "
+        
+        # Create a ConfigMap with the configuration
+        kubectl create configmap -n monitoring opentelemetry-collector-conf --from-literal=config="$otel_config" --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Install the OpenTelemetry Collector
+        helm install opentelemetry-collector open-telemetry/opentelemetry-collector \
+            --namespace monitoring \
+            --set mode=daemonset \
+            --set configMap.name=opentelemetry-collector-conf \
+            --set configMap.create=false \
+            --set extraPorts[0].name=otlp-http \
+            --set extraPorts[0].port=4318 \
+            --set extraPorts[0].protocol=TCP \
+            --set extraPorts[0].targetPort=4318 \
+            --set service.ports.otlp-http.port=4318 \
+            --set service.ports.otlp-http.protocol=TCP \
+            --set service.ports.otlp-http.targetPort=4318 \
+            --set service.ports.otlp-http.nodePort=null \
+            --set service.ports.otlp-grpc.port=4317 \
+            --set service.ports.otlp-grpc.protocol=TCP \
+            --set service.ports.otlp-grpc.targetPort=4317 \
+            --set service.ports.otlp-grpc.nodePort=null
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install OpenTelemetry Collector"
+            return 1
+        fi
+    else
+        log "INFO" "OpenTelemetry Collector is already installed. Skipping..."
+    fi
+    
+    # Install Grafana if not already installed
+    if ! helm status -n monitoring grafana &> /dev/null; then
+        log "INFO" "Installing Grafana..."
+        
+        # Create a secret for Grafana admin password
+        kubectl create secret generic -n monitoring grafana-admin \
+            --from-literal=admin-user=admin \
+            --from-literal=admin-password=admin \
+            --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Install Grafana
+        helm install grafana grafana/grafana \
+            --namespace monitoring \
+            --set admin.existingSecret=grafana-admin \
+            --set service.type=LoadBalancer \
+            --set persistence.enabled=true \
+            --set persistence.size=10Gi \
+            --set-string 'datasources.datasources\.yaml.apiVersion=1' \
+            --set 'datasources.datasources\.yaml.datasources[0].name=Loki' \
+            --set 'datasources.datasources\.yaml.datasources[0].type=loki' \
+            --set 'datasources.datasources\.yaml.datasources[0].url=http://loki.monitoring.svc.cluster.local:3100' \
+            --set 'datasources.datasources\.yaml.datasources[0].access=proxy' \
+            --set 'datasources.datasources\.yaml.datasources[1].name=Tempo' \
+            --set 'datasources.datasources\.yaml.datasources[1].type=tempo' \
+            --set 'datasources.datasources\.yaml.datasources[1].url=http://tempo.monitoring.svc.cluster.local:3200' \
+            --set 'datasources.datasources\.yaml.datasources[1].access=proxy' \
+            --set 'datasources.datasources\.yaml.datasources[2].name=Prometheus' \
+            --set 'datasources.datasources\.yaml.datasources[2].type=prometheus' \
+            --set 'datasources.datasources\.yaml.datasources[2].url=http://prometheus-stack-kube-prom-prometheus.monitoring.svc.cluster.local:9090' \
+            --set 'datasources.datasources\.yaml.datasources[2].access=proxy'
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR" "Failed to install Grafana"
+            return 1
+        fi
+    else
+        log "INFO" "Grafana is already installed. Skipping..."
+    fi
+    
+    # Import dashboards
+    log "INFO" "Importing dashboards..."
+    local grafana_pod
+    grafana_pod=$(kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].metadata.name}')
+    
+    if [ -n "$grafana_pod" ]; then
+        # Wait for Grafana to be ready
+        kubectl wait --for=condition=ready pod/$grafana_pod -n monitoring --timeout=300s
+        
+        # Import OpenTelemetry Collector dashboard
+        kubectl exec -n monitoring $grafana_pod -- wget -q -O - https://raw.githubusercontent.com/open-telemetry/opentelemetry-collector/main/exporter/loadbalancingexporter/example/grafana/dashboard.json | \
+            kubectl exec -i -n monitoring $grafana_pod -- curl -s -X POST -H "Content-Type: application/json" -H "Accept: application/json" -d @- http://admin:admin@localhost:3000/api/dashboards/import
+        
+        # Import Tempo dashboard
+        kubectl exec -n monitoring $grafana_pod -- wget -q -O - https://raw.githubusercontent.com/grafana/tempo/main/example/docker-compose/grafana/dashboards/tempo-single.json | \
+            kubectl exec -i -n monitoring $grafana_pod -- curl -s -X POST -H "Content-Type: application/json" -H "Accept: application/json" -d @- http://admin:admin@localhost:3000/api/dashboards/import
+    fi
+    
+    # Show access information
+    show_opentelemetry_access_info
+}
+
+# Function to display OpenTelemetry stack access information
+show_opentelemetry_access_info() {
+    local grafana_svc=""
+    local tempo_svc=""
+    
+    # Get Grafana service details
+    if grafana_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       grafana_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        grafana_port=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].spec.ports[0].port}')
+        grafana_url="http://$grafana_svc:$grafana_port"
+        log "INFO" "Grafana URL: $grafana_url"
+        log "INFO" "Grafana Username: admin"
+        log "INFO" "Grafana Password: admin"
+    fi
+    
+    # Get Tempo service details
+    if tempo_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       tempo_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        tempo_port=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=tempo -o jsonpath='{.items[0].spec.ports[0].port}')
+        tempo_url="http://$tempo_svc:$tempo_port"
+        log "INFO" "Tempo URL: $tempo_url"
+    fi
+    
+    # Display access information in a dialog
+    local message="✅ OpenTelemetry Stack Installed Successfully!\n\n"
+    
+    if [ -n "$grafana_url" ]; then
+        message+="🔵 Grafana: $grafana_url\n"
+        message+="   Username: admin\n"
+        message+="   Password: admin\n\n"
+    fi
+    
+    if [ -n "$tempo_url" ]; then
+        message+="🔵 Tempo: $tempo_url\n\n"
+    fi
+    
+    message+="📊 Pre-configured dashboards have been imported into Grafana.\n\n"
+    message+="To access these services from your local machine, you may need to set up port forwarding or an ingress controller.\n\n"
+    message+="To set up port forwarding, run these commands in separate terminals:\n"
+    message+="  kubectl port-forward -n monitoring svc/grafana 3000:80\n"
+    message+="  kubectl port-forward -n monitoring svc/tempo-query 16686:16686\n"
+    message+="  kubectl port-forward -n monitoring svc/loki 3100:3100"
+    
+    whiptail --title "OpenTelemetry Stack Installed" --msgbox "$message" 25 100
+}
+
+setup_prometheus_grafana() {
+    log "INFO" "Setting up Prometheus and Grafana..."
+    
+    # Check if kube-prometheus-stack is already installed
+    if helm list -n monitoring | grep -q prometheus-stack; then
+        log "INFO" "Prometheus Stack is already installed in the monitoring namespace"
+        if ! whiptail --title "Prometheus Stack Found" --yesno "Prometheus Stack is already installed. Do you want to upgrade it?" 10 60; then
+            log "INFO" "Skipping Prometheus Stack installation"
+            show_monitoring_access_info
+            return 0
+        fi
+    fi
+    
+    # Create monitoring namespace if it doesn't exist
+    if ! kubectl get namespace monitoring &> /dev/null; then
+        log "INFO" "Creating monitoring namespace..."
+        kubectl create namespace monitoring
+    fi
+    
+    # Add Prometheus Community Helm repository
+    log "INFO" "Adding Prometheus Community Helm repository..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
+    
+    # Install kube-prometheus-stack
+    log "INFO" "Installing kube-prometheus-stack..."
+    
+    # Check if we should use custom values
+    local use_custom_values="n"
+    if whiptail --title "Custom Configuration" --yesno "Would you like to use a custom values file for Prometheus Stack?" 10 60; then
+        use_custom_values="y"
+    fi
+    
+    local helm_command="helm upgrade --install prometheus-stack prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+        --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+        --set prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues=false \
+        --set prometheus.prometheusSpec.probeSelectorNilUsesHelmValues=false \
+        --set prometheus.prometheusSpec.enableAdminAPI=false \
+        --set grafana.adminPassword=admin \
+        --set grafana.service.type=LoadBalancer \
+        --set grafana.ingress.enabled=true \
+        --set grafana.ingress.hosts[0]=grafana.local \
+        --set grafana.ingress.paths[0]=/ \
+        --set grafana.ingress.tls[0].hosts[0]=grafana.local \
+        --set grafana.ingress.tls[0].secretName=grafana-tls \
+        --set prometheus.service.type=LoadBalancer \
+        --set alertmanager.service.type=LoadBalancer \
+        --set prometheus-node-exporter.hostRootFsMount.enabled=false \
+        --set prometheus-node-exporter.hostNetwork=false \
+        --set prometheus-node-exporter.hostPID=false \
+        --set prometheus-node-exporter.podSecurityPolicy.enabled=true \
+        --set prometheus-node-exporter.podSecurityPolicy.annotations."apparmor.security.beta.kubernetes.io/allowedProfileNames"=runtime/default \
+        --set prometheus-node-exporter.podSecurityPolicy.annotations."apparmor.security.beta.kubernetes.io/defaultProfileName"=runtime/default \
+        --set prometheus-node-exporter.podSecurityPolicy.annotations."seccomp.security.alpha.kubernetes.io/allowedProfileNames"=runtime/default \
+        --set prometheus-node-exporter.podSecurityPolicy.annotations."seccomp.security.alpha.kubernetes.io/defaultProfileName"=runtime/default"
+    
+    if [ "$use_custom_values" = "y" ]; then
+        local custom_values_file
+        custom_values_file=$(whiptail --title "Custom Values File" --inputbox "Enter the path to your custom values file:" 10 60 "$SCRIPT_DIR/config/prometheus-values.yaml" 3>&1 1>&2 2>&3)
+        if [ -f "$custom_values_file" ]; then
+            helm_command="$helm_command -f $custom_values_file"
+            log "INFO" "Using custom values file: $custom_values_file"
+        else
+            log "WARN" "Custom values file not found. Using default values."
+        fi
+    fi
+    
+    log "INFO" "Running Helm command: $helm_command"
+    eval "$helm_command"
+    
+    if [ $? -eq 0 ]; then
+        log "INFO" "Prometheus Stack deployed successfully!"
+        show_monitoring_access_info
+    else
+        log "ERROR" "Failed to deploy Prometheus Stack"
+        return 1
+    fi
+}
+
+# Function to display monitoring access information
+show_monitoring_access_info() {
+    local grafana_svc=""
+    local prometheus_svc=""
+    local alertmanager_svc=""
+    
+    # Get Grafana service details
+    if grafana_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       grafana_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        grafana_port=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana -o jsonpath='{.items[0].spec.ports[0].port}')
+        grafana_url="http://$grafana_svc:$grafana_port"
+        log "INFO" "Grafana URL: $grafana_url"
+        log "INFO" "Grafana Username: admin"
+        log "INFO" "Grafana Password: admin"
+    fi
+    
+    # Get Prometheus service details
+    if prometheus_svc=$(kubectl get svc -n monitoring -l app=prometheus -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       prometheus_svc=$(kubectl get svc -n monitoring -l app=prometheus -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        prometheus_port=$(kubectl get svc -n monitoring -l app=prometheus -o jsonpath='{.items[0].spec.ports[0].port}')
+        prometheus_url="http://$prometheus_svc:$prometheus_port"
+        log "INFO" "Prometheus URL: $prometheus_url"
+    fi
+    
+    # Get Alertmanager service details
+    if alertmanager_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=alertmanager -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}') || 
+       alertmanager_svc=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=alertmanager -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'); then
+        alertmanager_port=$(kubectl get svc -n monitoring -l app.kubernetes.io/name=alertmanager -o jsonpath='{.items[0].spec.ports[0].port}')
+        alertmanager_url="http://$alertmanager_svc:$alertmanager_port"
+        log "INFO" "Alertmanager URL: $alertmanager_url"
+    fi
+    
+    # Display access information in a dialog
+    local message="✅ Monitoring Stack Installed Successfully!\n\n"
+    
+    if [ -n "$grafana_url" ]; then
+        message+="🔵 Grafana: $grafana_url\n"
+        message+="   Username: admin\n"
+        message+="   Password: admin\n\n"
+    fi
+    
+    if [ -n "$prometheus_url" ]; then
+        message+="🟠 Prometheus: $prometheus_url\n\n"
+    fi
+    
+    if [ -n "$alertmanager_url" ]; then
+        message+="🔴 Alertmanager: $alertmanager_url\n\n"
+    fi
+    
+    message+="To access these services from your local machine, you may need to set up port forwarding or an ingress controller.\n\n"
+    message+="To set up port forwarding, run these commands in separate terminals:\n"
+    message+="  kubectl port-forward -n monitoring svc/prometheus-stack-grafana 3000:80\n"
+    message+="  kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-prometheus 9090:9090\n"
+    message+="  kubectl port-forward -n monitoring svc/prometheus-stack-kube-prom-alertmanager 9093:9093"
+    
+    whiptail --title "Monitoring Stack Installed" --msgbox "$message" 25 100
+}
+
 setup_cluster_monitoring() {
-    log "INFO" "Cluster monitoring setup not yet implemented"
-    whiptail --title "Coming Soon" --msgbox "Cluster monitoring setup will be implemented in the next update." 10 60
-    return 0
+    log "INFO" "Setting up cluster monitoring..."
+    
+    # Check if running in Kubernetes environment
+    if ! command -v kubectl &> /dev/null; then
+        log "ERROR" "kubectl not found. Please ensure you have a working Kubernetes cluster."
+        return 1
+    fi
+    
+    # Check if Helm is installed
+    if ! command -v helm &> /dev/null; then
+        log "WARN" "Helm not found. Some monitoring features may be limited."
+        if whiptail --title "Install Helm?" --yesno "Helm is required for advanced monitoring setup. Install Helm now?" 10 60; then
+            install_kubernetes_tools
+        else
+            log "INFO" "Proceeding with basic monitoring setup"
+        fi
+    fi
+    
+    # Present monitoring options
+    local monitoring_choice
+    monitoring_choice=$(whiptail --title "Monitoring Setup" --menu "Choose a monitoring solution:" 18 70 8 \
+        "1" "Prometheus + Grafana (Recommended)" \
+        "2" "OpenTelemetry + Loki + Tempo" \
+        "3" "Elastic Stack (ELK)" \
+        "4" "Custom Configuration" \
+        "5" "Back to Main Menu" 3>&1 1>&2 2>&3)
+    
+    case $monitoring_choice in
+        "1")
+            setup_prometheus_grafana
+            ;;
+        "2")
+            setup_opentelemetry_stack
+            ;;
+        "3")
+            setup_elastic_stack
+            ;;
+        "4")
+            setup_custom_monitoring
+            ;;
+        *)
+            log "INFO" "Monitoring setup cancelled."
+            return 0
+            ;;
+    esac
+    
+    log "INFO" "Monitoring setup completed successfully."
 }
 
 manage_cluster_addons() {

@@ -79,7 +79,7 @@ done
 # Configuration
 MONITORING_DIR="/opt/monitoring"
 PROMETHEUS_VERSION="2.45.0"
-GRAFANA_VERSION="10.1.0" 
+GRAFANA_VERSION="10.1.0"
 NODE_EXPORTER_VERSION="1.6.1"
 
 # Function to check if Docker is installed
@@ -96,50 +96,50 @@ check_docker() {
 # Function to install Docker (if needed)
 install_docker() {
     log "INFO" "Installing Docker..."
-    
+
     # Update package index
     apt-get update
-    
+
     # Install dependencies
     apt-get install -y ca-certificates curl gnupg lsb-release
-    
+
     # Add Docker's official GPG key
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
+
     # Set up the repository
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     # Install Docker Engine
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    
+
     # Enable and start Docker
     systemctl enable --now docker
-    
+
     log "INFO" "Docker installed successfully"
 }
 
 # Function to create monitoring directories
 create_monitoring_dirs() {
     log "INFO" "Creating monitoring directories..."
-    
+
     mkdir -p "$MONITORING_DIR"/{prometheus,grafana,alertmanager}
     mkdir -p "$MONITORING_DIR"/prometheus/{data,config}
     mkdir -p "$MONITORING_DIR"/grafana/{data,dashboards,provisioning}
     mkdir -p "$MONITORING_DIR"/grafana/provisioning/{dashboards,datasources}
-    
+
     # Set proper permissions
     chown -R 472:472 "$MONITORING_DIR"/grafana
     chown -R 65534:65534 "$MONITORING_DIR"/prometheus
-    
+
     log "INFO" "Monitoring directories created"
 }
 
 # Function to create Prometheus configuration
 create_prometheus_config() {
     log "INFO" "Creating Prometheus configuration..."
-    
+
     cat > "$MONITORING_DIR/prometheus/config/prometheus.yml" << 'EOF'
 global:
   scrape_interval: 15s
@@ -171,14 +171,14 @@ alerting:
         - targets:
           - alertmanager:9093
 EOF
-    
+
     log "INFO" "Prometheus configuration created"
 }
 
 # Function to create Grafana datasource configuration
 create_grafana_datasource() {
     log "INFO" "Creating Grafana datasource configuration..."
-    
+
     cat > "$MONITORING_DIR/grafana/provisioning/datasources/prometheus.yml" << 'EOF'
 apiVersion: 1
 
@@ -190,14 +190,14 @@ datasources:
     isDefault: true
     editable: true
 EOF
-    
+
     log "INFO" "Grafana datasource configuration created"
 }
 
 # Function to create Grafana dashboard provisioning
 create_grafana_dashboards() {
     log "INFO" "Creating Grafana dashboard provisioning..."
-    
+
     cat > "$MONITORING_DIR/grafana/provisioning/dashboards/default.yml" << 'EOF'
 apiVersion: 1
 
@@ -212,20 +212,20 @@ providers:
     options:
       path: /var/lib/grafana/dashboards
 EOF
-    
+
     # Download Node Exporter dashboard
     curl -s https://grafana.com/api/dashboards/1860/revisions/37/download | jq '.' > "$MONITORING_DIR/grafana/dashboards/node-exporter-dashboard.json"
-    
+
     log "INFO" "Grafana dashboard provisioning created"
 }
 
 # Function to create Alertmanager configuration
 create_alertmanager_config() {
     log "INFO" "Creating Alertmanager configuration..."
-    
+
     # Create alertmanager directory
     mkdir -p "$MONITORING_DIR/alertmanager"
-    
+
     # Create Alertmanager configuration
     cat > "$MONITORING_DIR/alertmanager/alertmanager.yml" << 'EOF'
 global:
@@ -248,7 +248,7 @@ receivers:
     webhook_configs:
       - url: 'http://127.0.0.1:5001/'
         send_resolved: true
-  
+
   - name: 'email'
     email_configs:
       - to: 'admin@example.com'
@@ -267,7 +267,7 @@ inhibit_rules:
       severity: 'warning'
     equal: ['alertname', 'dev', 'instance']
 EOF
-    
+
     # Create basic alert rules for Prometheus
     cat > "$MONITORING_DIR/prometheus/config/alert.rules.yml" << 'EOF'
 groups:
@@ -347,17 +347,17 @@ groups:
           summary: "Container high memory usage"
           description: "Container memory usage is above 80%"
 EOF
-    
+
     # Set proper permissions
     chown -R 65534:65534 "$MONITORING_DIR/alertmanager"
-    
+
     log "INFO" "Alertmanager configuration created"
 }
 
 # Function to create Docker Compose file
 create_docker_compose() {
     log "INFO" "Creating Docker Compose configuration..."
-    
+
     cat > "$MONITORING_DIR/docker-compose.yml" << EOF
 version: '3.8'
 
@@ -450,29 +450,29 @@ networks:
   monitoring:
     driver: bridge
 EOF
-    
+
     log "INFO" "Docker Compose configuration created"
 }
 
 # Function to deploy monitoring stack
 deploy_monitoring_stack() {
     log "INFO" "Deploying monitoring stack..."
-    
+
     cd "$MONITORING_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would deploy monitoring stack with docker-compose up -d"
     else
         docker compose up -d
-        
+
         # Wait for services to be ready
         log "INFO" "Waiting for services to be ready..."
         sleep 30
-        
+
         # Check service status
         log "INFO" "Checking service status..."
         docker compose ps
-        
+
         log "INFO" "Monitoring stack deployed successfully!"
         log "INFO" "Access URLs:"
         log "INFO" "  Prometheus: http://$(hostname -I | awk '{print $1}'):9090"
@@ -486,52 +486,52 @@ deploy_monitoring_stack() {
 # Function to check monitoring stack status
 check_monitoring_status() {
     log "INFO" "Checking monitoring stack status..."
-    
+
     if [ ! -f "$MONITORING_DIR/docker-compose.yml" ]; then
         log "INFO" "Monitoring stack not deployed"
         return 1
     fi
-    
+
     cd "$MONITORING_DIR"
-    
+
     local services_running=0
     local expected_services=5
-    
+
     if docker compose ps --services --filter "status=running" | grep -q prometheus; then
         ((services_running++))
         log "INFO" "Prometheus: Running"
     else
         log "WARN" "Prometheus: Not running"
     fi
-    
+
     if docker compose ps --services --filter "status=running" | grep -q grafana; then
         ((services_running++))
         log "INFO" "Grafana: Running"
     else
         log "WARN" "Grafana: Not running"
     fi
-    
+
     if docker compose ps --services --filter "status=running" | grep -q node-exporter; then
         ((services_running++))
         log "INFO" "Node Exporter: Running"
     else
         log "WARN" "Node Exporter: Not running"
     fi
-    
+
     if docker compose ps --services --filter "status=running" | grep -q cadvisor; then
         ((services_running++))
         log "INFO" "cAdvisor: Running"
     else
         log "WARN" "cAdvisor: Not running"
     fi
-    
+
     if docker compose ps --services --filter "status=running" | grep -q alertmanager; then
         ((services_running++))
         log "INFO" "Alertmanager: Running"
     else
         log "WARN" "Alertmanager: Not running"
     fi
-    
+
     if [ $services_running -eq $expected_services ]; then
         log "INFO" "All monitoring services are running"
         return 0
@@ -544,14 +544,14 @@ check_monitoring_status() {
 # Function to stop monitoring stack
 stop_monitoring_stack() {
     log "INFO" "Stopping monitoring stack..."
-    
+
     if [ ! -f "$MONITORING_DIR/docker-compose.yml" ]; then
         log "INFO" "Monitoring stack not deployed"
         return 1
     fi
-    
+
     cd "$MONITORING_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would stop monitoring stack with docker-compose down"
     else
@@ -563,20 +563,20 @@ stop_monitoring_stack() {
 # Function to remove monitoring stack
 remove_monitoring_stack() {
     log "INFO" "Removing monitoring stack..."
-    
+
     if [ ! -f "$MONITORING_DIR/docker-compose.yml" ]; then
         log "INFO" "Monitoring stack not deployed"
         return 1
     fi
-    
+
     cd "$MONITORING_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would remove monitoring stack and data"
     else
         # Stop and remove containers
         docker compose down -v
-        
+
         # Ask for confirmation before removing data
         if whiptail --title "Remove Data" --yesno "Do you want to remove all monitoring data?\nThis action cannot be undone." 10 60; then
             rm -rf "$MONITORING_DIR"
@@ -596,7 +596,7 @@ main_menu() {
         "3" "Stop monitoring stack" \
         "4" "Remove monitoring stack" \
         "5" "Help & Documentation" 3>&1 1>&2 2>&3)
-    
+
     case $option in
         1)
             # Deploy monitoring stack
@@ -612,7 +612,7 @@ main_menu() {
                     return 1
                 fi
             fi
-            
+
             create_monitoring_dirs
             create_prometheus_config
             create_grafana_datasource

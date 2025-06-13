@@ -60,7 +60,7 @@ check_os_compatibility() {
                 break
             fi
         done
-        
+
         if [ $os_supported -eq 1 ]; then
             log_info "Detected supported OS: $os_id"
             return 0
@@ -91,7 +91,7 @@ check_dependencies() {
 
     if [ ${#missing_deps[@]} -gt 0 ]; then
         log_info "Installing missing dependencies: ${missing_deps[*]}"
-        
+
         # Determine package manager
         if command -v apt-get >/dev/null 2>&1; then # Changed to apt-get
             log_info "Using apt-get package manager"
@@ -122,7 +122,7 @@ check_dependencies() {
             log_error "No supported package manager found. Please install manually: ${missing_deps[*]}"
             exit 1
         fi
-        
+
         # Verify installation
         local still_missing=()
         for dep in "${missing_deps[@]}"; do
@@ -130,13 +130,13 @@ check_dependencies() {
                 still_missing+=("$dep")
             fi
         done
-        
+
         if [ ${#still_missing[@]} -gt 0 ]; then
             log_error "Failed to install some dependencies: ${still_missing[*]}"
             exit 1
         fi
     fi
-    
+
     log_info "All dependencies satisfied."
     return 0
 }
@@ -147,7 +147,7 @@ check_proxmox() {
         local pve_version
         pve_version=$(pveversion | grep -oP 'pve-manager\/\K[0-9]+\.[0-9]+')
         log_info "Proxmox VE $pve_version detected"
-        
+
         # Check Proxmox version (minimum recommended 7.0)
         if (( $(echo "$pve_version < 7.0" | bc -l) )); then
             log_warn "Proxmox VE $pve_version is older than the recommended version 7.0. Some features may not work properly."
@@ -155,7 +155,7 @@ check_proxmox() {
         return 0
     else
         log_warn "Proxmox VE not detected. Some features may not be available."
-        
+
         # Ask to continue if run interactively
         if [ -t 0 ]; then # Check if stdin is a terminal
             # Use whiptail for a more consistent UI if available, otherwise fallback to read
@@ -185,13 +185,13 @@ check_proxmox() {
 setup_repository() {
     local repo_url="https://github.com/binghzal/homelab.git"
     local repo_dir="/opt/homelab"
-    
+
     log_info "Setting up repository..."
-    
+
     if [ ! -d "$repo_dir" ]; then
         mkdir -p "$repo_dir"
     fi
-    
+
     if [ ! -d "$repo_dir/.git" ]; then
         log_info "Cloning repository to $repo_dir"
         git clone --depth 1 "$repo_url" "$repo_dir" || { # Added --depth 1
@@ -237,7 +237,7 @@ setup_repository() {
             log_info "Local changes were stashed prior to update and remain stashed. To reapply: git -C $repo_dir stash pop"
         fi
     fi
-    
+
     # Set proper permissions for scripts
     if [ -d "$repo_dir/scripts" ]; then
         chmod -R u+rwx,g+rx,o-rwx "$repo_dir/scripts" || { # More specific permissions
@@ -246,7 +246,7 @@ setup_repository() {
     else
         log_warn "Scripts directory $repo_dir/scripts not found. Skipping permission settings."
     fi
-    
+
     log_info "Repository setup complete."
     return 0
 }
@@ -256,15 +256,15 @@ setup_config() {
     local config_dir="/etc/homelab"
     local user_config="$config_dir/user.conf"
     local system_config="$config_dir/system.conf"
-    
+
     log_info "Setting up configuration..."
-    
+
     if [ ! -d "$config_dir" ]; then
         mkdir -p "$config_dir"
         chmod 750 "$config_dir"
         log_info "Created config directory: $config_dir"
     fi
-    
+
     # Create user config if it doesn't exist
     if [ ! -f "$user_config" ]; then
         cat > "$user_config" << EOF
@@ -292,7 +292,7 @@ EOF
         chmod 640 "$user_config"
         log_info "Created user config: $user_config"
     fi
-    
+
     # Create system config if it doesn't exist
     if [ ! -f "$system_config" ]; then
         cat > "$system_config" << EOF
@@ -312,7 +312,7 @@ EOF
         chmod 640 "$system_config"
         log_info "Created system config: $system_config"
     fi
-    
+
     log_info "Configuration setup complete."
     return 0
 }
@@ -321,7 +321,7 @@ EOF
 setup_service() {
     local service_file="/etc/systemd/system/homelab-updater.service"
     local timer_file="/etc/systemd/system/homelab-updater.timer"
-    
+
     # Check if auto-update is enabled in user config
     local auto_update
     if [ -f "/etc/homelab/user.conf" ]; then
@@ -329,10 +329,10 @@ setup_service() {
     else
         auto_update="true"  # Default if config doesn't exist
     fi
-    
+
     if [ "$auto_update" = "true" ]; then
         log_info "Setting up auto-update service..."
-        
+
         # Create service file
         cat > "$service_file" << EOF
 [Unit]
@@ -348,7 +348,7 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-        
+
         # Create timer file for daily updates
         cat > "$timer_file" << EOF
 [Unit]
@@ -362,24 +362,24 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
-        
+
         # Enable the timer
         systemctl daemon-reload
         systemctl enable homelab-updater.timer
         systemctl start homelab-updater.timer
-        
+
         log_info "Auto-update service configured and enabled."
     else
         log_info "Auto-update disabled in configuration. Skipping service setup."
     fi
-    
+
     return 0
 }
 
 # Main function - ties everything together
 main() {
     log_info "Starting Proxmox Template Creator installation..."
-    
+
     check_root
     check_os_compatibility
     check_dependencies
@@ -387,10 +387,10 @@ main() {
     setup_repository
     setup_config
     setup_service
-    
+
     log_info "Installation complete! Launching main controller..."
     /opt/homelab/scripts/main.sh
-    
+
     exit 0
 }
 

@@ -97,44 +97,44 @@ check_docker() {
 # Function to install Docker (if needed)
 install_docker() {
     log "INFO" "Installing Docker..."
-    
+
     # Update package index
     apt-get update
-    
+
     # Install dependencies
     apt-get install -y ca-certificates curl gnupg lsb-release
-    
+
     # Add Docker's official GPG key
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    
+
     # Set up the repository
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     # Install Docker Engine
     apt-get update
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-    
+
     # Enable and start Docker
     systemctl enable --now docker
-    
+
     log "INFO" "Docker installed successfully"
 }
 
 # Function to check for required tools
 check_dependencies() {
     local missing_tools=()
-    
+
     # Check for openssl
     if ! command -v openssl >/dev/null 2>&1; then
         missing_tools+=("openssl")
     fi
-    
+
     # Check for apache2-utils (for htpasswd)
     if ! command -v htpasswd >/dev/null 2>&1; then
         missing_tools+=("apache2-utils")
     fi
-    
+
     if [ ${#missing_tools[@]} -gt 0 ]; then
         log "INFO" "Installing missing dependencies: ${missing_tools[*]}"
         apt-get update
@@ -145,21 +145,21 @@ check_dependencies() {
 # Function to create registry directories
 create_registry_dirs() {
     log "INFO" "Creating registry directories..."
-    
+
     mkdir -p "$REGISTRY_DIR"/{data,auth,certs,config}
-    
+
     log "INFO" "Registry directories created"
 }
 
 # Function to generate SSL certificates
 generate_ssl_certificates() {
     log "INFO" "Generating SSL certificates..."
-    
+
     local hostname
     hostname=$(hostname -f)
     local ip_address
     ip_address=$(hostname -I | awk '{print $1}')
-    
+
     # Create OpenSSL config
     cat > "$REGISTRY_DIR/certs/openssl.conf" << EOF
 [req]
@@ -189,17 +189,17 @@ EOF
 
     # Generate private key
     openssl genrsa -out "$REGISTRY_DIR/certs/registry.key" 4096
-    
+
     # Generate certificate signing request
     openssl req -new -key "$REGISTRY_DIR/certs/registry.key" -out "$REGISTRY_DIR/certs/registry.csr" -config "$REGISTRY_DIR/certs/openssl.conf"
-    
+
     # Generate self-signed certificate
     openssl x509 -req -days 365 -in "$REGISTRY_DIR/certs/registry.csr" -signkey "$REGISTRY_DIR/certs/registry.key" -out "$REGISTRY_DIR/certs/registry.crt" -extensions v3_req -extfile "$REGISTRY_DIR/certs/openssl.conf"
-    
+
     # Set proper permissions
     chmod 600 "$REGISTRY_DIR/certs/registry.key"
     chmod 644 "$REGISTRY_DIR/certs/registry.crt"
-    
+
     log "INFO" "SSL certificates generated"
     log "INFO" "Certificate details:"
     log "INFO" "  Hostname: $hostname"
@@ -211,10 +211,10 @@ EOF
 # Function to create authentication
 create_authentication() {
     log "INFO" "Setting up authentication..."
-    
+
     local username
     local password
-    
+
     if [ -n "$TEST_MODE" ]; then
         username="admin"
         password="admin"
@@ -226,24 +226,24 @@ create_authentication() {
             log "ERROR" "Username input cancelled"
             return 1
         fi
-        
+
         password=$(whiptail --passwordbox "Enter registry password:" 10 60 3>&1 1>&2 2>&3)
         if [ $? -ne 0 ]; then
             log "ERROR" "Password input cancelled"
             return 1
         fi
     fi
-    
+
     # Create htpasswd file
     htpasswd -Bbn "$username" "$password" > "$REGISTRY_DIR/auth/htpasswd"
-    
+
     log "INFO" "Authentication configured for user: $username"
 }
 
 # Function to create registry configuration
 create_registry_config() {
     log "INFO" "Creating registry configuration..."
-    
+
     cat > "$REGISTRY_DIR/config/config.yml" << EOF
 version: 0.1
 log:
@@ -269,14 +269,14 @@ health:
     interval: 10s
     threshold: 3
 EOF
-    
+
     log "INFO" "Registry configuration created"
 }
 
 # Function to create Docker Compose file
 create_docker_compose() {
     log "INFO" "Creating Docker Compose configuration..."
-    
+
     cat > "$REGISTRY_DIR/docker-compose.yml" << EOF
 version: '3.8'
 
@@ -328,32 +328,32 @@ networks:
   registry:
     driver: bridge
 EOF
-    
+
     log "INFO" "Docker Compose configuration created"
 }
 
 # Function to deploy registry
 deploy_registry() {
     log "INFO" "Deploying container registry..."
-    
+
     cd "$REGISTRY_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would deploy registry with docker-compose up -d"
     else
         docker compose up -d
-        
+
         # Wait for services to be ready
         log "INFO" "Waiting for services to be ready..."
         sleep 20
-        
+
         # Check service status
         log "INFO" "Checking service status..."
         docker compose ps
-        
+
         local hostname
         hostname=$(hostname -I | awk '{print $1}')
-        
+
         log "INFO" "Container registry deployed successfully!"
         log "INFO" "Access URLs:"
         log "INFO" "  Registry API: https://$hostname:$REGISTRY_PORT/v2/"
@@ -374,44 +374,44 @@ deploy_registry() {
 # Function to check registry status
 check_registry_status() {
     log "INFO" "Checking registry status..."
-    
+
     if [ ! -f "$REGISTRY_DIR/docker-compose.yml" ]; then
         log "INFO" "Registry not deployed"
         return 1
     fi
-    
+
     cd "$REGISTRY_DIR"
-    
+
     local services_running=0
     local expected_services=2
-    
+
     if docker compose ps --services --filter "status=running" | grep -q registry; then
         ((services_running++))
         log "INFO" "Registry: Running"
     else
         log "WARN" "Registry: Not running"
     fi
-    
+
     if docker compose ps --services --filter "status=running" | grep -q registry-ui; then
         ((services_running++))
         log "INFO" "Registry UI: Running"
     else
         log "WARN" "Registry UI: Not running"
     fi
-    
+
     if [ $services_running -eq $expected_services ]; then
         log "INFO" "All registry services are running"
-        
+
         # Test registry API
         local hostname
         hostname=$(hostname -I | awk '{print $1}')
-        
+
         if curl -k -s "https://$hostname:$REGISTRY_PORT/v2/" >/dev/null 2>&1; then
             log "INFO" "Registry API is accessible"
         else
             log "WARN" "Registry API is not accessible"
         fi
-        
+
         return 0
     else
         log "WARN" "Some registry services are not running ($services_running/$expected_services)"
@@ -422,14 +422,14 @@ check_registry_status() {
 # Function to stop registry
 stop_registry() {
     log "INFO" "Stopping registry..."
-    
+
     if [ ! -f "$REGISTRY_DIR/docker-compose.yml" ]; then
         log "INFO" "Registry not deployed"
         return 1
     fi
-    
+
     cd "$REGISTRY_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would stop registry with docker-compose down"
     else
@@ -441,20 +441,20 @@ stop_registry() {
 # Function to remove registry
 remove_registry() {
     log "INFO" "Removing registry..."
-    
+
     if [ ! -f "$REGISTRY_DIR/docker-compose.yml" ]; then
         log "INFO" "Registry not deployed"
         return 1
     fi
-    
+
     cd "$REGISTRY_DIR"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would remove registry and data"
     else
         # Stop and remove containers
         docker compose down -v
-        
+
         # Ask for confirmation before removing data
         if whiptail --title "Remove Data" --yesno "Do you want to remove all registry data?\nThis action cannot be undone." 10 60; then
             rm -rf "$REGISTRY_DIR"
@@ -468,13 +468,13 @@ remove_registry() {
 # Function to configure Docker client
 configure_docker_client() {
     log "INFO" "Configuring Docker client for registry access..."
-    
+
     local hostname
     hostname=$(hostname -I | awk '{print $1}')
-    
+
     # Create Docker certs directory
     mkdir -p "/etc/docker/certs.d/$hostname:$REGISTRY_PORT"
-    
+
     # Copy certificate
     if [ -f "$REGISTRY_DIR/certs/registry.crt" ]; then
         cp "$REGISTRY_DIR/certs/registry.crt" "/etc/docker/certs.d/$hostname:$REGISTRY_PORT/ca.crt"
@@ -483,7 +483,7 @@ configure_docker_client() {
         log "ERROR" "Registry certificate not found"
         return 1
     fi
-    
+
     # Test registry access
     log "INFO" "Testing registry access..."
     if curl -k -s "https://$hostname:$REGISTRY_PORT/v2/" >/dev/null 2>&1; then
@@ -499,22 +499,22 @@ configure_docker_client() {
 show_registry_info() {
     log "INFO" "Registry Information"
     log "INFO" "==================="
-    
+
     if [ ! -f "$REGISTRY_DIR/docker-compose.yml" ]; then
         log "INFO" "Registry not deployed"
         return 1
     fi
-    
+
     local hostname
     hostname=$(hostname -I | awk '{print $1}')
-    
+
     log "INFO" "Registry Status: $(check_registry_status && echo "Running" || echo "Not Running")"
     log "INFO" "Registry URL: https://$hostname:$REGISTRY_PORT"
     log "INFO" "Registry UI: http://$hostname:$REGISTRY_UI_PORT"
     log "INFO" "Data Directory: $REGISTRY_DIR/data"
     log "INFO" "Certificate: $REGISTRY_DIR/certs/registry.crt"
     log "INFO" "Configuration: $REGISTRY_DIR/config/config.yml"
-    
+
     if [ -f "$REGISTRY_DIR/auth/htpasswd" ]; then
         log "INFO" "Authentication: Enabled"
     else
@@ -534,7 +534,7 @@ main_menu() {
         "6" "Remove registry" \
         "7" "Help & Documentation" \
         "8" "Exit" 3>&1 1>&2 2>&3)
-    
+
     case $option in
         1)
             # Deploy registry
@@ -550,7 +550,7 @@ main_menu() {
                     return 1
                 fi
             fi
-            
+
             check_dependencies
             create_registry_dirs
             generate_ssl_certificates
@@ -558,7 +558,7 @@ main_menu() {
             create_registry_config
             create_docker_compose
             deploy_registry
-            
+
             whiptail --title "Registry Deployed" --msgbox "Container registry has been deployed successfully!\n\nNext steps:\n1. Configure Docker client (option 3)\n2. Access registry UI in your browser\n3. Start pushing/pulling images" 12 70
             main_menu
             ;;

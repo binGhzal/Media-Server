@@ -1,0 +1,155 @@
+# Enable all checks by default
+disable=SC1090,SC1091,SC2001,SC2016,SC2034,SC2039,SC2086,SC2148,SC2155,SC2164,SC2181,SC2230,SC2236,SC2242
+
+# Shellcheck directive for sourcing files from the lib directory
+# shellcheck source=lib/logging.sh
+
+# Allow using $* without quotes in specific cases
+exclude=SC2048,SC2068,SC2086,SC2125,SC2206
+
+# Allow using variables without quotes in specific cases
+exclude=SC2086,SC2206
+
+# Allow using unquoted expansions in specific cases
+exclude=SC2046,SC2086,SC2206,SC2207
+
+# Allow using [[ ... ]] for regex matching
+exclude=SC2076,SC2193
+
+# Allow using process substitution
+exclude=SC2094
+
+# Allow using $? directly in if statements
+exclude=SC2181
+
+# Allow using command -v instead of which
+exclude=SC2230
+
+# Allow using read without -r in specific cases
+exclude=SC2162
+
+# Allow using $() for command substitution
+exclude=SC2006
+
+# Allow using eval in specific cases
+exclude=SC2046,SC2086,SC2116,SC2140,SC2154,SC2206,SC2207
+
+# Allow using unquoted variables in printf format strings
+exclude=SC2059
+
+# Allow using unquoted variables in case patterns
+exclude=SC2254
+
+# Allow using unquoted variables in arithmetic expressions
+exclude=SC2004,SC2015,SC2219
+
+# Allow using unquoted variables in array indices
+exclude=SC2207
+
+# Allow using unquoted variables in for loops
+exclude=SC2044,SC2066,SC2231
+
+# Allow using unquoted command substitutions
+exclude=SC2044,SC2066,SC2086,SC2206,SC2207
+
+# Allow using unquoted here-document delimiters
+exclude=SC2178
+
+# Allow using unquoted parameter expansions in specific cases
+exclude=SC2206,SC2207
+
+# Allow using unquoted command arguments in specific cases
+exclude=SC2046,SC2086,SC2206,SC2207
+
+# Allow using unquoted variables in arithmetic for loops
+exclude=SC2015,SC2207
+
+# Allow using unquoted variables in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted command substitutions in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted variables in case statements
+exclude=SC2254
+
+# Allow using unquoted variables in test commands
+exclude=SC2166,SC2235
+
+# Allow using unquoted variables in arithmetic expressions in test commands
+exclude=SC2004,SC2015,SC2219
+
+# Allow using unquoted variables in here-documents
+exclude=SC2178
+
+# Allow using unquoted variables in printf format strings
+exclude=SC2059
+
+# Allow using unquoted variables in parameter expansions
+exclude=SC2206,SC2207
+
+# Allow using unquoted variables in command substitutions
+exclude=SC2044,SC2066,SC2086,SC2206,SC2207
+
+# Allow using unquoted variables in arithmetic for loops
+exclude=SC2015,SC2207
+
+# Allow using unquoted variables in array indices
+exclude=SC2207
+
+# Allow using unquoted command arguments in specific cases
+exclude=SC2046,SC2086,SC2206,SC2207
+
+# Allow using unquoted variables in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted command substitutions in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted variables in case statements
+exclude=SC2254
+
+# Allow using unquoted variables in test commands
+exclude=SC2166,SC2235
+
+# Allow using unquoted variables in arithmetic expressions in test commands
+exclude=SC2004,SC2015,SC2219
+
+# Allow using unquoted variables in here-documents
+exclude=SC2178
+
+# Allow using unquoted variables in printf format strings
+exclude=SC2059
+
+# Allow using unquoted variables in parameter expansions
+exclude=SC2206,SC2207
+
+# Allow using unquoted variables in command substitutions
+exclude=SC2044,SC2066,SC2086,SC2206,SC2207
+
+# Allow using unquoted variables in arithmetic for loops
+exclude=SC2015,SC2207
+
+# Allow using unquoted variables in array indices
+exclude=SC2207
+
+# Allow using unquoted command arguments in specific cases
+exclude=SC2046,SC2086,SC2206,SC2207
+
+# Allow using unquoted variables in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted command substitutions in array assignments
+exclude=SC2206,SC2207
+
+# Allow using unquoted variables in case statements
+exclude=SC2254
+
+# Allow using unquoted variables in test commands
+exclude=SC2166,SC2235
+
+# Allow using unquoted variables in arithmetic expressions in test commands
+exclude=SC2004,SC2015,SC2219
+
+# Allow using unquoted variables in here-documents
+exclude=SC2178

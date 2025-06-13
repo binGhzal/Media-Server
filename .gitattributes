@@ -1,0 +1,166 @@
+# Core
+* text=auto eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# YAML files
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# JSON files
+*.json text eol=lf
+
+# Markdown files
+*.md text eol=lf
+
+# Docker files
+Dockerfile* text eol=lf
+*.dockerfile text eol=lf
+
+# Configuration files
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.gitmodules text eol=lf
+.gitconfig text eol=lf
+.gitkeep text eol=lf
+
+# Text files
+*.txt text eol=lf
+*.conf text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.hcl text eol=lf
+*.tfvars text eol=lf
+
+# Source code
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.go text eol=lf
+*.rs text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.jsx text eol=lf
+*.tsx text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.sass text eol=lf
+*.less text eol=lf
+*.xml text eol=lf
+*.svg text eol=lf
+
+# Binary files that should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.tar binary
+*.7z binary
+*.dmg binary
+*.pkg binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+*.o binary
+*.obj binary
+*.class binary
+*.jar binary
+*.war binary
+*.ear binary
+*.apk binary
+*.ipa binary
+*.xap binary
+*.msi binary
+*.msm binary
+*.msp binary
+*.msixbundle binary
+*.appx binary
+*.appxbundle binary
+*.nupkg binary
+*.snupkg binary
+*.vsix binary
+*.deb binary
+*.rpm binary
+*.pkg.tar.* binary
+
+# Exclude vendored directories
+/vendor/ export-ignore
+/node_modules/ export-ignore
+/bower_components/ export-ignore
+
+# Exclude build artifacts
+/dist/ export-ignore
+/build/ export-ignore
+/out/ export-ignore
+/target/ export-ignore
+
+# Exclude IDE specific files
+.idea/ export-ignore
+.vscode/ export-ignore
+*.sublime-* export-ignore
+
+# Exclude OS generated files
+.DS_Store export-ignore
+.DS_Store? export-ignore
+._* export-ignore
+.Spotlight-V100 export-ignore
+.Trashes export-ignore
+ehthumbs.db export-ignore
+Thumbs.db export-ignore
+
+# Exclude test and coverage directories
+/coverage/ export-ignore
+/test/ export-ignore
+/tests/ export-ignore
+
+# Exclude environment and dependency files
+.env export-ignore
+.env.* export-ignore
+!.env.example
+
+# Exclude debug logs
+npm-debug.log* export-ignore
+yarn-debug.log* export-ignore
+yarn-error.log* export-ignore
+
+# Exclude lock files
+package-lock.json export-ignore
+yarn.lock export-ignore
+pnpm-lock.yaml export-ignore
+
+# Exclude editor directories and files
+.idea export-ignore
+.vscode export-ignore
+*.sublime-workspace export-ignore
+*.sublime-project export-ignore
+
+# Exclude system files
+*~ export-ignore
+*# export-ignore
+*.bak export-ignore
+*.swp export-ignore
+*.swo export-ignore
+
+# Exclude temporary files
+*.tmp export-ignore
+*.temp export-ignore
+*.log export-ignore
+*.log.* export-ignore
+*.pid export-ignore
+*.seed export-ignore
+*.pid.lock export-ignore

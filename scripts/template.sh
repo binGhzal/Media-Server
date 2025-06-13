@@ -139,7 +139,7 @@ supports_cloudinit() {
 # Function to get predefined script templates
 get_script_template() {
     local template_name="$1"
-    
+
     case "$template_name" in
         "docker-setup")
             cat << 'EOF'
@@ -313,32 +313,32 @@ EOF
 # Function to validate template configuration
 validate_template_config() {
     local errors=()
-    
+
     # Validate template name
     if [ -z "$template_name" ]; then
         errors+=("Template name is required")
     elif [[ ! "$template_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
         errors+=("Template name contains invalid characters (only alphanumeric, underscore, and dash allowed)")
     fi
-    
+
     # Validate distro selection
     if [ -z "$distro" ]; then
         errors+=("Distribution selection is required")
     fi
-    
+
     # Validate hardware specifications
     if ! [[ "$cpu" =~ ^[0-9]+$ ]] || [ "$cpu" -lt 1 ] || [ "$cpu" -gt 128 ]; then
         errors+=("CPU cores must be a number between 1 and 128")
     fi
-    
+
     if ! [[ "$ram" =~ ^[0-9]+$ ]] || [ "$ram" -lt 512 ] || [ "$ram" -gt 131072 ]; then
         errors+=("RAM must be a number between 512 MB and 128 GB")
     fi
-    
+
     if ! [[ "$storage" =~ ^[0-9]+$ ]] || [ "$storage" -lt 8 ] || [ "$storage" -gt 2048 ]; then
         errors+=("Storage must be a number between 8 GB and 2048 GB")
     fi
-    
+
     # Validate cloud-init configuration if enabled
     if [ "$use_cloudinit" = "yes" ]; then
         if [ -z "$ci_user" ]; then
@@ -346,7 +346,7 @@ validate_template_config() {
         elif [[ ! "$ci_user" =~ ^[a-z][a-z0-9_-]*$ ]]; then
             errors+=("Cloud-init username must start with a letter and contain only lowercase letters, numbers, underscore, and dash")
         fi
-        
+
         # Validate static IP configuration
         if [ "$ci_network" != "dhcp" ] && [[ "$ci_network" == *"ip="* ]]; then
             local ip_part
@@ -356,34 +356,34 @@ validate_template_config() {
             fi
         fi
     fi
-    
+
     # Check if any errors were found
     if [ ${#errors[@]} -gt 0 ]; then
         local error_msg="Configuration errors found:\n\n"
         for error in "${errors[@]}"; do
             error_msg+="• $error\n"
         done
-        
+
         whiptail --title "Configuration Errors" --msgbox "$error_msg\nPlease fix these errors and try again." 20 70
         return 1
     fi
-    
+
     return 0
 }
 
 # Function to list all templates in Proxmox
 list_templates() {
     log_info "Listing Proxmox templates..."
-    
+
     # Get list of VMs that are templates
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid)|\(.name)|\(.status)|\(.maxmem//0)|\(.cpus//0)|\(.tags//"")"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Templates" --msgbox "No templates found in Proxmox." 10 60
         return 0
     fi
-    
+
     # Format templates for display
     local template_list=""
     local count=0
@@ -394,7 +394,7 @@ list_templates() {
             ((count++))
         fi
     done <<< "$templates"
-    
+
     if [ $count -eq 0 ]; then
         whiptail --title "Templates" --msgbox "No templates found in Proxmox." 10 60
     else
@@ -413,7 +413,7 @@ manage_templates() {
             "4" "Clone template" \
             "5" "Template configuration" \
             "6" "Back to main menu" 3>&1 1>&2 2>&3)
-        
+
         case $choice in
             1)
                 list_templates
@@ -442,12 +442,12 @@ view_template_details() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -457,15 +457,15 @@ view_template_details() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Select Template" --menu "Choose template to view:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         # Get detailed template information
         local template_info
         template_info=$(pvesh get "/nodes/localhost/qemu/$selected_vmid/config" --output-format=json)
-        
+
         local details=""
         details+="VMID: $selected_vmid\n"
         details+="Name: $(echo "$template_info" | jq -r '.name // "N/A"')\n"
@@ -475,7 +475,7 @@ view_template_details() {
         details+="Description: $(echo "$template_info" | jq -r '.description // "N/A"')\n"
         details+="Tags: $(echo "$template_info" | jq -r '.tags // "None"')\n"
         details+="Boot Order: $(echo "$template_info" | jq -r '.boot // "N/A"')\n"
-        
+
         whiptail --title "Template Details - VMID $selected_vmid" --msgbox "$details" 20 80
     fi
 }
@@ -485,12 +485,12 @@ delete_template() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -500,14 +500,14 @@ delete_template() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Delete Template" --menu "Choose template to delete:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         local template_name
         template_name=$(pvesh get "/nodes/localhost/qemu/$selected_vmid/config" --output-format=json | jq -r '.name')
-        
+
         if whiptail --title "Confirm Deletion" --yesno "Are you sure you want to delete template:\n\nVMID: $selected_vmid\nName: $template_name\n\nThis action cannot be undone!" 12 70; then
             if qm destroy "$selected_vmid"; then
                 log_info "Template $selected_vmid ($template_name) deleted successfully"
@@ -525,12 +525,12 @@ clone_template() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -540,18 +540,18 @@ clone_template() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Clone Template" --menu "Choose template to clone:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         local new_name
         new_name=$(whiptail --title "Clone Template" --inputbox "Enter name for the new template:" 10 60 "template-clone-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
-        
+
         if [ -n "$new_name" ]; then
             local new_vmid
             new_vmid=$(pvesh get /cluster/nextid)
-            
+
             if qm clone "$selected_vmid" "$new_vmid" --name "$new_name"; then
                 if qm template "$new_vmid"; then
                     log_info "Template cloned successfully: $selected_vmid -> $new_vmid ($new_name)"
@@ -578,7 +578,7 @@ manage_template_config() {
             "3" "List saved configurations" \
             "4" "Delete saved configuration" \
             "5" "Back to template management" 3>&1 1>&2 2>&3)
-        
+
         case $choice in
             1)
                 export_template_config
@@ -604,12 +604,12 @@ export_template_config() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -619,19 +619,19 @@ export_template_config() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Export Configuration" --menu "Choose template to export:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         local config_name
         config_name=$(whiptail --title "Export Configuration" --inputbox "Enter name for the configuration file:" 10 60 "template-config-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
-        
+
         if [ -n "$config_name" ]; then
             local config_file="$TEMPLATE_CONFIG_DIR/${config_name}.json"
             local template_config
             template_config=$(pvesh get "/nodes/localhost/qemu/$selected_vmid/config" --output-format=json)
-            
+
             # Create enhanced configuration with metadata
             local enhanced_config
             enhanced_config=$(cat << EOF
@@ -646,7 +646,7 @@ export_template_config() {
 }
 EOF
 )
-            
+
             if echo "$enhanced_config" | jq '.' > "$config_file"; then
                 log_info "Template configuration exported to $config_file"
                 whiptail --title "Success" --msgbox "Template configuration exported successfully!\n\nFile: $config_file" 10 70
@@ -667,52 +667,52 @@ import_template_config() {
         basename_file=$(basename "$file" .json)
         config_files+=("$basename_file" "$(date -r "$file" '+%Y-%m-%d %H:%M')")
     done < <(find "$TEMPLATE_CONFIG_DIR" -name "*.json" -print0 2>/dev/null)
-    
+
     if [ ${#config_files[@]} -eq 0 ]; then
         whiptail --title "Error" --msgbox "No saved configuration files found in $TEMPLATE_CONFIG_DIR." 10 70
         return 1
     fi
-    
+
     local selected_config
     selected_config=$(whiptail --title "Import Configuration" --menu "Choose configuration to import:" 15 80 10 "${config_files[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_config" ]; then
         local config_file="$TEMPLATE_CONFIG_DIR/${selected_config}.json"
         local new_name
         new_name=$(whiptail --title "Import Configuration" --inputbox "Enter name for the new template:" 10 60 "imported-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
-        
+
         if [ -n "$new_name" ]; then
             # Get next available VMID
             local new_vmid
             new_vmid=$(pvesh get /cluster/nextid)
-            
+
             # Extract configuration
             local config_data
             if ! config_data=$(jq -r '.proxmox_config' "$config_file"); then
                 whiptail --title "Error" --msgbox "Failed to parse configuration file. File may be corrupted." 10 60
                 return 1
             fi
-            
+
             whiptail --title "Import Progress" --infobox "Creating VM from imported configuration...\nThis may take a few moments." 8 60
-            
+
             # Create basic VM first
             local memory cores
             memory=$(echo "$config_data" | jq -r '.memory // 2048')
             cores=$(echo "$config_data" | jq -r '.cores // 2')
-            
+
             if qm create "$new_vmid" --name "$new_name" --memory "$memory" --cores "$cores"; then
                 # Apply additional configuration settings
                 local ostype
                 ostype=$(echo "$config_data" | jq -r '.ostype // "l26"')
                 qm set "$new_vmid" --ostype "$ostype"
-                
+
                 # Set description
                 local description="Imported from configuration: $selected_config\\nImported: $(date '+%Y-%m-%d %H:%M:%S')"
                 qm set "$new_vmid" --description "$description"
-                
+
                 # Convert to template
                 qm template "$new_vmid"
-                
+
                 log_info "Template imported successfully: VMID $new_vmid ($new_name)"
                 whiptail --title "Success" --msgbox "Template imported successfully!\n\nVMID: $new_vmid\nName: $new_name\n\nNote: Disk images need to be restored separately." 12 70
             else
@@ -729,7 +729,7 @@ list_saved_configs() {
         whiptail --title "Saved Configurations" --msgbox "No saved configuration files found." 10 60
         return 0
     fi
-    
+
     local config_list=""
     local count=0
     for file in "$TEMPLATE_CONFIG_DIR"/*.json; do
@@ -744,7 +744,7 @@ list_saved_configs() {
             ((count++))
         fi
     done
-    
+
     whiptail --title "Saved Configurations ($count found)" --msgbox "$config_list" 20 80
 }
 
@@ -757,15 +757,15 @@ delete_saved_config() {
         basename_file=$(basename "$file" .json)
         config_files+=("$basename_file" "$(date -r "$file" '+%Y-%m-%d %H:%M')")
     done < <(find "$TEMPLATE_CONFIG_DIR" -name "*.json" -print0 2>/dev/null)
-    
+
     if [ ${#config_files[@]} -eq 0 ]; then
         whiptail --title "Error" --msgbox "No saved configuration files found." 10 60
         return 1
     fi
-    
+
     local selected_config
     selected_config=$(whiptail --title "Delete Configuration" --menu "Choose configuration to delete:" 15 80 10 "${config_files[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_config" ]; then
         if whiptail --title "Confirm Deletion" --yesno "Are you sure you want to delete configuration:\n\n$selected_config\n\nThis action cannot be undone!" 10 60; then
             local config_file="$TEMPLATE_CONFIG_DIR/${selected_config}.json"
@@ -785,12 +785,12 @@ validate_template() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found to validate." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -800,21 +800,21 @@ validate_template() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Validate Template" --menu "Choose template to validate:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         whiptail --title "Validating" --infobox "Validating template $selected_vmid...\nPlease wait..." 8 50
-        
+
         local validation_results=""
         local error_count=0
         local warning_count=0
-        
+
         # Get template configuration
         local template_config
         template_config=$(pvesh get "/nodes/localhost/qemu/$selected_vmid/config" --output-format=json)
-        
+
         # Validate template is actually a template
         local is_template
         is_template=$(pvesh get "/nodes/localhost/qemu/$selected_vmid/status/current" --output-format=json | jq -r '.template // false')
@@ -824,7 +824,7 @@ validate_template() {
         else
             validation_results+="✅ Template status: Valid\n"
         fi
-        
+
         # Validate memory configuration
         local memory
         memory=$(echo "$template_config" | jq -r '.memory // 0')
@@ -837,7 +837,7 @@ validate_template() {
         else
             validation_results+="✅ Memory: $memory MB (OK)\n"
         fi
-        
+
         # Validate CPU configuration
         local cores
         cores=$(echo "$template_config" | jq -r '.cores // 0')
@@ -847,7 +847,7 @@ validate_template() {
         else
             validation_results+="✅ CPU Cores: $cores (OK)\n"
         fi
-        
+
         # Check for storage configuration
         local has_storage=false
         for key in $(echo "$template_config" | jq -r 'keys[]'); do
@@ -861,7 +861,7 @@ validate_template() {
             validation_results+="❌ ERROR: No storage devices found\n"
             ((error_count++))
         fi
-        
+
         # Check network configuration
         local has_network=false
         for key in $(echo "$template_config" | jq -r 'keys[]'); do
@@ -875,13 +875,13 @@ validate_template() {
             validation_results+="⚠️  WARNING: No network interfaces configured\n"
             ((warning_count++))
         fi
-        
+
         # Check cloud-init configuration
         local has_cloudinit
         has_cloudinit=$(echo "$template_config" | jq -r 'has("ide2")')
         if [ "$has_cloudinit" = "true" ]; then
             validation_results+="✅ Cloud-init: Configured\n"
-            
+
             # Check cloud-init user
             local ci_user
             ci_user=$(echo "$template_config" | jq -r '.ciuser // "none"')
@@ -894,7 +894,7 @@ validate_template() {
         else
             validation_results+="ℹ️  Info: Cloud-init not configured\n"
         fi
-        
+
         # Summary
         local status_summary=""
         if [ $error_count -eq 0 ]; then
@@ -906,11 +906,11 @@ validate_template() {
         else
             status_summary="❌ VALIDATION FAILED: $error_count error(s), $warning_count warning(s)"
         fi
-        
+
         validation_results+="\\n$status_summary"
-        
+
         whiptail --title "Template Validation Results" --msgbox "$validation_results" 25 80
-        
+
         log_info "Template validation completed for VMID $selected_vmid: $error_count errors, $warning_count warnings"
     fi
 }
@@ -920,12 +920,12 @@ test_template() {
     # Get template selection
     local templates
     templates=$(pvesh get /nodes/localhost/qemu --output-format=json | jq -r '.[] | select(.template==1) | "\(.vmid) \(.name)"')
-    
+
     if [ -z "$templates" ]; then
         whiptail --title "Error" --msgbox "No templates found to test." 10 60
         return 1
     fi
-    
+
     # Convert to whiptail menu format
     local template_array=()
     while read -r line; do
@@ -935,60 +935,60 @@ test_template() {
             template_array+=("$vmid" "$name")
         fi
     done <<< "$templates"
-    
+
     local selected_vmid
     selected_vmid=$(whiptail --title "Test Template" --menu "Choose template to test:" 15 70 10 "${template_array[@]}" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$selected_vmid" ]; then
         if whiptail --title "Template Testing" --yesno "This will create a temporary VM from the template for testing.\n\nThe VM will be created, started, tested, and then destroyed.\n\nProceed with testing?" 12 70; then
             whiptail --title "Testing" --infobox "Testing template $selected_vmid...\nCreating test VM..." 8 50
-            
+
             # Get next available VMID for test VM
             local test_vmid
             test_vmid=$(pvesh get /cluster/nextid)
-            
+
             # Clone template to test VM
             if qm clone "$selected_vmid" "$test_vmid" --name "test-$selected_vmid-$(date +%s)"; then
                 log_info "Test VM $test_vmid created from template $selected_vmid"
-                
+
                 # Start the test VM
                 whiptail --title "Testing" --infobox "Starting test VM $test_vmid...\nThis may take a moment..." 8 50
-                
+
                 if qm start "$test_vmid"; then
                     log_info "Test VM $test_vmid started successfully"
-                    
+
                     # Wait a moment for VM to start
                     sleep 10
-                    
+
                     # Check VM status
                     local vm_status
                     vm_status=$(qm status "$test_vmid")
-                    
+
                     local test_results="✅ Template cloning: SUCCESS\n✅ VM creation: SUCCESS\n✅ VM startup: SUCCESS\n\nVM Status: $vm_status\n"
-                    
+
                     # Test basic functionality
                     whiptail --title "Testing" --infobox "Testing VM functionality...\nChecking guest agent..." 8 50
                     sleep 5
-                    
+
                     # Check if guest agent is running (if configured)
                     if qm guest ping "$test_vmid" 2>/dev/null; then
                         test_results+="✅ Guest agent: RESPONDING\n"
                     else
                         test_results+="⚠️  Guest agent: NOT RESPONDING (may need more time or not configured)\n"
                     fi
-                    
+
                     # Stop the test VM
                     whiptail --title "Testing" --infobox "Stopping and cleaning up test VM..." 8 50
                     qm stop "$test_vmid"
                     sleep 5
-                    
+
                     # Destroy test VM
                     qm destroy "$test_vmid"
-                    
+
                     test_results+="\n✅ Test completed successfully\n✅ Test VM cleaned up"
-                    
+
                     whiptail --title "Template Test Results" --msgbox "$test_results" 20 70
-                    
+
                     log_info "Template test completed successfully for VMID $selected_vmid"
                 else
                     log_error "Failed to start test VM $test_vmid"
@@ -1007,13 +1007,13 @@ test_template() {
 check_dependencies() {
     local deps=(curl qemu-img whiptail jq)
     local missing=()
-    
+
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &> /dev/null; then
             missing+=("$dep")
         fi
     done
-    
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing dependencies: ${missing[*]}"
         whiptail --title "Error" --msgbox "Missing required tools: ${missing[*]}\n\nPlease install these dependencies and try again." 10 70
@@ -1049,7 +1049,7 @@ main_menu() {
             "6" "Template configuration management" \
             "7" "Help and documentation" \
             "8" "Exit" 3>&1 1>&2 2>&3)
-        
+
         case $choice in
             1)
                 create_template
@@ -1217,7 +1217,7 @@ create_template() {
                 "custom_file" "Provide custom user-data file from Proxmox storage" \
                 "custom_paste" "Paste custom user-data directly" \
                 "cancel" "Cancel cloud-init setup" 3>&1 1>&2 2>&3)
-            
+
             if [ $? -ne 0 ] || [ "$ci_config_type" = "cancel" ]; then
                 log_info "User cancelled cloud-init configuration method selection."
                 use_cloudinit="no" # Effectively disable cloud-init if user cancels here
@@ -1230,9 +1230,9 @@ create_template() {
                     storage_list_json=$(pvesh get /storage --output-format=json)
                     snippet_storages=()
                     all_storages=()
-                    
+
                     while IFS= read -r line; do snippet_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | select((.content | contains("snippets"))) | .storage')
-                    
+
                     if [ ${#snippet_storages[@]} -eq 0 ]; then
                         whiptail --title "Warning: No Snippet Storage" --msgbox "No storage explicitly supports 'snippets' content type. You can select any storage, but ensure it's configured to allow user data files (e.g., as snippets or text files)." 10 78
                         while IFS= read -r line; do all_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | .storage')
@@ -1265,7 +1265,7 @@ create_template() {
                 elif [ "$ci_config_type" = "custom_paste" ]; then
                     # --- Custom User-Data Paste ---
                     whiptail --title "Information" --msgbox "You've chosen to paste custom user-data. The guided setup for user, SSH key, password, network, packages, and custom scripts will be skipped." 10 78
-                    
+
                     # Use a temporary file to capture textbox content
                     local tmp_paste_file
                     tmp_paste_file=$(mktemp)
@@ -1296,11 +1296,11 @@ create_template() {
                 if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
                     default_key=$(cat "$HOME/.ssh/id_rsa.pub")
                 fi
-                
+
                 ci_sshkey=$(whiptail --title "SSH Public Key" --inputbox "Paste SSH public key for user $ci_user:" 10 60 "$default_key" 3>&1 1>&2 2>&3)
                 ci_sshkey_result=$?
                 if [ $ci_sshkey_result -ne 0 ]; then return 0; fi
-                
+
                 # Validate SSH key format
                 if [ -n "$ci_sshkey" ]; then
                     if ! echo "$ci_sshkey" | grep -E '^(ssh-rsa|ssh-ed25519|ssh-ecdsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) [A-Za-z0-9+/]' >/dev/null; then
@@ -1311,7 +1311,7 @@ create_template() {
                         log_info "SSH key format validation passed"
                     fi
                 fi
-                
+
                 # Cloud-init password configuration
                 ci_password=""
                 ci_password_enabled="no"
@@ -1356,7 +1356,7 @@ create_template() {
                         fi
                     done
                 fi
-                
+
                 ci_network=$(whiptail --title "Network Config" --menu "Select network configuration:" 15 60 3 \
                     "dhcp" "Automatic IP configuration (DHCP)" \
                     "static" "Manual IP configuration" 3>&1 1>&2 2>&3)
@@ -1446,7 +1446,7 @@ create_template() {
                             "script" "Custom multi-line script" \
                             "template" "Predefined script templates" \
                             "none" "Skip custom scripts" 3>&1 1>&2 2>&3)
-                        
+
                         if [ "$script_option" != "none" ] && [ $? -eq 0 ]; then
                             case "$script_option" in
                                 "commands")
@@ -1589,7 +1589,7 @@ create_template() {
     if [ ! -f "$iso_path" ]; then
         log_info "Downloading image for $distro $version..."
         whiptail --title "Downloading" --infobox "Downloading $distro $version image...\nThis may take a few minutes." 10 60
-        
+
         # Download the image
         if ! curl -L -o "$iso_path" "$download_url"; then
             log_error "Failed to download image from $download_url"
@@ -1841,7 +1841,7 @@ main_menu() {
             "6" "Template configuration management" \
             "7" "Help and documentation" \
             "8" "Exit" 3>&1 1>&2 2>&3)
-        
+
         case $choice in
             1)
                 create_template

@@ -1,0 +1,85 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: mixed-line-ending
+        args: ['--fix=lf']
+    -   id: check-yaml
+    -   id: check-json
+    -   id: check-merge-conflict
+    -   id: check-case-conflict
+    -   id: check-executables-have-shebangs
+    -   id: check-shebang-scripts-are-executable
+    -   id: detect-private-key
+    -   id: debug-statements
+
+-   repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.83.0
+    hooks:
+    -   id: terraform_fmt
+    -   id: terraform_tflint
+    -   id: terraform_tfsec
+    -   id: terraform_docs
+    -   id: terraform_checkov
+
+-   repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.35.0
+    hooks:
+    -   id: markdownlint
+        args: ['--config', '.markdownlint.json']
+
+-   repo: https://github.com/pre-commit/mirrors-prettier
+    rev: 'v3.1.0'
+    hooks:
+    -   id: prettier
+        types_or: [yaml, yml, json, md, markdown, html, css, scss, javascript, typescript, jsx, tsx, vue]
+        args: [--write, --no-error-on-unmatched-pattern]
+
+-   repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+    -   id: shellcheck
+        args: [--severity=warning]
+
+-   repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+    -   id: black
+        language_version: python3
+
+-   repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+    -   id: isort
+        name: isort (python)
+        args: [--profile=black]
+
+-   repo: https://github.com/ansible/ansible-lint
+    rev: v6.22.2
+    hooks:
+    -   id: ansible-lint
+        files: \
+            (?x)^(
+                ?!tests?/|test/|.github/|.molecule/|molecule/|.ansible/
+            ).*\.(yaml|yml|yaml.j2|yml.j2)$
+        args: [--write=all]
+
+-   repo: https://github.com/gruntwork-io/pre-commit
+    rev: v0.1.17
+    hooks:
+    -   id: shell-format
+        args: [--indent=4, --binary-next-line, --case-indent, --keep-padding, --space-redirects]
+
+-   repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+    -   id: commitizen
+        stages: [commit-msg]
+        args: [--retry, --retry-failed-update, --allow-abort, --hook-mode, --no-verify]
+
+ci:
+  skip: [commitizen]  # Skip commitizen in CI as it requires a git repo

@@ -103,26 +103,26 @@ check_ansible() {
 # Function to install Ansible
 install_ansible() {
     log_info "Installing Ansible..."
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would install Ansible"
         return 0
     fi
-    
+
     # Update package index
     apt-get update
-    
+
     # Install required packages
     apt-get install -y software-properties-common
-    
+
     # Add Ansible PPA and install
     add-apt-repository --yes --update ppa:ansible/ansible
     apt-get install -y ansible
-    
+
     # Install additional useful collections
     ansible-galaxy collection install community.general
     ansible-galaxy collection install ansible.posix
-    
+
     # Verify installation
     if ansible --version >/dev/null 2>&1; then
         log_info "Ansible installed successfully"
@@ -136,9 +136,9 @@ install_ansible() {
 # Function to discover available Ansible playbooks
 discover_playbooks() {
     log_info "Discovering available Ansible playbooks..."
-    
+
     local playbooks_found=()
-    
+
     # Check for playbooks in the project directory
     if [ -d "$SCRIPT_DIR/../ansible" ]; then
         log_info "Found project ansible directory"
@@ -151,7 +151,7 @@ discover_playbooks() {
             fi
         done
     fi
-    
+
     # Check for playbooks in system ansible directory
     if [ -d "$ANSIBLE_PLAYBOOKS_DIR" ]; then
         for playbook_file in "$ANSIBLE_PLAYBOOKS_DIR"/*.yml "$ANSIBLE_PLAYBOOKS_DIR"/*.yaml; do
@@ -163,12 +163,12 @@ discover_playbooks() {
             fi
         done
     fi
-    
+
     if [ ${#playbooks_found[@]} -eq 0 ]; then
         log_warn "No Ansible playbooks found"
         return 1
     fi
-    
+
     printf '%s\n' "${playbooks_found[@]}"
     return 0
 }
@@ -176,9 +176,9 @@ discover_playbooks() {
 # Function to discover available Ansible roles
 discover_roles() {
     log_info "Discovering available Ansible roles..."
-    
+
     local roles_found=()
-    
+
     # Check for roles in the project directory
     if [ -d "$SCRIPT_DIR/../ansible/roles" ]; then
         log_info "Found project ansible roles directory"
@@ -191,7 +191,7 @@ discover_roles() {
             fi
         done
     fi
-    
+
     # Check for roles in system ansible directory
     if [ -d "$ANSIBLE_ROLES_DIR" ]; then
         for role_dir in "$ANSIBLE_ROLES_DIR"/*; do
@@ -203,12 +203,12 @@ discover_roles() {
             fi
         done
     fi
-    
+
     if [ ${#roles_found[@]} -eq 0 ]; then
         log_warn "No Ansible roles found"
         return 1
     fi
-    
+
     printf '%s\n' "${roles_found[@]}"
     return 0
 }
@@ -216,20 +216,20 @@ discover_roles() {
 # Function to collect variables for a playbook
 collect_variables() {
     local playbook_path="$1"
-    
+
     log_info "Collecting variables for playbook: $(basename "$playbook_path")"
-    
+
     # Check for group_vars and host_vars
     local playbook_dir
     playbook_dir=$(dirname "$playbook_path")
-    
+
     local vars_file="$playbook_dir/vars.yml"
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would collect variables for playbook"
         return 0
     fi
-    
+
     # Create basic inventory if it doesn't exist
     local inventory_file="$playbook_dir/inventory.ini"
     if [ ! -f "$inventory_file" ]; then
@@ -244,13 +244,13 @@ collect_variables() {
 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 EOF
     fi
-    
+
     # Interactive variable collection using whiptail
     if [ -t 0 ]; then  # If running interactively
         # Ask for basic configuration
         local target_hosts
         target_hosts=$(whiptail --title "Ansible Variables" --inputbox "Enter target hosts (comma-separated IP addresses or hostnames):" 10 60 3>&1 1>&2 2>&3)
-        
+
         if [ $? -eq 0 ] && [ -n "$target_hosts" ]; then
             # Update inventory file
             echo "" >> "$inventory_file"
@@ -262,20 +262,20 @@ EOF
             done
             log_info "Added hosts to inventory: $target_hosts"
         fi
-        
+
         # Ask for ansible user
         local ansible_user
         ansible_user=$(whiptail --title "Ansible Variables" --inputbox "Enter Ansible user (default: root):" 10 60 "root" 3>&1 1>&2 2>&3)
-        
+
         if [ $? -eq 0 ] && [ -n "$ansible_user" ]; then
             echo "ansible_user=$ansible_user" >> "$vars_file"
             log_info "Set ansible_user to '$ansible_user'"
         fi
-        
+
         # Ask for SSH key path
         local ssh_key_path
         ssh_key_path=$(whiptail --title "Ansible Variables" --inputbox "Enter SSH private key path (optional):" 10 60 3>&1 1>&2 2>&3)
-        
+
         if [ $? -eq 0 ] && [ -n "$ssh_key_path" ]; then
             echo "ansible_ssh_private_key_file=$ssh_key_path" >> "$vars_file"
             log_info "Set SSH private key path to '$ssh_key_path'"
@@ -283,31 +283,31 @@ EOF
     else
         log_warn "Running non-interactively, using default configuration"
     fi
-    
+
     return 0
 }
 
 # Function to validate Ansible playbook
 validate_playbook() {
     local playbook_path="$1"
-    
+
     log_info "Validating Ansible playbook: $playbook_path"
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would validate Ansible playbook"
         return 0
     fi
-    
+
     local playbook_dir
     playbook_dir=$(dirname "$playbook_path")
-    
+
     # Check for inventory file
     local inventory_file="$playbook_dir/inventory.ini"
     if [ ! -f "$inventory_file" ]; then
         log_error "No inventory file found: $inventory_file"
         return 1
     fi
-    
+
     # Validate playbook syntax
     if ansible-playbook --syntax-check -i "$inventory_file" "$playbook_path"; then
         log_info "Ansible playbook syntax is valid"
@@ -321,18 +321,18 @@ validate_playbook() {
 # Function to run dry-run (check mode)
 dry_run_playbook() {
     local playbook_path="$1"
-    
+
     log_info "Running Ansible playbook dry-run..."
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would run Ansible playbook dry-run"
         return 0
     fi
-    
+
     local playbook_dir
     playbook_dir=$(dirname "$playbook_path")
     local inventory_file="$playbook_dir/inventory.ini"
-    
+
     # Run in check mode
     if ansible-playbook --check -i "$inventory_file" "$playbook_path"; then
         log_info "Ansible playbook dry-run completed successfully"
@@ -346,18 +346,18 @@ dry_run_playbook() {
 # Function to execute Ansible playbook
 execute_playbook() {
     local playbook_path="$1"
-    
+
     log_info "Executing Ansible playbook..."
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would execute Ansible playbook"
         return 0
     fi
-    
+
     local playbook_dir
     playbook_dir=$(dirname "$playbook_path")
     local inventory_file="$playbook_dir/inventory.ini"
-    
+
     # Execute playbook
     if ansible-playbook -i "$inventory_file" "$playbook_path"; then
         log_info "Ansible playbook executed successfully"
@@ -371,17 +371,17 @@ execute_playbook() {
 # Function to install Ansible role from Ansible Galaxy
 install_role() {
     local role_name="$1"
-    
+
     log_info "Installing Ansible role: $role_name"
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would install Ansible role: $role_name"
         return 0
     fi
-    
+
     # Create roles directory if it doesn't exist
     mkdir -p "$ANSIBLE_ROLES_DIR"
-    
+
     # Install role
     if ansible-galaxy install -p "$ANSIBLE_ROLES_DIR" "$role_name"; then
         log_info "Ansible role installed successfully: $role_name"
@@ -395,12 +395,12 @@ install_role() {
 # Function to show Ansible configuration
 show_config() {
     log_info "Showing Ansible configuration..."
-    
+
     if [ "$TEST_MODE" ]; then
         log_info "[TEST MODE] Would show Ansible configuration"
         return 0
     fi
-    
+
     echo "Ansible Configuration:"
     echo "====================="
     ansible --version
@@ -410,7 +410,7 @@ show_config() {
     echo ""
     echo "Available Collections:"
     ansible-galaxy collection list
-    
+
     return 0
 }
 
@@ -419,12 +419,12 @@ create_sample_playbook() {
     local template_type="$1"
     local output_file="$2"
     local playbook_name="$3"
-    
+
     log_info "Creating sample playbook: $template_type -> $output_file"
-    
+
     # Ensure directory exists
     mkdir -p "$(dirname "$output_file")"
-    
+
     # Create playbook content based on template type
     case "$template_type" in
         "basic-setup")
@@ -447,25 +447,25 @@ create_sample_playbook() {
       - htop
       - unzip
       - software-properties-common
-    
+
     # User configuration
     admin_user: admin
-    admin_groups: 
+    admin_groups:
       - sudo
       - docker
-    
+
   tasks:
     - name: Update package cache
       apt:
         update_cache: yes
         cache_valid_time: 3600
       when: ansible_os_family == "Debian"
-    
+
     - name: Install common packages
       package:
         name: "{{ common_packages }}"
         state: present
-    
+
     - name: Create admin user
       user:
         name: "{{ admin_user }}"
@@ -473,18 +473,18 @@ create_sample_playbook() {
         shell: /bin/bash
         create_home: yes
         state: present
-    
+
     - name: Configure SSH for admin user
       authorized_key:
         user: "{{ admin_user }}"
         key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
         state: present
       ignore_errors: yes
-    
+
     - name: Set timezone
       timezone:
         name: UTC
-    
+
     - name: Configure firewall (ufw)
       ufw:
         rule: allow
@@ -494,7 +494,7 @@ create_sample_playbook() {
         - "80"
         - "443"
       when: ansible_os_family == "Debian"
-    
+
     - name: Enable firewall
       ufw:
         state: enabled
@@ -524,7 +524,7 @@ EOF
         image: redis:alpine
         ports:
           - "6379:6379"
-  
+
   tasks:
     - name: Install Docker dependencies
       package:
@@ -536,19 +536,19 @@ EOF
           - lsb-release
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Add Docker GPG key
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Add Docker repository
       apt_repository:
         repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Install Docker
       package:
         name:
@@ -558,19 +558,19 @@ EOF
         state: present
         update_cache: yes
       when: ansible_os_family == "Debian"
-    
+
     - name: Start and enable Docker service
       systemd:
         name: docker
         state: started
         enabled: yes
-    
+
     - name: Install Docker Compose
       get_url:
         url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-{{ ansible_system }}-{{ ansible_architecture }}"
         dest: /usr/local/bin/docker-compose
         mode: '0755'
-    
+
     - name: Deploy containers
       docker_container:
         name: "{{ item.name }}"
@@ -595,13 +595,13 @@ EOF
     server_name: example.com
     document_root: /var/www/html
     ssl_enabled: false
-  
+
   tasks:
     - name: Install Nginx
       package:
         name: nginx
         state: present
-    
+
     - name: Create document root
       file:
         path: "{{ document_root }}"
@@ -609,7 +609,7 @@ EOF
         owner: www-data
         group: www-data
         mode: '0755'
-    
+
     - name: Create default index page
       copy:
         content: |
@@ -627,33 +627,33 @@ EOF
         owner: www-data
         group: www-data
         mode: '0644'
-    
+
     - name: Configure Nginx virtual host
       template:
         src: nginx-vhost.j2
         dest: "/etc/nginx/sites-available/{{ server_name }}"
         backup: yes
       notify: restart nginx
-    
+
     - name: Enable virtual host
       file:
         src: "/etc/nginx/sites-available/{{ server_name }}"
         dest: "/etc/nginx/sites-enabled/{{ server_name }}"
         state: link
       notify: restart nginx
-    
+
     - name: Remove default Nginx site
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
       notify: restart nginx
-    
+
     - name: Start and enable Nginx
       systemd:
         name: nginx
         state: started
         enabled: yes
-    
+
     - name: Configure firewall for web traffic
       ufw:
         rule: allow
@@ -662,7 +662,7 @@ EOF
         - "80"
         - "443"
       when: ansible_os_family == "Debian"
-  
+
   handlers:
     - name: restart nginx
       systemd:
@@ -685,7 +685,7 @@ EOF
     db_name: myapp
     db_user: appuser
     db_password: "{{ vault_db_password | default('changeme456') }}"
-  
+
   tasks:
     - name: Install MySQL server
       package:
@@ -695,7 +695,7 @@ EOF
           - python3-pymysql
         state: present
       when: db_type == "mysql"
-    
+
     - name: Install PostgreSQL server
       package:
         name:
@@ -704,21 +704,21 @@ EOF
           - python3-psycopg2
         state: present
       when: db_type == "postgresql"
-    
+
     - name: Start and enable MySQL service
       systemd:
         name: mysql
         state: started
         enabled: yes
       when: db_type == "mysql"
-    
+
     - name: Start and enable PostgreSQL service
       systemd:
         name: postgresql
         state: started
         enabled: yes
       when: db_type == "postgresql"
-    
+
     - name: Set MySQL root password
       mysql_user:
         name: root
@@ -726,7 +726,7 @@ EOF
         login_unix_socket: /var/run/mysqld/mysqld.sock
         state: present
       when: db_type == "mysql"
-    
+
     - name: Create application database (MySQL)
       mysql_db:
         name: "{{ db_name }}"
@@ -734,7 +734,7 @@ EOF
         login_user: root
         login_password: "{{ db_root_password }}"
       when: db_type == "mysql"
-    
+
     - name: Create application user (MySQL)
       mysql_user:
         name: "{{ db_user }}"
@@ -744,14 +744,14 @@ EOF
         login_user: root
         login_password: "{{ db_root_password }}"
       when: db_type == "mysql"
-    
+
     - name: Create application database (PostgreSQL)
       postgresql_db:
         name: "{{ db_name }}"
         state: present
       become_user: postgres
       when: db_type == "postgresql"
-    
+
     - name: Create application user (PostgreSQL)
       postgresql_user:
         name: "{{ db_user }}"
@@ -761,7 +761,7 @@ EOF
         state: present
       become_user: postgres
       when: db_type == "postgresql"
-    
+
     - name: Configure firewall for database
       ufw:
         rule: allow
@@ -788,7 +788,7 @@ EOF
     node_exporter_version: "1.6.0"
     prometheus_user: prometheus
     grafana_admin_password: "{{ vault_grafana_password | default('admin123') }}"
-  
+
   tasks:
     - name: Create prometheus user
       user:
@@ -797,7 +797,7 @@ EOF
         shell: /bin/false
         home: /etc/prometheus
         create_home: no
-    
+
     - name: Create prometheus directories
       file:
         path: "{{ item }}"
@@ -808,14 +808,14 @@ EOF
       loop:
         - /etc/prometheus
         - /var/lib/prometheus
-    
+
     - name: Download and install Prometheus
       unarchive:
         src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
         dest: /tmp
         remote_src: yes
         creates: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64"
-    
+
     - name: Copy Prometheus binaries
       copy:
         src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
@@ -827,19 +827,19 @@ EOF
       loop:
         - prometheus
         - promtool
-    
+
     - name: Create Prometheus configuration
       copy:
         content: |
           global:
             scrape_interval: 15s
             evaluation_interval: 15s
-          
+
           scrape_configs:
             - job_name: 'prometheus'
               static_configs:
                 - targets: ['localhost:9090']
-            
+
             - job_name: 'node'
               static_configs:
                 - targets: ['localhost:9100']
@@ -848,7 +848,7 @@ EOF
         group: "{{ prometheus_user }}"
         mode: '0644'
       notify: restart prometheus
-    
+
     - name: Create Prometheus systemd service
       copy:
         content: |
@@ -856,7 +856,7 @@ EOF
           Description=Prometheus
           Wants=network-online.target
           After=network-online.target
-          
+
           [Service]
           User={{ prometheus_user }}
           Group={{ prometheus_user }}
@@ -868,7 +868,7 @@ EOF
             --web.console.libraries=/etc/prometheus/console_libraries \
             --web.listen-address=0.0.0.0:9090 \
             --web.enable-lifecycle
-          
+
           [Install]
           WantedBy=multi-user.target
         dest: /etc/systemd/system/prometheus.service
@@ -876,14 +876,14 @@ EOF
       notify:
         - reload systemd
         - restart prometheus
-    
+
     - name: Download and install Node Exporter
       unarchive:
         src: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
         dest: /tmp
         remote_src: yes
         creates: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64"
-    
+
     - name: Copy Node Exporter binary
       copy:
         src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
@@ -892,7 +892,7 @@ EOF
         group: "{{ prometheus_user }}"
         mode: '0755'
         remote_src: yes
-    
+
     - name: Create Node Exporter systemd service
       copy:
         content: |
@@ -900,13 +900,13 @@ EOF
           Description=Node Exporter
           Wants=network-online.target
           After=network-online.target
-          
+
           [Service]
           User={{ prometheus_user }}
           Group={{ prometheus_user }}
           Type=simple
           ExecStart=/usr/local/bin/node_exporter
-          
+
           [Install]
           WantedBy=multi-user.target
         dest: /etc/systemd/system/node_exporter.service
@@ -914,25 +914,25 @@ EOF
       notify:
         - reload systemd
         - restart node_exporter
-    
+
     - name: Install Grafana
       get_url:
         url: "https://dl.grafana.com/oss/release/grafana_{{ grafana_version }}_amd64.deb"
         dest: "/tmp/grafana_{{ grafana_version }}_amd64.deb"
-    
+
     - name: Install Grafana package
       apt:
         deb: "/tmp/grafana_{{ grafana_version }}_amd64.deb"
         state: present
       when: ansible_os_family == "Debian"
-    
+
     - name: Configure Grafana admin password
       lineinfile:
         path: /etc/grafana/grafana.ini
         regexp: '^;admin_password = admin'
         line: "admin_password = {{ grafana_admin_password }}"
       notify: restart grafana
-    
+
     - name: Start and enable services
       systemd:
         name: "{{ item }}"
@@ -942,7 +942,7 @@ EOF
         - prometheus
         - node_exporter
         - grafana-server
-    
+
     - name: Configure firewall for monitoring
       ufw:
         rule: allow
@@ -952,22 +952,22 @@ EOF
         - "9100"  # Node Exporter
         - "3000"  # Grafana
       when: ansible_os_family == "Debian"
-  
+
   handlers:
     - name: reload systemd
       systemd:
         daemon_reload: yes
-    
+
     - name: restart prometheus
       systemd:
         name: prometheus
         state: restarted
-    
+
     - name: restart node_exporter
       systemd:
         name: node_exporter
         state: restarted
-    
+
     - name: restart grafana
       systemd:
         name: grafana-server
@@ -989,7 +989,7 @@ EOF
     app_version: "1.0.0"
     app_user: myapp
     app_port: 8080
-  
+
   tasks:
     - name: Ensure required packages are installed
       package:
@@ -998,7 +998,7 @@ EOF
           - wget
           - git
         state: present
-    
+
     - name: Create application user
       user:
         name: "{{ app_user }}"
@@ -1006,7 +1006,7 @@ EOF
         shell: /bin/bash
         create_home: yes
         state: present
-    
+
     - name: Create application directory
       file:
         path: "/opt/{{ app_name }}"
@@ -1014,7 +1014,7 @@ EOF
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: '0755'
-    
+
     - name: Example configuration file
       copy:
         content: |
@@ -1026,14 +1026,14 @@ EOF
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
         mode: '0644'
-    
+
     - name: Example service template
       copy:
         content: |
           [Unit]
           Description={{ app_name }} Service
           After=network.target
-          
+
           [Service]
           Type=simple
           User={{ app_user }}
@@ -1041,24 +1041,24 @@ EOF
           WorkingDirectory=/opt/{{ app_name }}
           ExecStart=/opt/{{ app_name }}/start.sh
           Restart=always
-          
+
           [Install]
           WantedBy=multi-user.target
         dest: "/etc/systemd/system/{{ app_name }}.service"
         mode: '0644'
       notify: reload systemd
-    
+
     - name: Configure firewall
       ufw:
         rule: allow
         port: "{{ app_port }}"
       when: ansible_os_family == "Debian"
-  
+
   handlers:
     - name: reload systemd
       systemd:
         daemon_reload: yes
-    
+
     - name: restart service
       systemd:
         name: "{{ app_name }}"
@@ -1070,10 +1070,10 @@ EOF
             return 1
             ;;
     esac
-    
+
     # Set proper permissions
     chmod 644 "$output_file"
-    
+
     log_info "Sample playbook created successfully: $output_file"
     return 0
 }
@@ -1081,19 +1081,19 @@ EOF
 # Main function to display menu and handle user selection
 main() {
     log_info "Starting Ansible Module v${VERSION}"
-    
+
     # Check if running as root
     if [ "$EUID" -ne 0 ]; then
         log_error "This script must be run as root"
         exit 1
     fi
-    
+
     # Check/install dependencies
     if ! command -v python3 >/dev/null 2>&1; then
         log_info "Installing Python3..."
         apt-get update && apt-get install -y python3 python3-pip
     fi
-    
+
     # Check/install Ansible
     if ! check_ansible; then
         if [ -t 0 ]; then  # If running interactively
@@ -1108,7 +1108,7 @@ main() {
             install_ansible
         fi
     fi
-    
+
     # Main menu loop
     while true; do
         if [ -t 0 ]; then  # If running interactively
@@ -1125,7 +1125,7 @@ main() {
                 "8" "Create Sample Playbook" \
                 "9" "Exit" \
                 3>&1 1>&2 2>&3)
-            
+
             case $choice in
                 1)
                     log_info "Discovering Ansible playbooks..."
@@ -1154,13 +1154,13 @@ main() {
                 3)
                     # Execute playbook workflow
                     log_info "Starting playbook execution workflow..."
-                    
+
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
                         whiptail --title "Error" --msgbox "No Ansible playbooks found." 10 60
                         continue
                     fi
-                    
+
                     # Convert playbooks to menu format
                     local menu_items=()
                     local i=1
@@ -1168,18 +1168,18 @@ main() {
                         menu_items+=("$i" "$playbook")
                         ((i++))
                     done <<< "$playbooks"
-                    
+
                     # Let user select playbook
                     local selected_index
                     selected_index=$(whiptail --title "Select Playbook" \
                         --menu "Choose a playbook to execute:" 20 70 10 \
                         "${menu_items[@]}" \
                         3>&1 1>&2 2>&3)
-                    
+
                     if [ $? -eq 0 ]; then
                         local selected_playbook
                         selected_playbook=$(echo "$playbooks" | sed -n "${selected_index}p")
-                        
+
                         # Find playbook path
                         local playbook_path=""
                         if [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yml" ]; then
@@ -1191,13 +1191,13 @@ main() {
                         elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml" ]; then
                             playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml"
                         fi
-                        
+
                         if [ -n "$playbook_path" ]; then
                             log_info "Selected playbook: $selected_playbook at $playbook_path"
-                            
+
                             # Collect variables
                             collect_variables "$playbook_path"
-                            
+
                             # Validate playbook
                             if validate_playbook "$playbook_path"; then
                                 # Execute playbook
@@ -1217,13 +1217,13 @@ main() {
                 4)
                     # Dry-run playbook
                     log_info "Starting playbook dry-run workflow..."
-                    
+
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
                         whiptail --title "Error" --msgbox "No Ansible playbooks found." 10 60
                         continue
                     fi
-                    
+
                     # Convert playbooks to menu format
                     local menu_items=()
                     local i=1
@@ -1231,18 +1231,18 @@ main() {
                         menu_items+=("$i" "$playbook")
                         ((i++))
                     done <<< "$playbooks"
-                    
+
                     # Let user select playbook
                     local selected_index
                     selected_index=$(whiptail --title "Select Playbook for Dry-run" \
                         --menu "Choose a playbook for dry-run (check mode):" 20 70 10 \
                         "${menu_items[@]}" \
                         3>&1 1>&2 2>&3)
-                    
+
                     if [ $? -eq 0 ]; then
                         local selected_playbook
                         selected_playbook=$(echo "$playbooks" | sed -n "${selected_index}p")
-                        
+
                         # Find playbook path
                         local playbook_path=""
                         if [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yml" ]; then
@@ -1254,13 +1254,13 @@ main() {
                         elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml" ]; then
                             playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml"
                         fi
-                        
+
                         if [ -n "$playbook_path" ]; then
                             log_info "Selected playbook for dry-run: $selected_playbook at $playbook_path"
-                            
+
                             # Collect variables
                             collect_variables "$playbook_path"
-                            
+
                             # Validate playbook first
                             if validate_playbook "$playbook_path"; then
                                 # Run dry-run
@@ -1280,13 +1280,13 @@ main() {
                 5)
                     # Validate playbook
                     log_info "Starting playbook validation workflow..."
-                    
+
                     # Get available playbooks
                     if ! playbooks=$(discover_playbooks); then
                         whiptail --title "Error" --msgbox "No Ansible playbooks found." 10 60
                         continue
                     fi
-                    
+
                     # Convert playbooks to menu format
                     local menu_items=()
                     local i=1
@@ -1294,18 +1294,18 @@ main() {
                         menu_items+=("$i" "$playbook")
                         ((i++))
                     done <<< "$playbooks"
-                    
+
                     # Let user select playbook
                     local selected_index
                     selected_index=$(whiptail --title "Select Playbook for Validation" \
                         --menu "Choose a playbook to validate:" 20 70 10 \
                         "${menu_items[@]}" \
                         3>&1 1>&2 2>&3)
-                    
+
                     if [ $? -eq 0 ]; then
                         local selected_playbook
                         selected_playbook=$(echo "$playbooks" | sed -n "${selected_index}p")
-                        
+
                         # Find playbook path
                         local playbook_path=""
                         if [ -f "$SCRIPT_DIR/../ansible/$selected_playbook.yml" ]; then
@@ -1317,10 +1317,10 @@ main() {
                         elif [ -f "$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml" ]; then
                             playbook_path="$ANSIBLE_PLAYBOOKS_DIR/$selected_playbook.yaml"
                         fi
-                        
+
                         if [ -n "$playbook_path" ]; then
                             log_info "Validating playbook: $selected_playbook at $playbook_path"
-                            
+
                             if validate_playbook "$playbook_path"; then
                                 whiptail --title "Validation Success" --msgbox "Playbook validation successful!\n\nPlaybook: $selected_playbook\nSyntax: Valid\nStructure: Valid" 12 70
                             else
@@ -1335,7 +1335,7 @@ main() {
                     # Install role from Galaxy
                     local role_name
                     role_name=$(whiptail --title "Install Role" --inputbox "Enter role name from Ansible Galaxy:" 10 60 3>&1 1>&2 2>&3)
-                    
+
                     if [ $? -eq 0 ] && [ -n "$role_name" ]; then
                         install_role "$role_name"
                         if [ $? -eq 0 ]; then
@@ -1348,7 +1348,7 @@ main() {
                 7)
                     # Show configuration
                     log_info "Displaying Ansible configuration..."
-                    
+
                     # Collect configuration information
                     local config_info=""
                     if [ "$TEST_MODE" ]; then
@@ -1379,18 +1379,18 @@ main() {
                             echo "System Playbooks Directory: $ANSIBLE_PLAYBOOKS_DIR"
                             echo "System Roles Directory: $ANSIBLE_ROLES_DIR"
                         } > "$temp_file"
-                        
+
                         config_info=$(cat "$temp_file")
                         rm -f "$temp_file"
                     fi
-                    
+
                     # Display in scrollable dialog
                     whiptail --title "Ansible Configuration" --scrolltext --msgbox "$config_info" 25 100
                     ;;
                 8)
                     # Create sample playbook
                     log_info "Starting sample playbook creation workflow..."
-                    
+
                     # Define sample playbook templates
                     local templates=(
                         "basic-setup" "Basic System Setup (packages, users, security)"
@@ -1400,12 +1400,12 @@ main() {
                         "monitoring-setup" "Monitoring Stack Setup (Prometheus/Grafana)"
                         "custom" "Create Custom Playbook Template"
                     )
-                    
+
                     # Show template selection dialog
                     local selected_template
                     if selected_template=$(whiptail --title "Create Sample Playbook" --menu "Choose a playbook template to create:" 20 80 6 "${templates[@]}" 3>&1 1>&2 2>&3); then
                         log_info "Selected template: $selected_template"
-                        
+
                         # Get playbook name
                         local playbook_name
                         if playbook_name=$(whiptail --title "Playbook Name" --inputbox "Enter a name for your playbook:" 10 60 "sample-$selected_template" 3>&1 1>&2 2>&3); then
@@ -1413,7 +1413,7 @@ main() {
                                 # Sanitize playbook name
                                 playbook_name=$(echo "$playbook_name" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')
                                 local playbook_file="$ANSIBLE_PLAYBOOKS_DIR/${playbook_name}.yaml"
-                                
+
                                 # Check if file already exists
                                 if [ -f "$playbook_file" ]; then
                                     if ! whiptail --title "File Exists" --yesno "A playbook named '$playbook_name' already exists. Overwrite it?" 10 60; then
@@ -1421,7 +1421,7 @@ main() {
                                         continue
                                     fi
                                 fi
-                                
+
                                 # Create playbook based on template
                                 if create_sample_playbook "$selected_template" "$playbook_file" "$playbook_name"; then
                                     whiptail --title "Success" --msgbox "Sample playbook created successfully!\n\nFile: $playbook_file\nTemplate: $selected_template\n\nYou can now edit this playbook to customize it for your needs." 15 70

@@ -102,30 +102,30 @@ check_docker() {
 # Function to install Docker
 install_docker() {
     log "INFO" "Installing Docker..."
-    
+
     # Create a temporary file for the installation script
     local temp_script
     temp_script=$(mktemp)
-    
+
     # Download the Docker installation script
     curl -fsSL https://get.docker.com -o "$temp_script"
-    
+
     # Make it executable and run it
     chmod +x "$temp_script"
     sh "$temp_script"
-    
+
     # Clean up
     rm "$temp_script"
-    
+
     # Enable and start Docker service
     systemctl enable --now docker
-    
+
     # Add current user to docker group if not running as root
     if [ "$SUDO_USER" ]; then
         usermod -aG docker "$SUDO_USER"
         log "INFO" "Added user $SUDO_USER to the docker group"
     fi
-    
+
     log "INFO" "Docker installed successfully: $(docker --version)"
     return 0
 }
@@ -133,18 +133,18 @@ install_docker() {
 # Function to install Docker Compose
 install_docker_compose() {
     log "INFO" "Installing Docker Compose..."
-    
+
     # Get the latest version of Docker Compose
     local compose_version
     compose_version=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
-    
+
     # Download Docker Compose
     mkdir -p /usr/local/lib/docker/cli-plugins
     curl -L "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
-    
+
     # Make it executable
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-    
+
     log "INFO" "Docker Compose installed successfully: $(docker compose version)"
     return 0
 }
@@ -167,23 +167,23 @@ install_k3s() {
     local node_type="$1"  # "server" or "agent"
     local server_ip="$2"  # Only required for agent nodes
     local node_token="$3" # Only required for agent nodes
-    
+
     log "INFO" "Installing k3s as $node_type..."
-    
+
     # Download and install k3s
     if [ "$node_type" = "server" ]; then
         # Install k3s server (master)
         curl -sfL https://get.k3s.io | sh -
-        
+
         # Get the node token for other nodes to join
         local token
         token=$(cat /var/lib/rancher/k3s/server/node-token)
-        
+
         # Set up kubectl for the current user
         mkdir -p "$HOME/.kube"
         cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
         chown -R "$(id -u):$(id -g)" "$HOME/.kube"
-        
+
         # Also set up kubectl for the sudo user if applicable
         if [ "$SUDO_USER" ]; then
             sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
@@ -192,34 +192,34 @@ install_k3s() {
             sed -i "s/127.0.0.1/$(hostname -I | awk '{print $1}')/g" "$sudo_home/.kube/config"
             chown -R "$SUDO_USER:$(id -gn "$SUDO_USER")" "$sudo_home/.kube"
         fi
-        
+
         log "INFO" "k3s server installed successfully"
         log "INFO" "Node token: $token"
         log "INFO" "Server IP: $(hostname -I | awk '{print $1}')"
         whiptail --title "k3s Server Info" --msgbox "k3s server installed successfully!\n\nServer IP: $(hostname -I | awk '{print $1}')\nNode Token: $token\n\nSave this information to join other nodes." 15 70
-        
+
     elif [ "$node_type" = "agent" ]; then
         # Install k3s agent (worker)
         if [ -z "$server_ip" ] || [ -z "$node_token" ]; then
             log "ERROR" "Server IP and node token are required for agent installation"
             return 1
         fi
-        
+
         curl -sfL https://get.k3s.io | K3S_URL="https://$server_ip:6443" K3S_TOKEN="$node_token" sh -
-        
+
         log "INFO" "k3s agent installed successfully and joined cluster at $server_ip"
     else
         log "ERROR" "Invalid node type: $node_type. Must be 'server' or 'agent'"
         return 1
     fi
-    
+
     return 0
 }
 
 # Function to uninstall k3s
 uninstall_k3s() {
     log "INFO" "Uninstalling k3s..."
-    
+
     if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
         /usr/local/bin/k3s-uninstall.sh
     elif [ -f /usr/local/bin/k3s-agent-uninstall.sh ]; then
@@ -227,7 +227,7 @@ uninstall_k3s() {
     else
         log "WARN" "k3s uninstall script not found"
     fi
-    
+
     log "INFO" "k3s uninstalled"
 }
 
@@ -248,23 +248,23 @@ check_k3s() {
 # Function to install Kubernetes tools
 install_kubernetes_tools() {
     log "INFO" "Installing Kubernetes tools (kubectl, kubeadm, kubelet)..."
-    
+
     # Add Kubernetes apt repository
     apt-get update
     apt-get install -y apt-transport-https ca-certificates curl
-    
+
     # Add Kubernetes signing key
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-    
+
     # Add Kubernetes apt repository
     echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
-    
+
     # Update apt and install Kubernetes components
     apt-get update
     apt-get install -y kubelet kubeadm kubectl
     apt-mark hold kubelet kubeadm kubectl
-    
+
     log "INFO" "Kubernetes tools installed successfully: $(kubectl version --client)"
     return 0
 }
@@ -272,21 +272,21 @@ install_kubernetes_tools() {
 # Function to initialize a Kubernetes cluster
 init_kubernetes_cluster() {
     local pod_network_cidr="$1"
-    
+
     log "INFO" "Initializing Kubernetes cluster..."
-    
+
     # Disable swap (required for Kubernetes)
     swapoff -a
     sed -i '/swap/s/^\(.*\)$/#\1/g' /etc/fstab
-    
+
     # Initialize the cluster
     kubeadm init --pod-network-cidr="$pod_network_cidr" --control-plane-endpoint "$(hostname -I | awk '{print $1}'):6443"
-    
+
     # Set up kubectl for the current user
     mkdir -p "$HOME/.kube"
     cp -i /etc/kubernetes/admin.conf "$HOME/.kube/config"
     chown -R "$(id -u):$(id -g)" "$HOME/.kube"
-    
+
     # Also set up kubectl for the sudo user if applicable
     if [ "$SUDO_USER" ]; then
         sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
@@ -294,7 +294,7 @@ init_kubernetes_cluster() {
         cp -i /etc/kubernetes/admin.conf "$sudo_home/.kube/config"
         chown -R "$SUDO_USER:$(id -gn "$SUDO_USER")" "$sudo_home/.kube"
     fi
-    
+
     log "INFO" "Kubernetes cluster initialized successfully"
     return 0
 }
@@ -302,15 +302,15 @@ init_kubernetes_cluster() {
 # Function to deploy Calico CNI
 deploy_calico_cni() {
     log "INFO" "Deploying Calico CNI..."
-    
+
     # Apply Calico manifest
     kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
     kubectl create -f https://docs.projectcalico.org/manifests/custom-resources.yaml
-    
+
     # Wait for the pods to be ready
     log "INFO" "Waiting for Calico pods to be ready..."
     kubectl wait --for=condition=ready pods --all -n calico-system --timeout=300s
-    
+
     log "INFO" "Calico CNI deployed successfully"
     return 0
 }
@@ -318,19 +318,19 @@ deploy_calico_cni() {
 # Function for advanced cluster management
 advanced_cluster_management() {
     log "INFO" "Starting advanced Kubernetes cluster management..."
-    
+
     # Check if kubectl is available
     if ! command -v kubectl >/dev/null 2>&1; then
         log "ERROR" "kubectl is not available. Please set up a Kubernetes cluster first."
         return 1
     fi
-    
+
     # Check if cluster is accessible
     if ! kubectl cluster-info >/dev/null 2>&1; then
         log "ERROR" "Cannot connect to Kubernetes cluster. Please check your configuration."
         return 1
     fi
-    
+
     local management_option
     management_option=$(whiptail --title "Advanced Cluster Management" --menu "Choose a management option:" 18 70 7 \
         "1" "Setup Ingress Controller (NGINX/Traefik)" \
@@ -340,7 +340,7 @@ advanced_cluster_management() {
         "5" "Manage cluster add-ons" \
         "6" "Resource management (deployments, services, pods)" \
         "7" "Network policies and security" 3>&1 1>&2 2>&3)
-    
+
     case $management_option in
         1)
             setup_ingress_controller
@@ -367,14 +367,14 @@ advanced_cluster_management() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to setup ingress controller
 setup_ingress_controller() {
     log "INFO" "Setting up Kubernetes Ingress Controller..."
-    
+
     # Check if any ingress controller is already installed
     local existing_ingress=""
     if kubectl get ingressclass >/dev/null 2>&1; then
@@ -385,13 +385,13 @@ setup_ingress_controller() {
             fi
         fi
     fi
-    
+
     local ingress_type
     ingress_type=$(whiptail --title "Ingress Controller Selection" --menu "Choose an ingress controller:" 15 70 3 \
         "1" "NGINX Ingress Controller (most popular)" \
         "2" "Traefik (modern, easy to configure)" \
         "3" "View current ingress controllers" 3>&1 1>&2 2>&3)
-    
+
     case $ingress_type in
         1)
             install_nginx_ingress
@@ -406,21 +406,21 @@ setup_ingress_controller() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to install NGINX Ingress Controller
 install_nginx_ingress() {
     log "INFO" "Installing NGINX Ingress Controller..."
-    
+
     # Choose installation method
     local install_method
     install_method=$(whiptail --title "NGINX Installation Method" --menu "Choose installation method:" 15 60 3 \
         "1" "Helm chart (recommended)" \
         "2" "Raw YAML manifests" \
         "3" "Custom configuration" 3>&1 1>&2 2>&3)
-    
+
     case $install_method in
         1)
             install_nginx_with_helm
@@ -435,14 +435,14 @@ install_nginx_ingress() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to install NGINX with Helm
 install_nginx_with_helm() {
     log "INFO" "Installing NGINX Ingress Controller using Helm..."
-    
+
     # Check if Helm is installed
     if ! command -v helm >/dev/null 2>&1; then
         if whiptail --title "Helm Required" --yesno "Helm is not installed. Install it now?" 10 60; then
@@ -456,7 +456,7 @@ install_nginx_with_helm() {
             return 1
         fi
     fi
-    
+
     # Get configuration options
     local namespace="ingress-nginx"
     local service_type
@@ -464,19 +464,19 @@ install_nginx_with_helm() {
         "LoadBalancer" "LoadBalancer (cloud environments)" \
         "NodePort" "NodePort (on-premises, specific ports)" \
         "ClusterIP" "ClusterIP (internal only)" 3>&1 1>&2 2>&3)
-    
+
     # Get additional configuration
     local enable_metrics=""
     if whiptail --title "Metrics" --yesno "Enable Prometheus metrics collection?" 10 60; then
         enable_metrics="--set controller.metrics.enabled=true --set controller.metrics.serviceMonitor.enabled=true"
     fi
-    
+
     local replica_count
     replica_count=$(whiptail --title "Replica Count" --inputbox "Enter number of controller replicas:" 10 60 "2" 3>&1 1>&2 2>&3)
     if [ -z "$replica_count" ] || [ "$replica_count" -lt 1 ]; then
         replica_count="2"
     fi
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install NGINX Ingress Controller with Helm"
         log "INFO" "Namespace: $namespace"
@@ -487,50 +487,50 @@ install_nginx_with_helm() {
         # Add NGINX Ingress Helm repository
         helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
         helm repo update
-        
+
         # Create namespace
         kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
-        
+
         # Install NGINX Ingress Controller
         helm install ingress-nginx ingress-nginx/ingress-nginx \
             --namespace "$namespace" \
             --set controller.service.type="$service_type" \
             --set controller.replicaCount="$replica_count" \
             $enable_metrics
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for NGINX Ingress Controller to be ready..."
         kubectl wait --namespace "$namespace" \
             --for=condition=ready pod \
             --selector=app.kubernetes.io/component=controller \
             --timeout=300s
-        
+
         log "INFO" "NGINX Ingress Controller installed successfully!"
-        
+
         # Show access information
         show_nginx_access_info "$namespace" "$service_type"
     fi
-    
+
     return 0
 }
 
 # Function to install NGINX with raw YAML
 install_nginx_with_yaml() {
     log "INFO" "Installing NGINX Ingress Controller using raw YAML manifests..."
-    
+
     local manifest_version
     manifest_version=$(whiptail --title "NGINX Version" --menu "Choose NGINX Ingress version:" 15 60 3 \
         "latest" "Latest stable version" \
         "v1.10.0" "Version 1.10.0 (tested)" \
         "custom" "Custom version" 3>&1 1>&2 2>&3)
-    
+
     if [ "$manifest_version" = "custom" ]; then
         manifest_version=$(whiptail --title "Custom Version" --inputbox "Enter NGINX Ingress version (e.g., v1.10.0):" 10 60 3>&1 1>&2 2>&3)
         if [ -z "$manifest_version" ]; then
             manifest_version="latest"
         fi
     fi
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install NGINX Ingress Controller from YAML manifests"
         log "INFO" "Version: $manifest_version"
@@ -542,35 +542,35 @@ install_nginx_with_yaml() {
         else
             manifest_url="https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-$manifest_version/deploy/static/provider/cloud/deploy.yaml"
         fi
-        
+
         # Apply the manifest
         kubectl apply -f "$manifest_url"
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for NGINX Ingress Controller to be ready..."
         kubectl wait --namespace ingress-nginx \
             --for=condition=ready pod \
             --selector=app.kubernetes.io/component=controller \
             --timeout=300s
-        
+
         log "INFO" "NGINX Ingress Controller installed successfully!"
         show_nginx_access_info "ingress-nginx" "LoadBalancer"
     fi
-    
+
     return 0
 }
 
 # Function to install NGINX with custom configuration
 install_nginx_custom() {
     log "INFO" "Setting up custom NGINX Ingress Controller configuration..."
-    
+
     # Create custom values file
     local config_file="/tmp/nginx-values.yaml"
-    
+
     # Get custom configuration options
     local custom_config=""
     custom_config=$(whiptail --title "Custom Configuration" --inputbox "Enter custom Helm values (YAML format) or leave empty for interactive setup:" 10 60 3>&1 1>&2 2>&3)
-    
+
     if [ -z "$custom_config" ]; then
         # Interactive configuration
         setup_nginx_interactive_config "$config_file"
@@ -578,7 +578,7 @@ install_nginx_custom() {
         # Use provided configuration
         echo "$custom_config" > "$config_file"
     fi
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install NGINX with custom configuration"
         log "INFO" "Configuration file: $config_file"
@@ -587,55 +587,55 @@ install_nginx_custom() {
         # Install with custom values
         helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
         helm repo update
-        
+
         kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
-        
+
         helm install ingress-nginx ingress-nginx/ingress-nginx \
             --namespace ingress-nginx \
             --values "$config_file"
-        
+
         log "INFO" "NGINX Ingress Controller installed with custom configuration!"
         show_nginx_access_info "ingress-nginx" "LoadBalancer"
     fi
-    
+
     return 0
 }
 
 # Function to setup interactive NGINX configuration
 setup_nginx_interactive_config() {
     local config_file="$1"
-    
+
     log "INFO" "Setting up interactive NGINX configuration..."
-    
+
     # Service type
     local service_type
     service_type=$(whiptail --title "Service Type" --menu "Choose service type:" 15 60 3 \
         "LoadBalancer" "LoadBalancer" \
         "NodePort" "NodePort" \
         "ClusterIP" "ClusterIP" 3>&1 1>&2 2>&3)
-    
+
     # Replica count
     local replicas
     replicas=$(whiptail --title "Replicas" --inputbox "Number of controller replicas:" 10 60 "2" 3>&1 1>&2 2>&3)
-    
+
     # Enable metrics
     local metrics="false"
     if whiptail --title "Metrics" --yesno "Enable Prometheus metrics?" 10 60; then
         metrics="true"
     fi
-    
+
     # SSL redirect
     local ssl_redirect="true"
     if ! whiptail --title "SSL Redirect" --yesno "Force HTTPS redirect by default?" 10 60; then
         ssl_redirect="false"
     fi
-    
+
     # Custom annotations
     local custom_annotations=""
     if whiptail --title "Custom Annotations" --yesno "Add custom service annotations?" 10 60; then
         custom_annotations=$(whiptail --title "Service Annotations" --inputbox "Enter custom annotations (key=value,key2=value2):" 10 60 3>&1 1>&2 2>&3)
     fi
-    
+
     # Create values file
     cat > "$config_file" << EOF
 controller:
@@ -643,7 +643,7 @@ controller:
   service:
     type: $service_type
 EOF
-    
+
     if [ -n "$custom_annotations" ]; then
         echo "    annotations:" >> "$config_file"
         IFS=',' read -ra ANNOTATIONS <<< "$custom_annotations"
@@ -653,7 +653,7 @@ EOF
             echo "      $key: \"$value\"" >> "$config_file"
         done
     fi
-    
+
     cat >> "$config_file" << EOF
   config:
     ssl-redirect: "$ssl_redirect"
@@ -662,7 +662,7 @@ EOF
     serviceMonitor:
       enabled: $metrics
 EOF
-    
+
     log "INFO" "Configuration file created: $config_file"
 }
 
@@ -670,17 +670,17 @@ EOF
 show_nginx_access_info() {
     local namespace="$1"
     local service_type="$2"
-    
+
     log "INFO" "NGINX Ingress Controller access information:"
-    
+
     # Get service information
     local service_info
     service_info=$(kubectl get service -n "$namespace" -l app.kubernetes.io/component=controller -o wide 2>/dev/null)
-    
+
     if [ -n "$service_info" ]; then
         echo "Service Information:"
         echo "$service_info"
-        
+
         # Show specific access instructions based on service type
         case $service_type in
             LoadBalancer)
@@ -707,7 +707,7 @@ show_nginx_access_info() {
                 ;;
         esac
     fi
-    
+
     # Show example ingress resource
     show_example_ingress_resource
 }
@@ -715,13 +715,13 @@ show_nginx_access_info() {
 # Function to install Traefik Ingress Controller
 install_traefik_ingress() {
     log "INFO" "Installing Traefik Ingress Controller..."
-    
+
     local install_method
     install_method=$(whiptail --title "Traefik Installation Method" --menu "Choose installation method:" 15 60 3 \
         "1" "Helm chart (recommended)" \
         "2" "Raw YAML manifests" \
         "3" "Custom configuration" 3>&1 1>&2 2>&3)
-    
+
     case $install_method in
         1)
             install_traefik_with_helm
@@ -736,14 +736,14 @@ install_traefik_ingress() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to install Traefik with Helm
 install_traefik_with_helm() {
     log "INFO" "Installing Traefik using Helm..."
-    
+
     # Check if Helm is installed
     if ! command -v helm >/dev/null 2>&1; then
         if whiptail --title "Helm Required" --yesno "Helm is not installed. Install it now?" 10 60; then
@@ -757,20 +757,20 @@ install_traefik_with_helm() {
             return 1
         fi
     fi
-    
+
     # Configuration options
     local namespace="traefik-system"
     local enable_dashboard=""
     if whiptail --title "Traefik Dashboard" --yesno "Enable Traefik dashboard?" 10 60; then
         enable_dashboard="--set dashboard.enabled=true"
     fi
-    
+
     local service_type
     service_type=$(whiptail --title "Service Type" --menu "Choose service type:" 15 60 3 \
         "LoadBalancer" "LoadBalancer (cloud)" \
         "NodePort" "NodePort (on-premises)" \
         "ClusterIP" "ClusterIP (internal)" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install Traefik with Helm"
         log "INFO" "Namespace: $namespace"
@@ -780,43 +780,43 @@ install_traefik_with_helm() {
         # Add Traefik Helm repository
         helm repo add traefik https://traefik.github.io/charts
         helm repo update
-        
+
         # Create namespace
         kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
-        
+
         # Install Traefik
         helm install traefik traefik/traefik \
             --namespace "$namespace" \
             --set service.type="$service_type" \
             $enable_dashboard
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for Traefik to be ready..."
         kubectl wait --namespace "$namespace" \
             --for=condition=ready pod \
             --selector=app.kubernetes.io/name=traefik \
             --timeout=300s
-        
+
         log "INFO" "Traefik Ingress Controller installed successfully!"
         show_traefik_access_info "$namespace" "$service_type"
     fi
-    
+
     return 0
 }
 
 # Function to install Traefik with YAML
 install_traefik_with_yaml() {
     log "INFO" "Installing Traefik using YAML manifests..."
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install Traefik from YAML manifests"
     else
         # Create namespace
         kubectl create namespace traefik-system --dry-run=client -o yaml | kubectl apply -f -
-        
+
         # Apply Traefik CRDs and resources
         kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.0/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-        
+
         # Create basic Traefik deployment
         cat << 'EOF' | kubectl apply -f -
 apiVersion: v1
@@ -907,38 +907,38 @@ spec:
   selector:
     app: traefik
 EOF
-        
+
         log "INFO" "Traefik installed successfully!"
         show_traefik_access_info "traefik-system" "LoadBalancer"
     fi
-    
+
     return 0
 }
 
 # Function to install Traefik with custom configuration
 install_traefik_custom() {
     log "INFO" "Setting up custom Traefik configuration..."
-    
+
     # Create custom values file for Helm installation
     local config_file="/tmp/traefik-values.yaml"
-    
+
     # Get configuration options
     local enable_dashboard="false"
     if whiptail --title "Dashboard" --yesno "Enable Traefik dashboard?" 10 60; then
         enable_dashboard="true"
     fi
-    
+
     local enable_metrics="false"
     if whiptail --title "Metrics" --yesno "Enable Prometheus metrics?" 10 60; then
         enable_metrics="true"
     fi
-    
+
     local service_type
     service_type=$(whiptail --title "Service Type" --menu "Choose service type:" 15 60 3 \
         "LoadBalancer" "LoadBalancer" \
         "NodePort" "NodePort" \
         "ClusterIP" "ClusterIP" 3>&1 1>&2 2>&3)
-    
+
     # Create configuration file
     cat > "$config_file" << EOF
 dashboard:
@@ -965,7 +965,7 @@ providers:
   kubernetescrd:
     enabled: true
 EOF
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install Traefik with custom configuration"
         log "INFO" "Configuration file: $config_file"
@@ -973,17 +973,17 @@ EOF
     else
         helm repo add traefik https://traefik.github.io/charts
         helm repo update
-        
+
         kubectl create namespace traefik-system --dry-run=client -o yaml | kubectl apply -f -
-        
+
         helm install traefik traefik/traefik \
             --namespace traefik-system \
             --values "$config_file"
-        
+
         log "INFO" "Traefik installed with custom configuration!"
         show_traefik_access_info "traefik-system" "$service_type"
     fi
-    
+
     return 0
 }
 
@@ -991,17 +991,17 @@ EOF
 show_traefik_access_info() {
     local namespace="$1"
     local service_type="$2"
-    
+
     log "INFO" "Traefik Ingress Controller access information:"
-    
+
     # Get service information
     local service_info
     service_info=$(kubectl get service -n "$namespace" traefik -o wide 2>/dev/null)
-    
+
     if [ -n "$service_info" ]; then
         echo "Service Information:"
         echo "$service_info"
-        
+
         # Show dashboard access if enabled
         local dashboard_port
         dashboard_port=$(kubectl get service -n "$namespace" traefik -o jsonpath='{.spec.ports[?(@.name=="traefik")].port}' 2>/dev/null)
@@ -1023,7 +1023,7 @@ show_traefik_access_info() {
             esac
         fi
     fi
-    
+
     # Show example ingress resource for Traefik
     show_example_traefik_ingress
 }
@@ -1031,7 +1031,7 @@ show_traefik_access_info() {
 # Function to show ingress status
 show_ingress_status() {
     log "INFO" "Current Ingress Controller Status:"
-    
+
     # Check for existing ingress classes
     echo "=== Ingress Classes ==="
     if kubectl get ingressclass >/dev/null 2>&1; then
@@ -1039,24 +1039,24 @@ show_ingress_status() {
     else
         echo "No ingress classes found"
     fi
-    
+
     echo ""
     echo "=== Ingress Controllers ==="
-    
+
     # Check for NGINX
     if kubectl get namespace ingress-nginx >/dev/null 2>&1; then
         echo "NGINX Ingress Controller:"
         kubectl get pods -n ingress-nginx -l app.kubernetes.io/component=controller
         kubectl get service -n ingress-nginx -l app.kubernetes.io/component=controller
     fi
-    
+
     # Check for Traefik
     if kubectl get namespace traefik-system >/dev/null 2>&1; then
         echo "Traefik Ingress Controller:"
         kubectl get pods -n traefik-system -l app.kubernetes.io/name=traefik
         kubectl get service -n traefik-system traefik
     fi
-    
+
     echo ""
     echo "=== Existing Ingress Resources ==="
     if kubectl get ingress --all-namespaces >/dev/null 2>&1; then
@@ -1064,7 +1064,7 @@ show_ingress_status() {
     else
         echo "No ingress resources found"
     fi
-    
+
     # Show example commands
     echo ""
     echo "=== Example Usage ==="
@@ -1135,26 +1135,26 @@ EOF
 # Placeholder functions for other advanced cluster management features
 setup_cert_manager() {
     log "INFO" "Setting up cert-manager for automatic SSL certificate management..."
-    
+
     # Check if kubectl is available
     if ! command -v kubectl >/dev/null 2>&1; then
         log "ERROR" "kubectl is not available. Please set up a Kubernetes cluster first."
         return 1
     fi
-    
+
     # Check if cluster is accessible
     if ! kubectl cluster-info >/dev/null 2>&1; then
         log "ERROR" "Cannot connect to Kubernetes cluster. Please check your configuration."
         return 1
     fi
-    
+
     # Choose installation method
     local install_method
     install_method=$(whiptail --title "cert-manager Installation" --menu "Choose installation method:" 15 60 3 \
         "1" "Helm chart (recommended)" \
         "2" "YAML manifests" \
         "3" "Custom configuration" 3>&1 1>&2 2>&3)
-    
+
     case $install_method in
         1)
             install_cert_manager_helm
@@ -1169,14 +1169,14 @@ setup_cert_manager() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to install cert-manager with Helm
 install_cert_manager_helm() {
     log "INFO" "Installing cert-manager using Helm..."
-    
+
     # Check if Helm is installed
     if ! command -v helm >/dev/null 2>&1; then
         if whiptail --title "Helm Required" --yesno "Helm is not installed. Install it now?" 10 60; then
@@ -1190,9 +1190,9 @@ install_cert_manager_helm() {
             return 1
         fi
     fi
-    
+
     local namespace="cert-manager"
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install cert-manager with Helm"
         log "INFO" "Namespace: $namespace"
@@ -1200,75 +1200,75 @@ install_cert_manager_helm() {
         # Add Jetstack Helm repository
         helm repo add jetstack https://charts.jetstack.io
         helm repo update
-        
+
         # Create namespace
         kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f -
-        
+
         # Install cert-manager
         helm install cert-manager jetstack/cert-manager \
             --namespace "$namespace" \
             --version v1.13.2 \
             --set installCRDs=true \
             --set global.leaderElection.namespace="$namespace"
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for cert-manager to be ready..."
         kubectl wait --namespace "$namespace" \
             --for=condition=ready pod \
             --selector=app.kubernetes.io/instance=cert-manager \
             --timeout=300s
-        
+
         log "INFO" "cert-manager installed successfully!"
-        
+
         # Show example ClusterIssuer
         show_cert_manager_examples
     fi
-    
+
     return 0
 }
 
 # Function to install cert-manager with YAML
 install_cert_manager_yaml() {
     log "INFO" "Installing cert-manager using YAML manifests..."
-    
+
     local version="v1.13.2"
     version=$(whiptail --title "cert-manager Version" --inputbox "Enter cert-manager version:" 10 60 "$version" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install cert-manager from YAML manifests"
         log "INFO" "Version: $version"
     else
         # Apply cert-manager CRDs
         kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/$version/cert-manager.crds.yaml"
-        
+
         # Apply cert-manager
         kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/$version/cert-manager.yaml"
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for cert-manager to be ready..."
         kubectl wait --namespace cert-manager \
             --for=condition=ready pod \
             --selector=app.kubernetes.io/instance=cert-manager \
             --timeout=300s
-        
+
         log "INFO" "cert-manager installed successfully!"
         show_cert_manager_examples
     fi
-    
+
     return 0
 }
 
 # Function to install cert-manager with custom configuration
 install_cert_manager_custom() {
     log "INFO" "Setting up custom cert-manager configuration..."
-    
+
     # Get issuer type
     local issuer_type
     issuer_type=$(whiptail --title "Certificate Issuer" --menu "Choose certificate issuer:" 15 60 3 \
         "letsencrypt-staging" "Let's Encrypt Staging (testing)" \
         "letsencrypt-prod" "Let's Encrypt Production" \
         "selfsigned" "Self-signed certificates" 3>&1 1>&2 2>&3)
-    
+
     # Get email for Let's Encrypt
     local email=""
     if [[ "$issuer_type" == letsencrypt* ]]; then
@@ -1278,15 +1278,15 @@ install_cert_manager_custom() {
             return 1
         fi
     fi
-    
+
     # Install cert-manager first
     install_cert_manager_helm
-    
+
     if [ $? -eq 0 ] && [ -z "$TEST_MODE" ]; then
         # Create ClusterIssuer
         create_cluster_issuer "$issuer_type" "$email"
     fi
-    
+
     return 0
 }
 
@@ -1294,9 +1294,9 @@ install_cert_manager_custom() {
 create_cluster_issuer() {
     local issuer_type="$1"
     local email="$2"
-    
+
     log "INFO" "Creating ClusterIssuer for $issuer_type..."
-    
+
     case $issuer_type in
         letsencrypt-staging)
             cat <<EOF | kubectl apply -f -
@@ -1345,14 +1345,14 @@ spec:
 EOF
             ;;
     esac
-    
+
     log "INFO" "ClusterIssuer created successfully!"
 }
 
 # Function to show cert-manager examples
 show_cert_manager_examples() {
     log "INFO" "cert-manager has been installed successfully!"
-    
+
     # Show example usage
     whiptail --title "cert-manager Examples" --msgbox "cert-manager is now ready! Here are some examples:
 
@@ -1362,7 +1362,7 @@ show_cert_manager_examples() {
 2. Request a certificate in your Ingress:
    Add these annotations to your Ingress:
    cert-manager.io/cluster-issuer: \"letsencrypt-prod\"
-   
+
 3. Check certificate status:
    kubectl get certificates
    kubectl describe certificate <cert-name>
@@ -1372,26 +1372,26 @@ For more examples, check the cert-manager documentation." 20 80
 
 setup_kubernetes_dashboard() {
     log "INFO" "Setting up Kubernetes Dashboard..."
-    
+
     # Check if kubectl is available
     if ! command -v kubectl >/dev/null 2>&1; then
         log "ERROR" "kubectl is not available. Please set up a Kubernetes cluster first."
         return 1
     fi
-    
+
     # Check if cluster is accessible
     if ! kubectl cluster-info >/dev/null 2>&1; then
         log "ERROR" "Cannot connect to Kubernetes cluster. Please check your configuration."
         return 1
     fi
-    
+
     # Choose installation method
     local install_method
     install_method=$(whiptail --title "Dashboard Installation" --menu "Choose installation method:" 15 60 3 \
         "1" "Official Kubernetes Dashboard" \
         "2" "Dashboard with metrics server" \
         "3" "Dashboard with custom configuration" 3>&1 1>&2 2>&3)
-    
+
     case $install_method in
         1)
             install_k8s_dashboard_basic
@@ -1406,51 +1406,51 @@ setup_kubernetes_dashboard() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
 # Function to install basic Kubernetes Dashboard
 install_k8s_dashboard_basic() {
     log "INFO" "Installing Kubernetes Dashboard..."
-    
+
     local version="v2.7.0"
     version=$(whiptail --title "Dashboard Version" --inputbox "Enter dashboard version:" 10 60 "$version" 3>&1 1>&2 2>&3)
-    
+
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install Kubernetes Dashboard"
         log "INFO" "Version: $version"
     else
         # Apply dashboard manifests
         kubectl apply -f "https://raw.githubusercontent.com/kubernetes/dashboard/${version}/aio/deploy/recommended.yaml"
-        
+
         # Wait for deployment to be ready
         log "INFO" "Waiting for dashboard to be ready..."
         kubectl wait --namespace kubernetes-dashboard \
             --for=condition=ready pod \
             --selector=k8s-app=kubernetes-dashboard \
             --timeout=300s
-        
+
         # Create admin user and get token
         create_dashboard_admin_user
-        
+
         log "INFO" "Kubernetes Dashboard installed successfully!"
         show_dashboard_access_info
     fi
-    
+
     return 0
 }
 
 # Function to install dashboard with metrics server
 install_k8s_dashboard_with_metrics() {
     log "INFO" "Installing Kubernetes Dashboard with metrics server..."
-    
+
     # Install metrics server first
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would install metrics server"
     else
         kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-        
+
         # Wait for metrics server to be ready
         log "INFO" "Waiting for metrics server to be ready..."
         kubectl wait --namespace kube-system \
@@ -1458,39 +1458,39 @@ install_k8s_dashboard_with_metrics() {
             --selector=k8s-app=metrics-server \
             --timeout=300s
     fi
-    
+
     # Install dashboard
     install_k8s_dashboard_basic
-    
+
     return 0
 }
 
 # Function to install dashboard with custom configuration
 install_k8s_dashboard_custom() {
     log "INFO" "Setting up custom Kubernetes Dashboard configuration..."
-    
+
     # Get access type
     local access_type
     access_type=$(whiptail --title "Dashboard Access" --menu "Choose access method:" 15 60 3 \
         "NodePort" "NodePort (accessible from outside)" \
         "LoadBalancer" "LoadBalancer (cloud environments)" \
         "Ingress" "Ingress (with domain name)" 3>&1 1>&2 2>&3)
-    
+
     # Install basic dashboard first
     install_k8s_dashboard_basic
-    
+
     if [ $? -eq 0 ] && [ -z "$TEST_MODE" ]; then
         # Configure access method
         configure_dashboard_access "$access_type"
     fi
-    
+
     return 0
 }
 
 # Function to create dashboard admin user
 create_dashboard_admin_user() {
     log "INFO" "Creating dashboard admin user..."
-    
+
     # Create admin user
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -1512,14 +1512,14 @@ subjects:
   name: admin-user
   namespace: kubernetes-dashboard
 EOF
-    
+
     # Get the token
     local token
     token=$(kubectl -n kubernetes-dashboard create token admin-user)
-    
+
     # Save token to file for reference
     echo "$token" > /tmp/dashboard-admin-token.txt
-    
+
     log "INFO" "Admin user created successfully!"
     log "INFO" "Token saved to /tmp/dashboard-admin-token.txt"
 }
@@ -1527,16 +1527,16 @@ EOF
 # Function to configure dashboard access
 configure_dashboard_access() {
     local access_type="$1"
-    
+
     log "INFO" "Configuring dashboard access via $access_type..."
-    
+
     case $access_type in
         NodePort)
             # Patch service to NodePort
             kubectl patch service kubernetes-dashboard \
                 -n kubernetes-dashboard \
                 -p '{"spec":{"type":"NodePort","ports":[{"port":443,"targetPort":8443,"nodePort":30443}]}}'
-            
+
             log "INFO" "Dashboard accessible via NodePort 30443"
             ;;
         LoadBalancer)
@@ -1544,14 +1544,14 @@ configure_dashboard_access() {
             kubectl patch service kubernetes-dashboard \
                 -n kubernetes-dashboard \
                 -p '{"spec":{"type":"LoadBalancer"}}'
-            
+
             log "INFO" "Dashboard accessible via LoadBalancer (check external IP)"
             ;;
         Ingress)
             # Create ingress for dashboard
             local domain
             domain=$(whiptail --title "Domain Name" --inputbox "Enter domain name for dashboard:" 10 60 "dashboard.local" 3>&1 1>&2 2>&3)
-            
+
             cat <<EOF | kubectl apply -f -
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -1574,7 +1574,7 @@ spec:
             port:
               number: 443
 EOF
-            
+
             log "INFO" "Dashboard accessible via https://$domain"
             ;;
     esac
@@ -1583,21 +1583,21 @@ EOF
 # Function to show dashboard access information
 show_dashboard_access_info() {
     log "INFO" "Kubernetes Dashboard access information:"
-    
+
     # Get service information
     local service_info
     service_info=$(kubectl get service -n kubernetes-dashboard kubernetes-dashboard -o wide 2>/dev/null)
-    
+
     if [ -n "$service_info" ]; then
         echo "Service Information:"
         echo "$service_info"
     fi
-    
+
     # Check if token file exists
     if [ -f /tmp/dashboard-admin-token.txt ]; then
         local token
         token=$(cat /tmp/dashboard-admin-token.txt)
-        
+
         whiptail --title "Dashboard Access" --msgbox "Kubernetes Dashboard is ready!
 
 Access Methods:
@@ -1642,14 +1642,14 @@ manage_network_security() {
 # Function for multi-VM deployment
 multi_vm_deployment() {
     log "INFO" "Starting multi-VM deployment setup..."
-    
+
     # Get deployment configuration
     local deployment_type
     deployment_type=$(whiptail --title "Multi-VM Deployment" --menu "Choose deployment type:" 15 60 3 \
         "1" "Docker Swarm cluster" \
         "2" "Distributed containers across VMs" \
         "3" "Load-balanced application" 3>&1 1>&2 2>&3)
-    
+
     case $deployment_type in
         1)
             setup_docker_swarm
@@ -1669,38 +1669,38 @@ multi_vm_deployment() {
 # Function to setup Docker Swarm cluster
 setup_docker_swarm() {
     log "INFO" "Setting up Docker Swarm cluster..."
-    
+
     local swarm_option
     swarm_option=$(whiptail --title "Docker Swarm Setup" --menu "Choose an option:" 15 60 3 \
         "1" "Initialize new swarm (manager node)" \
         "2" "Join existing swarm as worker" \
         "3" "Join existing swarm as manager" 3>&1 1>&2 2>&3)
-    
+
     case $swarm_option in
         1)
             # Initialize swarm
             local advertise_addr
             advertise_addr=$(whiptail --title "Advertise Address" --inputbox "Enter the IP address to advertise (leave empty for auto-detect):" 10 60 3>&1 1>&2 2>&3)
-            
+
             local command="docker swarm init"
             if [ -n "$advertise_addr" ]; then
                 command="$command --advertise-addr $advertise_addr"
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute: $command"
                 whiptail --title "Swarm Initialized" --msgbox "Test mode: Docker Swarm would be initialized.\n\nTo join workers, run:\ndocker swarm join --token <worker-token> <manager-ip>:2377\n\nTo join managers, run:\ndocker swarm join --token <manager-token> <manager-ip>:2377" 15 70
             else
                 log "INFO" "Initializing Docker Swarm..."
                 eval "$command"
-                
+
                 # Get join tokens
                 local worker_token manager_token
                 worker_token=$(docker swarm join-token worker -q)
                 manager_token=$(docker swarm join-token manager -q)
                 local manager_ip
                 manager_ip=$(hostname -I | awk '{print $1}')
-                
+
                 whiptail --title "Swarm Initialized" --msgbox "Docker Swarm initialized successfully!\n\nTo join workers, run on each worker node:\ndocker swarm join --token $worker_token $manager_ip:2377\n\nTo join managers, run on each manager node:\ndocker swarm join --token $manager_token $manager_ip:2377" 15 70
                 log "INFO" "Docker Swarm initialized on $manager_ip"
             fi
@@ -1712,7 +1712,7 @@ setup_docker_swarm() {
             if [ -z "$join_command" ]; then
                 return 1
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute: $join_command"
             else
@@ -1728,7 +1728,7 @@ setup_docker_swarm() {
             if [ -z "$join_command" ]; then
                 return 1
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute: $join_command"
             else
@@ -1743,40 +1743,40 @@ setup_docker_swarm() {
 # Function to deploy distributed containers across VMs
 deploy_distributed_containers() {
     log "INFO" "Setting up distributed container deployment..."
-    
+
     # Get VM list
     local vm_list
     vm_list=$(whiptail --title "VM List" --inputbox "Enter comma-separated list of VM IPs/hostnames:" 10 60 3>&1 1>&2 2>&3)
     if [ -z "$vm_list" ]; then
         return 1
     fi
-    
+
     # Get container configuration
     local image_name
     image_name=$(whiptail --title "Container Image" --inputbox "Enter container image (e.g., nginx:latest):" 10 60 3>&1 1>&2 2>&3)
     if [ -z "$image_name" ]; then
         return 1
     fi
-    
+
     local container_prefix
     container_prefix=$(whiptail --title "Container Prefix" --inputbox "Enter container name prefix:" 10 60 "app" 3>&1 1>&2 2>&3)
-    
+
     local port_mapping
     port_mapping=$(whiptail --title "Port Mapping" --inputbox "Enter port mapping (e.g., 8080:80):" 10 60 3>&1 1>&2 2>&3)
-    
+
     # Deploy to each VM
     local counter=1
     IFS=',' read -ra VMS <<< "$vm_list"
     for vm in "${VMS[@]}"; do
         vm=$(echo "$vm" | xargs)  # Trim whitespace
         local container_name="${container_prefix}-${counter}"
-        
+
         local ssh_command="docker run -d --name $container_name"
         if [ -n "$port_mapping" ]; then
             ssh_command="$ssh_command -p $port_mapping"
         fi
         ssh_command="$ssh_command $image_name"
-        
+
         if [ -n "$TEST_MODE" ]; then
             log "INFO" "Test mode: Would SSH to $vm and execute: $ssh_command"
         else
@@ -1787,10 +1787,10 @@ deploy_distributed_containers() {
                 log "ERROR" "Failed to deploy to $vm"
             fi
         fi
-        
+
         ((counter++))
     done
-    
+
     if [ -z "$TEST_MODE" ]; then
         whiptail --title "Deployment Complete" --msgbox "Distributed container deployment completed!\n\nDeployed to VMs: $vm_list\nContainer prefix: $container_prefix\nImage: $image_name" 12 70
     fi
@@ -1799,35 +1799,35 @@ deploy_distributed_containers() {
 # Function to deploy load-balanced application
 deploy_load_balanced_app() {
     log "INFO" "Setting up load-balanced application deployment..."
-    
+
     # Get configuration
     local backend_vms
     backend_vms=$(whiptail --title "Backend VMs" --inputbox "Enter comma-separated list of backend VM IPs:" 10 60 3>&1 1>&2 2>&3)
     if [ -z "$backend_vms" ]; then
         return 1
     fi
-    
+
     local lb_vm
     lb_vm=$(whiptail --title "Load Balancer VM" --inputbox "Enter load balancer VM IP:" 10 60 3>&1 1>&2 2>&3)
     if [ -z "$lb_vm" ]; then
         return 1
     fi
-    
+
     local app_image
     app_image=$(whiptail --title "Application Image" --inputbox "Enter application image:" 10 60 "nginx:latest" 3>&1 1>&2 2>&3)
-    
+
     local app_port
     app_port=$(whiptail --title "Application Port" --inputbox "Enter application port:" 10 60 "80" 3>&1 1>&2 2>&3)
-    
+
     # Deploy backends
     local counter=1
     IFS=',' read -ra BACKENDS <<< "$backend_vms"
     local backend_list=""
-    
+
     for backend in "${BACKENDS[@]}"; do
         backend=$(echo "$backend" | xargs)
         local container_name="backend-${counter}"
-        
+
         if [ -n "$TEST_MODE" ]; then
             log "INFO" "Test mode: Would deploy $container_name to $backend"
         else
@@ -1835,11 +1835,11 @@ deploy_load_balanced_app() {
             ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$backend" \
                 "docker run -d --name $container_name -p $app_port:$app_port $app_image"
         fi
-        
+
         backend_list="${backend_list}server backend${counter} ${backend}:${app_port} check\n    "
         ((counter++))
     done
-    
+
     # Create HAProxy configuration
     local haproxy_config="/tmp/haproxy.cfg"
     cat > "$haproxy_config" << EOF
@@ -1860,24 +1860,24 @@ backend http_back
     balance roundrobin
     $backend_list
 EOF
-    
+
     # Deploy load balancer
     if [ -n "$TEST_MODE" ]; then
         log "INFO" "Test mode: Would deploy HAProxy to $lb_vm"
         log "INFO" "HAProxy config created at $haproxy_config"
     else
         log "INFO" "Deploying HAProxy load balancer to $lb_vm..."
-        
+
         # Copy config to LB VM
         scp -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$haproxy_config" "root@$lb_vm:/tmp/"
-        
+
         # Deploy HAProxy container
         ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$lb_vm" \
             "docker run -d --name haproxy-lb -p 80:80 -v /tmp/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro haproxy:latest"
-        
+
         whiptail --title "Load Balancer Deployed" --msgbox "Load-balanced application deployed successfully!\n\nLoad Balancer: http://$lb_vm\nBackends: $backend_vms\n\nThe application is now accessible through the load balancer." 12 70
     fi
-    
+
     # Clean up
     rm -f "$haproxy_config"
 }
@@ -1885,22 +1885,22 @@ EOF
 # Function to show container monitoring and health status
 show_container_monitoring() {
     log "INFO" "Displaying container monitoring and health status..."
-    
+
     # Check if Docker is running
     if ! docker info > /dev/null 2>&1; then
         whiptail --title "Error" --msgbox "Docker is not running or not accessible." 8 60
         return 1
     fi
-    
+
     # Get list of containers
     local containers
     containers=$(docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}" 2>/dev/null)
-    
+
     if [ -z "$containers" ] || [ "$(echo "$containers" | wc -l)" -eq 1 ]; then
         whiptail --title "Container Monitoring" --msgbox "No containers found on this system." 8 60
         return 0
     fi
-    
+
     # Show monitoring options
     local monitoring_option
     monitoring_option=$(whiptail --title "Container Monitoring" --menu "Choose monitoring option:" 15 80 4 \
@@ -1908,7 +1908,7 @@ show_container_monitoring() {
         "2" "Monitor specific container" \
         "3" "View container resource usage" \
         "4" "View container health checks" 3>&1 1>&2 2>&3)
-    
+
     case $monitoring_option in
         1)
             # Show all container status
@@ -1924,26 +1924,26 @@ show_container_monitoring() {
             # Monitor specific container
             local container_list
             container_list=$(docker ps -a --format "{{.Names}}" | sort)
-            
+
             if [ -z "$container_list" ]; then
                 whiptail --title "Error" --msgbox "No containers found." 8 60
                 return 1
             fi
-            
+
             local menu_items=()
             local counter=1
             while IFS= read -r container; do
                 menu_items+=("$counter" "$container")
                 ((counter++))
             done <<< "$container_list"
-            
+
             local selected_num
             selected_num=$(whiptail --title "Select Container" --menu "Choose container to monitor:" 15 60 8 "${menu_items[@]}" 3>&1 1>&2 2>&3)
-            
+
             if [ -n "$selected_num" ]; then
                 local selected_container
                 selected_container=$(echo "$container_list" | sed -n "${selected_num}p")
-                
+
                 if [ -n "$TEST_MODE" ]; then
                     log "INFO" "Test mode: Would monitor container $selected_container"
                 else
@@ -1959,7 +1959,7 @@ CPU Usage: {{.HostConfig.CpuShares}}
 Memory Limit: {{.HostConfig.Memory}}
 RestartPolicy: {{.HostConfig.RestartPolicy.Name}}
 Health: {{if .State.Health}}{{.State.Health.Status}}{{else}}No health check{{end}}")
-                    
+
                     whiptail --title "Container Details: $selected_container" --msgbox "$container_info" 20 80 --scrolltext
                 fi
             fi
@@ -1978,7 +1978,7 @@ Health: {{if .State.Health}}{{.State.Health.Status}}{{else}}No health check{{end
             # View health checks
             local health_info
             health_info=$(docker ps --filter "health=healthy" --filter "health=unhealthy" --filter "health=starting" --format "table {{.Names}}\t{{.Status}}" 2>/dev/null)
-            
+
             if [ -z "$health_info" ] || [ "$(echo "$health_info" | wc -l)" -eq 1 ]; then
                 whiptail --title "Health Checks" --msgbox "No containers with health checks found." 8 60
             else
@@ -2008,7 +2008,7 @@ docker_deployment() {
             return 1
         fi
     fi
-    
+
     # Docker deployment options
     local docker_option
     docker_option=$(whiptail --title "Docker Deployment" --menu "Choose a deployment option:" 18 70 4 \
@@ -2016,7 +2016,7 @@ docker_deployment() {
         "2" "Deploy with Docker Compose" \
         "3" "Multi-VM deployment" \
         "4" "Container management" 3>&1 1>&2 2>&3)
-    
+
     case $docker_option in
         1)
             # Deploy a single container
@@ -2025,23 +2025,23 @@ docker_deployment() {
             if [ -z "$container_name" ]; then
                 return 1
             fi
-            
+
             local image_name
             image_name=$(whiptail --title "Container Image" --inputbox "Enter image name (e.g., nginx:latest):" 10 60 3>&1 1>&2 2>&3)
             if [ -z "$image_name" ]; then
                 return 1
             fi
-            
+
             local port_mapping
             port_mapping=$(whiptail --title "Port Mapping" --inputbox "Enter port mapping (e.g., 8080:80):" 10 60 3>&1 1>&2 2>&3)
-            
+
             local command
             command="docker run -d --name $container_name"
             if [ -n "$port_mapping" ]; then
                 command="$command -p $port_mapping"
             fi
             command="$command $image_name"
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute: $command"
             else
@@ -2058,17 +2058,17 @@ docker_deployment() {
                 log "ERROR" "Invalid docker-compose.yml path: $compose_path"
                 return 1
             fi
-            
+
             local compose_project
             compose_project=$(whiptail --title "Project Name" --inputbox "Enter project name:" 10 60 3>&1 1>&2 2>&3)
-            
+
             local command
             if [ -n "$compose_project" ]; then
                 command="docker compose -p $compose_project -f $compose_path up -d"
             else
                 command="docker compose -f $compose_path up -d"
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute: $command"
             else
@@ -2085,7 +2085,7 @@ docker_deployment() {
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
@@ -2099,7 +2099,7 @@ k3s_deployment() {
             node_type=$(whiptail --title "k3s Node Type" --menu "Select node type:" 15 60 2 \
                 "server" "k3s Server (Master Node)" \
                 "agent" "k3s Agent (Worker Node)" 3>&1 1>&2 2>&3)
-            
+
             case $node_type in
                 server)
                     if [ -n "$TEST_MODE" ]; then
@@ -2115,14 +2115,14 @@ k3s_deployment() {
                         log "ERROR" "Server IP is required for agent installation"
                         return 1
                     fi
-                    
+
                     local node_token
                     node_token=$(whiptail --title "Node Token" --inputbox "Enter k3s node token:" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$node_token" ]; then
                         log "ERROR" "Node token is required for agent installation"
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would install k3s agent to join $server_ip"
                     else
@@ -2138,7 +2138,7 @@ k3s_deployment() {
             return 1
         fi
     fi
-    
+
     # k3s management options
     local k3s_option
     k3s_option=$(whiptail --title "k3s Management" --menu "Choose an option:" 15 60 5 \
@@ -2147,7 +2147,7 @@ k3s_deployment() {
         "3" "Get node token (for adding workers)" \
         "4" "Uninstall k3s" \
         "5" "View cluster info" 3>&1 1>&2 2>&3)
-    
+
     case $k3s_option in
         1)
             # Check cluster status
@@ -2166,7 +2166,7 @@ k3s_deployment() {
                 "2" "WordPress with MySQL" \
                 "3" "Custom YAML file" \
                 "4" "Helm chart" 3>&1 1>&2 2>&3)
-            
+
             case $app_option in
                 1)
                     # Deploy Nginx
@@ -2185,7 +2185,7 @@ k3s_deployment() {
                     else
                         # Create namespace
                         kubectl create namespace wordpress
-                        
+
                         # Deploy MySQL
                         kubectl apply -f - <<EOF
 apiVersion: v1
@@ -2298,7 +2298,7 @@ EOF
                         log "ERROR" "Invalid YAML file path: $yaml_path"
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would apply YAML file $yaml_path"
                     else
@@ -2320,19 +2320,19 @@ EOF
                             return 1
                         fi
                     fi
-                    
+
                     local chart_name
                     chart_name=$(whiptail --title "Helm Chart" --inputbox "Enter Helm chart name (e.g., bitnami/nginx):" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$chart_name" ]; then
                         return 1
                     fi
-                    
+
                     local release_name
                     release_name=$(whiptail --title "Release Name" --inputbox "Enter release name:" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$release_name" ]; then
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would deploy Helm chart $chart_name as release $release_name"
                     else
@@ -2383,7 +2383,7 @@ EOF
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
@@ -2399,7 +2399,7 @@ kubernetes_deployment() {
             return 1
         fi
     fi
-    
+
     # Kubernetes deployment options
     local k8s_option
     k8s_option=$(whiptail --title "Kubernetes Deployment" --menu "Choose a deployment option:" 18 70 6 \
@@ -2409,7 +2409,7 @@ kubernetes_deployment() {
         "4" "Join an existing cluster (manual)" \
         "5" "Advanced cluster management" \
         "6" "Deploy an application" 3>&1 1>&2 2>&3)
-    
+
     case $k8s_option in
         1)
             # Initialize a new cluster (basic)
@@ -2418,18 +2418,18 @@ kubernetes_deployment() {
             if [ -z "$pod_cidr" ]; then
                 pod_cidr="10.244.0.0/16"  # Default to Flannel's CIDR
             fi
-            
+
             local cni_option
             cni_option=$(whiptail --title "CNI Selection" --menu "Select a CNI plugin:" 15 60 3 \
                 "1" "Calico" \
                 "2" "Flannel" \
                 "3" "Weave Net" 3>&1 1>&2 2>&3)
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would initialize Kubernetes cluster with CIDR $pod_cidr"
             else
                 init_kubernetes_cluster "$pod_cidr"
-                
+
                 # Deploy selected CNI
                 case $cni_option in
                     1)
@@ -2445,7 +2445,7 @@ kubernetes_deployment() {
                         log "WARN" "No CNI selected, network will not be functional."
                         ;;
                 esac
-                
+
                 # Display the join command for worker nodes
                 log "INFO" "To add worker nodes, run the following command on each node:"
                 kubeadm token create --print-join-command
@@ -2466,7 +2466,7 @@ kubernetes_deployment() {
             if [ -z "$join_command" ]; then
                 return 1
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would execute join command"
             else
@@ -2486,7 +2486,7 @@ kubernetes_deployment() {
                 "2" "Deploy using kubectl create" \
                 "3" "Deploy using Helm" \
                 "4" "Deploy sample WordPress with MySQL" 3>&1 1>&2 2>&3)
-            
+
             case $deploy_option in
                 1)
                     # Deploy from YAML
@@ -2496,7 +2496,7 @@ kubernetes_deployment() {
                         log "ERROR" "Invalid YAML file path: $yaml_path"
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would apply YAML file $yaml_path"
                     else
@@ -2511,13 +2511,13 @@ kubernetes_deployment() {
                     if [ -z "$app_name" ]; then
                         return 1
                     fi
-                    
+
                     local image_name
                     image_name=$(whiptail --title "Container Image" --inputbox "Enter image name (e.g., nginx:latest):" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$image_name" ]; then
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would create deployment $app_name with image $image_name"
                     else
@@ -2540,19 +2540,19 @@ kubernetes_deployment() {
                             return 1
                         fi
                     fi
-                    
+
                     local chart_name
                     chart_name=$(whiptail --title "Helm Chart" --inputbox "Enter Helm chart name (e.g., bitnami/nginx):" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$chart_name" ]; then
                         return 1
                     fi
-                    
+
                     local release_name
                     release_name=$(whiptail --title "Release Name" --inputbox "Enter release name:" 10 60 3>&1 1>&2 2>&3)
                     if [ -z "$release_name" ]; then
                         return 1
                     fi
-                    
+
                     if [ -n "$TEST_MODE" ]; then
                         log "INFO" "Test mode: Would deploy Helm chart $chart_name as release $release_name"
                     else
@@ -2569,7 +2569,7 @@ kubernetes_deployment() {
                     else
                         # Create namespace
                         kubectl create namespace wordpress
-                        
+
                         # Deploy MySQL
                         kubectl apply -f - <<EOF
 apiVersion: v1
@@ -2693,19 +2693,19 @@ EOF
                     return 1
                 fi
             fi
-            
+
             local chart_name
             chart_name=$(whiptail --title "Helm Chart" --inputbox "Enter Helm chart name (e.g., bitnami/nginx):" 10 60 3>&1 1>&2 2>&3)
             if [ -z "$chart_name" ]; then
                 return 1
             fi
-            
+
             local release_name
             release_name=$(whiptail --title "Release Name" --inputbox "Enter release name:" 10 60 3>&1 1>&2 2>&3)
             if [ -z "$release_name" ]; then
                 return 1
             fi
-            
+
             if [ -n "$TEST_MODE" ]; then
                 log "INFO" "Test mode: Would deploy Helm chart $chart_name as release $release_name"
             else
@@ -2730,7 +2730,7 @@ EOF
                 "5" "Manage container logs" \
                 "6" "Monitor container health" \
                 "7" "Return to main menu" 3>&1 1>&2 2>&3)
-            
+
             case $manage_option in
                 1)
                     # Enhanced container listing
@@ -2769,7 +2769,7 @@ EOF
             return 1
             ;;
     esac
-    
+
     return 0
 }
 
@@ -2781,7 +2781,7 @@ main_menu() {
         "2" "Kubernetes - Container Orchestration" \
         "3" "k3s - Lightweight Kubernetes" \
         "4" "Help & Documentation" 3>&1 1>&2 2>&3)
-    
+
     case $option in
         1)
             docker_deployment

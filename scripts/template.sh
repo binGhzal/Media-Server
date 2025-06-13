@@ -1051,7 +1051,7 @@ show_progress() {
     local delay=0.5
     local spinstr='|/-\'
     local progress=""
-    
+
     echo -n "  "  # Initial indent
     while ps -p $pid > /dev/null 2>&1; do
         local temp=${spinstr#?}
@@ -1089,28 +1089,28 @@ validate_template_name() {
 # Function to configure cloud-init
 configure_cloud_init() {
     local distro=$1
-    
+
     # Initialize cloud-init configuration
     local cloud_init_config=()
-    
+
     # Check if distribution supports cloud-init
     if ! supports_cloudinit "$distro"; then
         log_info "Cloud-init is not supported for $distro"
         return 1
     fi
-    
+
     # Ask if user wants to enable cloud-init
     if ! whiptail --title "Cloud-Init Configuration" --yesno "Enable cloud-init for this template?" 10 60; then
         log_info "Cloud-init disabled by user"
         return 1
     fi
-    
+
     # Configure cloud-init user
     local ci_user
     while true; do
         ci_user=$(whiptail --title "Cloud-Init User" --inputbox "Enter default username:" 10 60 "clouduser" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled cloud-init configuration"; return 1; }
-        
+
         # Validate username (starts with letter, only lowercase letters, numbers, underscore, dash)
         if [[ "$ci_user" =~ ^[a-z][a-z0-9_-]*$ ]]; then
             break
@@ -1118,30 +1118,30 @@ configure_cloud_init() {
             whiptail --title "Invalid Username" --msgbox "Username must start with a letter and contain only lowercase letters, numbers, underscore, and dash" 10 60
         fi
     done
-    
+
     # Configure password
     local password_ok=false
     local ci_password
     while [ "$password_ok" = false ]; do
         ci_password=$(whiptail --title "Cloud-Init Password" --passwordbox "Enter password for $ci_user:" 10 60 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled password setup"; return 1; }
-        
+
         local password_verify=$(whiptail --title "Verify Password" --passwordbox "Re-enter password:" 10 60 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled password verification"; return 1; }
-        
+
         if [ "$ci_password" = "$password_verify" ]; then
             password_ok=true
         else
             whiptail --title "Error" --msgbox "Passwords do not match. Please try again." 10 60
         fi
     done
-    
+
     # Configure SSH keys
     local ssh_keys=""
     if whiptail --title "SSH Keys" --yesno "Would you like to add SSH public keys for passwordless login?" 10 60; then
         local key_file
         key_file=$(whiptail --title "SSH Public Key File" --inputbox "Enter path to SSH public key file:" 10 60 "$HOME/.ssh/id_rsa.pub" 3>&1 1>&2 2>&3)
-        
+
         if [ -f "$key_file" ]; then
             ssh_keys=$(cat "$key_file")
             log_info "Added SSH key from $key_file"
@@ -1150,24 +1150,24 @@ configure_cloud_init() {
             whiptail --title "Warning" --msgbox "SSH key file not found. You can add keys later." 10 60
         fi
     fi
-    
+
     # Configure network (DHCP by default)
     local network_config=""
     if whiptail --title "Network Configuration" --yesno "Configure static IP? (No for DHCP)" 10 60; then
         local ip_address netmask gateway dns
-        
+
         ip_address=$(whiptail --title "IP Address" --inputbox "Enter IP address (e.g., 192.168.1.100):" 10 60 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled network configuration"; return 1; }
-        
+
         netmask=$(whiptail --title "Netmask" --inputbox "Enter netmask (e.g., 255.255.255.0):" 10 60 "255.255.255.0" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled network configuration"; return 1; }
-        
+
         gateway=$(whiptail --title "Gateway" --inputbox "Enter default gateway:" 10 60 "${ip_address%.*}.1" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled network configuration"; return 1; }
-        
+
         dns=$(whiptail --title "DNS Servers" --inputbox "Enter DNS servers (comma-separated):" 10 60 "8.8.8.8,8.8.4.4" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled network configuration"; return 1; }
-        
+
         network_config="\n  network:"
         network_config+="\n    version: 2"
         network_config+="\n    ethernets:"
@@ -1178,70 +1178,70 @@ configure_cloud_init() {
         network_config+="\n        nameservers:"
         network_config+="\n          addresses: [${dns//,/ }]"
     fi
-    
+
     # Configure timezone
     local timezone
     timezone=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
     timezone=$(whiptail --title "Timezone" --inputbox "Enter timezone:" 10 60 "$timezone" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled timezone configuration"; return 1; }
-    
+
     # Configure hostname
     local hostname
     hostname=$(whiptail --title "Hostname" --inputbox "Enter hostname:" 10 60 "$template_name" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled hostname configuration"; return 1; }
-    
+
     # Build cloud-init configuration
     local user_data="#cloud-config\n"
     user_data+="hostname: $hostname\n"
     user_data+="fqdn: $hostname.localdomain\n"
     user_data+="manage_etc_hosts: true\n"
     user_data+="timezone: $timezone\n"
-    
+
     # User configuration
     user_data+="\nusers:\n"
     user_data+="  - name: $ci_user\n"
     user_data+="    sudo: ALL=(ALL) NOPASSWD:ALL\n"
     user_data+="    shell: /bin/bash\n"
-    
+
     if [ -n "$ssh_keys" ]; then
         user_data+="    ssh_authorized_keys:\n"
         user_data+="      - $ssh_keys\n"
     fi
-    
+
     # Password configuration
     user_data+="\nchpasswd:\n"
     user_data+="  list: |\n"
     user_data+="    $ci_user:$ci_password\n"
     user_data+="  expire: false\n"
-    
+
     # Package update and upgrade
     user_data+="\npackage_update: true\n"
     user_data+="package_upgrade: true\n"
-    
+
     # Add network configuration if specified
     if [ -n "$network_config" ]; then
         user_data+="$network_config\n"
     fi
-    
+
     # Write cloud-init configuration to a temporary file
     local temp_dir=$(mktemp -d)
     echo -e "$user_data" > "$temp_dir/user-data"
-    
+
     # Generate meta-data
     echo "instance-id: $(uuidgen || echo "i-$(date +%s)")" > "$temp_dir/meta-data"
-    
+
     # Create cloud-init ISO
     local ci_iso_path="/var/lib/vz/template/cloud-init/$template_name-cloud-init.iso"
     mkdir -p "$(dirname "$ci_iso_path")"
-    
+
     genisoimage -output "$ci_iso_path" -volid cidata -joliet -rock \
         "$temp_dir/user-data" "$temp_dir/meta-data" >/dev/null 2>&1 &
     local gen_iso_pid=$!
     show_progress $gen_iso_pid
-    
+
     # Clean up temporary files
     rm -rf "$temp_dir"
-    
+
     # Return the path to the cloud-init ISO
     echo "$ci_iso_path"
     return 0
@@ -1250,16 +1250,16 @@ configure_cloud_init() {
 # Function to configure VM resources (CPU, memory, disk)
 configure_vm_resources() {
     local vm_id=$1
-    
+
     # Get current VM configuration
     local current_config=$(qm config $vm_id 2>/dev/null)
-    
+
     # Default values
     local default_cores=2
     local default_memory=2048
     local default_disk_size="32G"
     local default_disk_storage="local-lvm"
-    
+
     # Parse current configuration if exists
     if [ -n "$current_config" ]; then
         default_cores=$(echo "$current_config" | grep -oP 'cores \K\d+' || echo "2")
@@ -1267,40 +1267,40 @@ configure_vm_resources() {
         default_disk_size=$(echo "$current_config" | grep -oP 'size=\K[^ ]+' | head -1 || echo "32G")
         default_disk_storage=$(echo "$current_config" | grep -oP 'scsi0: \K[^,]+' | cut -d: -f1 || echo "local-lvm")
     fi
-    
+
     # Configure CPU cores
     local cores
     cores=$(whiptail --title "CPU Cores" --inputbox "Number of CPU cores:" 10 60 "$default_cores" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled CPU configuration"; return 1; }
-    
+
     # Validate CPU cores
     if ! [[ "$cores" =~ ^[1-9][0-9]*$ ]]; then
         whiptail --title "Invalid Input" --msgbox "CPU cores must be a positive integer." 10 60
         return 1
     fi
-    
+
     # Configure memory (in MB)
     local memory
     memory=$(whiptail --title "Memory (MB)" --inputbox "Amount of memory in MB:" 10 60 "$default_memory" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled memory configuration"; return 1; }
-    
+
     # Validate memory
     if ! [[ "$memory" =~ ^[1-9][0-9]*$ ]]; then
         whiptail --title "Invalid Input" --msgbox "Memory must be a positive integer (in MB)." 10 60
         return 1
     fi
-    
+
     # Configure disk size
     local disk_size
     disk_size=$(whiptail --title "Disk Size" --inputbox "Disk size (e.g., 32G, 100G):" 10 60 "$default_disk_size" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled disk size configuration"; return 1; }
-    
+
     # Validate disk size format
     if ! [[ "$disk_size" =~ ^[0-9]+[KMGTP]$ ]]; then
         whiptail --title "Invalid Input" --msgbox "Invalid disk size format. Use format like 32G, 100G, etc." 10 60
         return 1
     fi
-    
+
     # Get available storage (using mapfile to avoid splitting issues)
     local storage_list=()
     local storage_output
@@ -1312,7 +1312,7 @@ configure_vm_resources() {
         whiptail --title "Error" --msgbox "No storage available. Please configure storage in Proxmox first." 10 60
         return 1
     fi
-    
+
     # Create storage menu
     local storage_menu=()
     for storage in "${storage_list[@]}"; do
@@ -1322,13 +1322,13 @@ configure_vm_resources() {
             storage_menu+=("$storage" "" "OFF")
         fi
     done
-    
+
     # Select storage
     local disk_storage
     disk_storage=$(whiptail --title "Select Storage" --radiolist \
         "Select storage for the disk:" 15 60 5 "${storage_menu[@]}" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled storage selection"; return 1; }
-    
+
     # Return configuration
     echo "$cores $memory $disk_size $disk_storage"
     return 0
@@ -1338,15 +1338,15 @@ configure_vm_resources() {
 configure_network() {
     local vm_id=$1
     local default_bridge="vmbr0"
-    
+
     # Get current network configuration
     local current_config=$(qm config $vm_id 2>/dev/null | grep -E '^net[0-9]+:' | head -1 || echo "")
-    
+
     # Parse current configuration if exists
     if [ -n "$current_config" ]; then
         default_bridge=$(echo "$current_config" | grep -oP 'bridge=\K[^,]+' || echo "vmbr0")
     fi
-    
+
     # Get available bridges (using glob and array instead of ls | grep)
     local bridge_list=()
     for iface in /sys/class/net/*; do
@@ -1358,7 +1358,7 @@ configure_network() {
         whiptail --title "Error" --msgbox "No network bridges found. Please configure networking in Proxmox first." 10 60
         return 1
     fi
-    
+
     # Create bridge menu
     local bridge_menu=()
     for bridge in "${bridge_list[@]}"; do
@@ -1368,13 +1368,13 @@ configure_network() {
             bridge_menu+=("$bridge" "" "OFF")
         fi
     done
-    
+
     # Select bridge
     local selected_bridge
     selected_bridge=$(whiptail --title "Select Network Bridge" --radiolist \
         "Select network bridge for the VM:" 15 60 5 "${bridge_menu[@]}" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled network configuration"; return 1; }
-    
+
     # Configure network model
     local model_menu=(
         "virtio" "VirtIO (Recommended for Linux)" "ON"
@@ -1382,25 +1382,25 @@ configure_network() {
         "rtl8139" "Realtek RTL8139" "OFF"
         "vmxnet3" "VMware vmxnet3" "OFF"
     )
-    
+
     local selected_model
     selected_model=$(whiptail --title "Select Network Model" --radiolist \
         "Select network interface model:" 15 60 5 "${model_menu[@]}" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled network model selection"; return 1; }
-    
+
     # Configure VLAN (optional)
     local vlan_tag=""
     if whiptail --title "VLAN Configuration" --yesno "Configure VLAN tag?" 10 60; then
         vlan_tag=$(whiptail --title "VLAN Tag" --inputbox "Enter VLAN ID (1-4094):" 10 60 "" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled VLAN configuration"; return 1; }
-        
+
         # Validate VLAN ID
         if ! [[ "$vlan_tag" =~ ^[1-9][0-9]{0,3}$ ]] || [ "$vlan_tag" -gt 4094 ]; then
             whiptail --title "Invalid Input" --msgbox "VLAN ID must be between 1 and 4094." 10 60
             return 1
         fi
     fi
-    
+
     # Return configuration
     echo "$selected_bridge $selected_model $vlan_tag"
     return 0
@@ -1418,56 +1418,56 @@ create_vm() {
     local model=$8
     local vlan_tag=$9
     local ci_iso_path=${10}
-    
+
     log_info "Creating VM $vm_id ($name) with $cores cores, ${memory}MB RAM, ${disk_size} disk"
-    
+
     # Create VM
     if ! qm create $vm_id --name "$name" --memory $memory --cores $cores --net0 $model,bridge=$bridge${vlan_tag:+,tag=$vlan_tag}; then
         log_error "Failed to create VM $vm_id"
         return 1
     fi
-    
+
     # Attach disk
     if ! qm set $vm_id --scsihw virtio-scsi-pci --scsi0 $disk_storage:0,import-from=$disk_storage:$disk_size; then
         log_error "Failed to attach disk to VM $vm_id"
         qm destroy $vm_id --purge
         return 1
     fi
-    
+
     # Attach cloud-init ISO if provided
     if [ -n "$ci_iso_path" ] && [ -f "$ci_iso_path" ]; then
         if ! qm set $vm_id --ide2 $disk_storage:cloudinit; then
             log_warn "Failed to attach cloud-init drive to VM $vm_id"
         fi
-        
+
         # Mount cloud-init ISO
         if ! qm set $vm_id --ide3 $ci_iso_path,media=cdrom; then
             log_warn "Failed to mount cloud-init ISO to VM $vm_id"
         fi
     fi
-    
+
     # Set boot order
     if ! qm set $vm_id --boot c --bootdisk scsi0; then
         log_warn "Failed to set boot order for VM $vm_id"
     fi
-    
+
     # Enable QEMU guest agent
     if ! qm set $vm_id --agent enabled=1; then
         log_warn "Failed to enable QEMU guest agent for VM $vm_id"
     fi
-    
+
     return 0
 }
 
 # Main template creation function
 create_template() {
     log_info "Starting template creation wizard"
-    
+
     # --- Step 1: Template Name ---
     while true; do
         template_name=$(whiptail --title "Template Name" --inputbox "Enter a name for the new VM template:" 10 60 "template-$(date +%Y%m%d)" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled template creation"; return 0; }
-        
+
         if validate_template_name "$template_name"; then
             break
         else
@@ -1481,23 +1481,23 @@ create_template() {
         "predefined" "Predefined Cloud Image" \
         "custom" "Custom ISO/Image from Proxmox Storage" \
         "cancel" "Cancel Template Creation" 3>&1 1>&2 2>&3)
-    
+
     if [ $? -ne 0 ] || [ "$source_type" = "cancel" ] || [ -z "$source_type" ]; then
         log_info "User cancelled at source type selection."
         return 0
     fi
-    
+
     # Initialize variables
     local distro="" version=""
     local custom_source_storage="" custom_source_path="" custom_file_type=""
     local ci_iso_path=""
     local ci_config_type="default"
-    
+
     # --- Step 3: Get VM ID ---
     local next_vm_id=100
     local used_ids
     mapfile -t used_ids < <(qm list --full | awk 'NR>1 {print $1}')
-    
+
     # Check if next_vm_id is already used
     local id_in_use=1
     while [ $id_in_use -eq 1 ]; do
@@ -1510,17 +1510,17 @@ create_template() {
             fi
         done
     done
-    
+
     local vm_id
     vm_id=$(whiptail --title "VM ID" --inputbox "Enter VM ID:" 10 60 "$next_vm_id" 3>&1 1>&2 2>&3)
     [ $? -ne 0 ] && { log_info "User cancelled VM ID selection"; return 0; }
-    
+
     # Validate VM ID
     if ! [[ "$vm_id" =~ ^[0-9]+$ ]]; then
         whiptail --title "Invalid VM ID" --msgbox "VM ID must be a number." 10 60
         return 1
     fi
-    
+
     # Check if VM ID is already in use
     local id_in_use=0
     for id in "${used_ids[@]}"; do
@@ -1529,30 +1529,30 @@ create_template() {
             break
         fi
     done
-    
+
     if [ $id_in_use -eq 1 ]; then
         whiptail --title "VM ID In Use" --msgbox "VM ID $vm_id is already in use." 10 60
         return 1
     fi
-    
+
     # --- Step 4: Configure VM Resources ---
     local vm_config
     vm_config=$(configure_vm_resources $vm_id)
     [ $? -ne 0 ] && return 1
-    
+
     # Parse VM configuration
     local cores memory disk_size disk_storage
     read -r cores memory disk_size disk_storage <<< "$vm_config"
-    
+
     # --- Step 5: Configure Network ---
     local network_config
     network_config=$(configure_network $vm_id)
     [ $? -ne 0 ] && return 1
-    
+
     # Parse network configuration
     local bridge model vlan_tag
     read -r bridge model vlan_tag <<< "$network_config"
-    
+
     # --- Step 6: Cloud-Init Configuration ---
     if whiptail --title "Cloud-Init" --yesno "Configure cloud-init for this template?" 10 60; then
         ci_iso_path=$(configure_cloud_init "$distro")
@@ -1566,7 +1566,7 @@ create_template() {
             IFS='|' read -r val desc ci url <<< "$entry"
             distro_menu+=("$val" "$desc")
         done
-        
+
         distro=$(whiptail --title "Select Distribution" --menu "Choose a Linux distribution:" 20 60 10 "${distro_menu[@]}" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled at distro selection"; return 0; }
     fi
@@ -1617,9 +1617,9 @@ create_template() {
                 version="latest"
                 ;;
         esac
-        
+
         [ $? -ne 0 ] && { log_info "User cancelled at version selection"; return 0; }
-        
+
         # --- Step 9: Download Predefined Image ---
         local image_url
         image_url=$(get_distro_url_template "$distro" "$version")
@@ -1627,58 +1627,58 @@ create_template() {
             whiptail --title "Error" --msgbox "Failed to get download URL for $distro $version" 10 60
             return 1
         fi
-        
+
         local image_name="${distro}-${version}-cloudimg-amd64.img"
         local image_path="/var/lib/vz/template/iso/${image_name}"
-        
+
         log_info "Downloading $distro $version image..."
         if ! wget -q --show-progress -O "$image_path" "$image_url"; then
             whiptail --title "Error" --msgbox "Failed to download $distro $version image" 10 60
             return 1
         fi
-        
+
         custom_source_path="$image_path"
         custom_file_type="qcow2"
     else
         # --- Step 9: Custom Image Selection ---
         local storage_list=()
         mapfile -t storage_list < <(pvesm status --enabled --type dir,lvm,iscsi,cephfs,nfs,cifs | awk 'NR>1 {print $1}')
-        
+
         if [ ${#storage_list[@]} -eq 0 ]; then
             whiptail --title "Error" --msgbox "No storage available. Please configure storage in Proxmox first." 10 60
             return 1
         fi
-        
+
         # Create storage menu
         local storage_menu=()
         for storage in "${storage_list[@]}"; do
             storage_menu+=("$storage" "")
         done
-        
+
         # Select storage
         local selected_storage
         selected_storage=$(whiptail --title "Select Storage" --menu "Select storage containing the image:" 15 60 5 "${storage_menu[@]}" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled storage selection"; return 1; }
-        
+
         # Get list of files in storage
         local file_list=()
         mapfile -t file_list < <(pvesm list "$selected_storage" | awk 'NR>1 {print $1}')
-        
+
         if [ ${#file_list[@]} -eq 0 ]; then
             whiptail --title "Error" --msgbox "No files found in selected storage." 10 60
             return 1
         fi
-        
+
         # Create file menu
         local file_menu=()
         for file in "${file_list[@]}"; do
             file_menu+=("$file" "")
         done
-        
+
         # Select file
         custom_source_path=$(whiptail --title "Select File" --menu "Select image file:" 20 80 10 "${file_menu[@]}" 3>&1 1>&2 2>&3)
         [ $? -ne 0 ] && { log_info "User cancelled file selection"; return 1; }
-        
+
         # Determine file type
         custom_file_type=$(qemu-img info "$selected_storage:$custom_source_path" 2>/dev/null | grep 'file format' | awk '{print $3}' || echo "unknown")
         if [ "$custom_file_type" = "unknown" ]; then
@@ -1686,14 +1686,14 @@ create_template() {
             custom_file_type="raw"
         fi
     fi
-    
+
     # --- Step 10: Create VM ---
     if ! create_vm "$vm_id" "$template_name" "$cores" "$memory" "$disk_size" "$disk_storage" \
         "$bridge" "$model" "$vlan_tag" "$ci_iso_path"; then
         whiptail --title "Error" --msgbox "Failed to create VM $vm_id" 10 60
         return 1
     fi
-    
+
     # --- Step 11: Import Disk ---
     log_info "Importing disk image..."
     if [ "$source_type" = "predefined" ]; then
@@ -1709,25 +1709,25 @@ create_template() {
             return 1
         fi
     fi
-    
+
     # --- Step 12: Configure VM ---
     log_info "Configuring VM..."
-    
+
     # Set boot order
     if ! qm set "$vm_id" --boot c --bootdisk scsi0; then
         log_warn "Failed to set boot order"
     fi
-    
+
     # Enable QEMU agent
     if ! qm set "$vm_id" --agent enabled=1; then
         log_warn "Failed to enable QEMU agent"
     fi
-    
+
     # Set display to serial console
     if ! qm set "$vm_id" --serial0 socket --vga serial0; then
         log_warn "Failed to configure serial console"
     fi
-    
+
     # --- Step 13: Convert to Template ---
     if whiptail --title "Convert to Template" --yesno "Convert VM to template after creation?" 10 60; then
         log_info "Converting VM $vm_id to template..."
@@ -1739,7 +1739,7 @@ create_template() {
     else
         whiptail --title "Success" --msgbox "VM '$template_name' (ID: $vm_id) created successfully!" 10 60
     fi
-    
+
     log_info "Template creation completed successfully"
     return 0
 }

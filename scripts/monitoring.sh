@@ -142,17 +142,17 @@ create_prometheus_config() {
     local enable_advanced_monitoring=${1:-false}
     local enable_thanos=${2:-false}
     local thanos_sidecar_enabled="false"
-    
+
     if [ "$enable_advanced_monitoring" = true ]; then
         log "INFO" "Enabling advanced monitoring features in Prometheus configuration..."
         thanos_sidecar_enabled="true"
     fi
-    
+
     if [ "$enable_thanos" = true ]; then
         log "INFO" "Enabling Thanos sidecar in Prometheus configuration..."
         thanos_sidecar_enabled="true"
     fi
-    
+
     log "INFO" "Creating Prometheus configuration..."
     log "INFO" "Creating Prometheus configuration..."
 
@@ -502,9 +502,9 @@ EOF
 # Function to create Blackbox Exporter configuration
 create_blackbox_config() {
     log "INFO" "Creating Blackbox Exporter configuration..."
-    
+
     mkdir -p "$MONITORING_DIR/blackbox/config"
-    
+
     cat > "$MONITORING_DIR/blackbox/config/config.yml" << 'EOF'
 modules:
   http_2xx:

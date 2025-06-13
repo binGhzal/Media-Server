@@ -1,111 +1,202 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Proxmox Template Creator - Configuration Management Module
 # Centralized configuration management for all modules
 
-set -e
+# Enable strict mode for better error handling and debugging
+set -o errexit          # Exit on any error
+set -o nounset          # Exit on unset variables
+set -o pipefail         # Ensure pipelines fail on any error
+set -o errtrace         # Ensure ERR traps are inherited in functions
 
-# Script version
-VERSION="1.0.0"
+# Set IFS to newline and tab only to prevent word splitting issues
+IFS=$'\n\t'
 
-# Directory where the script is located
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-export SCRIPT_DIR
+# Disable globbing to prevent unwanted filename expansion
+set -o noglob
+
+# Script metadata
+readonly VERSION="1.0.0"
+readonly SCRIPT_NAME=$(basename "${0}")
+readonly SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+readonly LOCK_FILE="/var/run/${SCRIPT_NAME%.*}.lock"
+
+# Export necessary variables
+export SCRIPT_NAME SCRIPT_DIR VERSION
 
 # Source logging library if available
-if [ -f "$SCRIPT_DIR/lib/logging.sh" ]; then
-    source "$SCRIPT_DIR/lib/logging.sh"
-    init_logging "ConfigModule"
-
-    # Create wrapper functions for compatibility
-    log() {
-        local level="$1"; shift
-        case $level in
-            INFO) log_info "$*" ;;
-            WARN) log_warn "$*" ;;
-            ERROR) log_error "$*" ;;
-            DEBUG) log_debug "$*" ;;
-            *) log_info "$*" ;;
-        esac
-    }
+if [[ -f "${SCRIPT_DIR}/lib/logging.sh" ]]; then
+    # shellcheck source=lib/logging.sh
+    source "${SCRIPT_DIR}/lib/logging.sh"
+    if ! init_logging "ConfigModule" 2>/dev/null; then
+        echo "Failed to initialize logging" >&2
+        exit 1
+    fi
 else
     # Fallback logging function
     log() {
-        local level="$1"; shift
+        local level="${1}"
+        local message="${2:-}"
         local color=""
         local reset="\033[0m"
-        case $level in
+
+        case "${level}" in
             INFO) color="\033[0;32m" ;;
             WARN) color="\033[0;33m" ;;
             ERROR) color="\033[0;31m" ;;
+            DEBUG) color="\033[0;36m" ;;
             *) color="" ;;
         esac
-        echo -e "${color}[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $*${reset}"
+
+        # Use printf instead of echo -e for better portability
+        printf "%b[%s] [%s] %s%b\n" \
+            "${color}" "$(date '+%Y-%m-%d %H:%M:%S')" "${level}" "${message}" "${reset}" >&2
     }
+
+    # Define log level functions for compatibility
+    log_info() { log "INFO" "${1:-}"; }
+    log_warn() { log "WARN" "${1:-}"; }
+    log_error() { log "ERROR" "${1:-}"; }
+    log_debug() { log "DEBUG" "${1:-}"; }
 fi
 
+# Log script start
+log_info "Starting ${SCRIPT_NAME} v${VERSION}"
+log_debug "Script directory: ${SCRIPT_DIR}"
+
 # Configuration directories and files
-CONFIG_DIR="/etc/homelab"
-USER_CONFIG="$CONFIG_DIR/user.conf"
-SYSTEM_CONFIG="$CONFIG_DIR/system.conf"
-MODULE_CONFIG_DIR="$CONFIG_DIR/modules"
-BACKUP_DIR="$CONFIG_DIR/backups"
-TEMPLATES_DIR="$CONFIG_DIR/templates"
+readonly CONFIG_DIR="${CONFIG_DIR:-/etc/homelab}"
+readonly USER_CONFIG="${CONFIG_DIR}/user.conf"
+readonly SYSTEM_CONFIG="${CONFIG_DIR}/system.conf"
+readonly MODULE_CONFIG_DIR="${CONFIG_DIR}/modules"
+readonly BACKUP_DIR="${CONFIG_DIR}/backups"
+readonly TEMPLATES_DIR="${CONFIG_DIR}/templates"
+
+# Ensure required variables are set
+: "${USER:?USER environment variable not set}"
+: "${HOME:?HOME environment variable not set}"
 
 # Default configuration values
-declare -A DEFAULT_CONFIG=(
-    ["AUTO_UPDATE"]="true"
-    ["LOG_LEVEL"]="INFO"
-    ["BACKUP_RETENTION_DAYS"]="30"
-    ["DEFAULT_VM_STORAGE"]="local-lvm"
-    ["DEFAULT_VM_BRIDGE"]="vmbr0"
-    ["DEFAULT_VM_MEMORY"]="2048"
-    ["DEFAULT_VM_CORES"]="2"
-    ["DEFAULT_VM_DISK_SIZE"]="20"
-    ["ENABLE_CLOUD_INIT"]="true"
-    ["DEFAULT_SSH_USER"]="ubuntu"
-    ["MONITORING_ENABLED"]="false"
-    ["REGISTRY_ENABLED"]="false"
-    ["TERRAFORM_ENABLED"]="false"
-    ["ANSIBLE_ENABLED"]="false"
+declare -rA DEFAULT_CONFIG=(
+    [AUTO_UPDATE]="true"
+    [LOG_LEVEL]="INFO"
+    [BACKUP_RETENTION_DAYS]="30"
+    [DEFAULT_VM_STORAGE]="local-lvm"
+    [DEFAULT_VM_BRIDGE]="vmbr0"
+    [DEFAULT_VM_MEMORY]="2048"
+    [DEFAULT_VM_CORES]="2"
+    [DEFAULT_VM_DISK_SIZE]="20"
+    [ENABLE_CLOUD_INIT]="true"
+    [DEFAULT_SSH_USER]="${SUDO_USER:-$USER}"
+    [MONITORING_ENABLED]="false"
+    [REGISTRY_ENABLED]="false"
+    [TERRAFORM_ENABLED]="false"
+    [ANSIBLE_ENABLED]="false"
 )
+
+# Validate configuration values
+for key in "${!DEFAULT_CONFIG[@]}"; do
+    if [[ -z "${DEFAULT_CONFIG[$key]}" ]]; then
+        log_error "Empty default value for key: ${key}"
+        exit 1
+    fi
+done
 
 # Error handling function
 handle_error() {
-    local exit_code="$1"
-    local line_no="$2"
-    log "ERROR" "An error occurred on line $line_no with exit code $exit_code"
-    if [ -t 0 ]; then  # If running interactively
-        whiptail --title "Error" --msgbox "An error occurred. Check the logs for details." 10 60 3>&1 1>&2 2>&3
+    local -r exit_code="${1:-1}"
+    local -r line_no="${2:-0}"
+    local -r script_name="${BASH_SOURCE[1]##*/}"
+    local -r func_name="${FUNCNAME[1]:-main}"
+
+    # Log the error
+    log_error "Error in ${script_name}:${line_no} (function: ${func_name}): ${BASH_COMMAND}"
+
+    # If we have a line number and file, show more context
+    if [[ ${line_no} -gt 0 ]]; then
+        log_error "Near line ${line_no} in ${script_name} (function: ${func_name}):"
+        if [[ -f "${BASH_SOURCE[1]}" ]]; then
+            local -r context_lines=5
+            local -r start_line=$((line_no > context_lines ? line_no - context_lines : 1))
+            local -r end_line=$((line_no + context_lines))
+
+            log_error "Context (${start_line}-${end_line}):"
+            # Use sed to extract context lines with line numbers
+            sed -n "${start_line},${end_line}p;${end_line}q" "${BASH_SOURCE[1]}" 2>/dev/null | \
+            while IFS= read -r line; do
+                log_error "  ${start_line}: ${line}"
+                start_line=$((start_line + 1))
+            done
+        fi
     fi
-    exit "$exit_code"
+
+    # If running interactively, show a dialog
+    if [[ -t 0 ]] && command -v whiptail >/dev/null 2>&1; then
+        whiptail --title "Error" --msgbox "An error occurred (code: ${exit_code}). Check the logs for details." 10 60 3>&1 1>&2 2>&3
+    fi
+
+    # Exit with the provided status code
+    exit "${exit_code}"
 }
 
 # Set up error trap
-trap 'handle_error $? $LINENO' ERR
+trap 'handle_error $? ${LINENO}' ERR
 
 # Parse command line arguments
-TEST_MODE=""
+parse_arguments() {
+    local -r script_name="${0##*/}"
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --test)
-            TEST_MODE=1
-            shift
-            ;;
-        --quiet|-q)
-            # QUIET_MODE option is deprecated and ignored
-            shift
-            ;;
-        --help|-h)
-            cat << EOF
+    while [[ $# -gt 0 ]]; do
+        case "${1}" in
+            --test)
+                readonly TEST_MODE=1
+                log_info "Test mode enabled - no changes will be made"
+                shift
+                ;;
+            --quiet | -q)
+                # QUIET_MODE option is deprecated and ignored
+                log_warn "--quiet/-q option is deprecated and will be removed in a future version"
+                shift
+                ;;
+            --debug)
+                set -x
+                log_info "Debug mode enabled"
+                shift
+                ;;
+            --help | -h)
+                show_help
+                exit 0
+                ;;
+            --version | -v)
+                echo "${script_name} v${VERSION}"
+                exit 0
+                ;;
+            -*)
+                log_error "Unknown option: ${1}"
+                show_usage
+                exit 1
+                ;;
+            *)
+                log_error "Unexpected argument: ${1}"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# Show usage information
+show_usage() {
+    cat << EOF
 Proxmox Template Creator - Configuration Management Module v${VERSION}
 
-Usage: $(basename "$0") [OPTIONS]
+Usage: ${0##*/} [OPTIONS]
 
 Options:
   --test              Run in test mode (no actual changes)
-  --quiet, -q         Run in quiet mode (minimal output)
+  --quiet, -q         Run in quiet mode (minimal output) [DEPRECATED]
+  --debug             Enable debug output
   --help, -h          Show this help message
+  --version, -v       Show version information
 
 Functions:
   - Centralized configuration management
@@ -115,23 +206,87 @@ Functions:
   - Import/export configuration profiles
   - Backup and restore configurations
 
-EOF
-            exit 0
-            ;;
-        *)
-            log "ERROR" "Unknown option: $1"
-            echo "Try '$(basename "$0") --help' for more information."
-            exit 1
-            ;;
-    esac
-done
+Environment Variables:
+  CONFIG_DIR          Override the default configuration directory
+  LOG_LEVEL           Set the log level (DEBUG, INFO, WARN, ERROR)
 
-# Function to check if running as root
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        log "ERROR" "This script must be run as root"
-        exit 1
+Examples:
+  ${0##*/} --test      # Run in test mode
+  LOG_LEVEL=DEBUG ${0##*/}  # Enable debug logging
+
+Report bugs to: <your-email@example.com>
+Project home: <https://github.com/yourusername/proxmox-template-creator>
+EOF
+}
+
+# Initialize the script
+initialize() {
+    # Parse command line arguments
+    parse_arguments "$@"
+
+    # Check for required commands
+    local -a required_commands=("basename" "dirname" "date" "mkdir" "chmod")
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "${cmd}" >/dev/null 2>&1; then
+            log_error "Required command not found: ${cmd}"
+            exit 1
+        fi
+    done
+
+    # Create configuration directories if they don't exist
+    create_config_dirs
+
+    # Initialize default configuration
+    init_default_config
+
+    log_info "Initialization completed successfully"
+}
+
+# Function to check if running as root or with sudo
+check_privileges() {
+    local -r user_id=$(id -u)
+
+    if [[ ${user_id} -eq 0 ]]; then
+        log_debug "Running with root privileges"
+        return 0
     fi
+
+    log_error "This script must be run as root or with sudo"
+    exit 1
+}
+
+# Function to acquire an exclusive lock
+acquire_lock() {
+    local -r lock_file="${1}"
+    local -r lock_timeout=300  # 5 minutes
+    local -r pid=$$
+
+    # Try to create the lock file
+    if ( set -o noclobber; echo "${pid}" > "${lock_file}" ) 2>/dev/null; then
+        # Set a trap to remove the lock file on exit
+        trap 'rm -f "${lock_file}"' EXIT
+        return 0
+    fi
+
+    # Check if the lock file is stale
+    if [[ -f "${lock_file}" ]]; then
+        local -r lock_pid=$(cat "${lock_file}" 2>/dev/null)
+
+        # Check if the process that created the lock is still running
+        if ! ps -p "${lock_pid}" >/dev/null 2>&1; then
+            log_warn "Removing stale lock file (PID: ${lock_pid})"
+            rm -f "${lock_file}"
+
+            # Try to acquire the lock again
+            if ( set -o noclobber; echo "${pid}" > "${lock_file}" ) 2>/dev/null; then
+                trap 'rm -f "${lock_file}"' EXIT
+                return 0
+            fi
+        fi
+    fi
+
+    log_error "Failed to acquire lock. Another instance might be running."
+    exit 1
 }
 
 # Function to create configuration directories

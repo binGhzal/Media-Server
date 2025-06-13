@@ -499,6 +499,500 @@ EOF
     log "INFO" "Grafana dashboard provisioning created"
 }
 
+# Function to create Blackbox Exporter configuration
+create_blackbox_config() {
+    log "INFO" "Creating Blackbox Exporter configuration..."
+    
+    mkdir -p "$MONITORING_DIR/blackbox/config"
+    
+    cat > "$MONITORING_DIR/blackbox/config/config.yml" << 'EOF'
+modules:
+  http_2xx:
+    prober: http
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      headers:
+        Accept-Language: en-US
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_post_2xx:
+    prober: http
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: '{}'
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 204]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_ssl_expiry:
+    prober: http
+    http:
+      fail_if_not_ssl: true
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: false
+    timeout: 10s
+    verify: true
+
+  tcp_connect:
+    prober: tcp
+    tcp:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls: false
+      tls_config:
+        insecure_skip_verify: true
+
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+
+  dns_tcp:
+    prober: dns
+    dns:
+      transport_protocol: "tcp"
+      preferred_ip_protocol: "ip4"
+      query_name: "example.com"
+      query_type: "A"
+      valid_rdata:
+        match_regexp:
+          - ".*"
+
+  dns_udp:
+    prober: dns
+    dns:
+      transport_protocol: "udp"
+      preferred_ip_protocol: "ip4"
+      query_name: "example.com"
+      query_type: "A"
+      valid_rdata:
+        match_regexp:
+          - ".*"
+
+  grpc_plaintext:
+    prober: grpc
+    grpc:
+      tls: false
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      service: ""
+
+  grpc_tls:
+    prober: grpc
+    grpc:
+      tls: true
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      service: ""
+
+  ssh_banner:
+    prober: tcp
+    tcp:
+      query_response:
+        - expect: "^SSH-2.0-"
+      tls: false
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+
+  http_2xx_with_body:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      headers:
+        Accept: '*/*'
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      fail_if_body_not_matches_regexp:
+        - "<title>.*</title>"
+
+  http_2xx_with_redirect:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      no_follow_redirects: false
+      fail_if_not_redirect: true
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_basic_auth:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      basic_auth:
+        username: "user"
+        password: "password"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_headers:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      headers:
+        X-Custom-Header: "custom-value"
+        Accept: "application/json"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_body_match:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      fail_if_body_not_matches_regexp:
+        - "<title>.*</title>"
+        - "<meta.*charset=[\"']?[uU][tT][fF]-?8"
+
+  http_2xx_with_cert_check:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      method: GET
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: false
+        cert_file: "/path/to/cert.pem"
+        key_file: "/path/to/key.pem"
+        ca_file: "/path/to/ca.pem"
+        server_name: "example.com"
+
+  http_2xx_with_proxy:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      proxy_url: "http://proxy.example.com:8080"
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_compression:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      headers:
+        Accept-Encoding: "gzip, deflate, br"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_cookies:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      headers:
+        Cookie: "sessionid=abc123"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_oauth2:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      method: GET
+      oauth2:
+        client_id: "client-id"
+        client_secret: "client-secret"
+        token_url: "https://auth.example.com/oauth2/token"
+        scopes: ["read"]
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_ntlm:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      method: GET
+      basic_auth:
+        username: "domain\\user"
+        password: "password"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_aws_sigv4:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      method: GET
+      aws_sigv4:
+        region: "us-east-1"
+        access_key: "AKIA..."
+        secret_key: "..."
+        service: "execute-api"
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+
+  http_2xx_with_http2:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/2.0"]
+      valid_status_codes: [200]
+      method: GET
+      headers:
+        User-Agent: "Blackbox Exporter"
+
+  http_2xx_with_http11_required:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/1.1"]
+      valid_status_codes: [200]
+      method: GET
+      headers:
+        User-Agent: "Blackbox Exporter"
+
+  http_2xx_with_ipv6:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip6"
+      ip_protocol_fallback: true
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      method: GET
+
+  http_2xx_with_http10:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/1.0"]
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      method: GET
+
+  http_2xx_with_http09:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/0.9", "HTTP/1.0"]
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      method: GET
+
+  http_2xx_with_http3:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/3.0"]
+      valid_status_codes: [200]
+      method: GET
+      enable_http2: true
+      preferred_ip_protocol: "udp"
+
+  http_2xx_with_http2_prior_knowledge:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/2.0"]
+      valid_status_codes: [200]
+      method: GET
+      enable_http2: true
+      http2_prior_knowledge: true
+
+  http_2xx_with_http2_prior_knowledge_and_tls:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/2.0"]
+      valid_status_codes: [200]
+      method: GET
+      enable_http2: true
+      http2_prior_knowledge: true
+      tls: true
+
+  http_2xx_with_http2_prior_knowledge_and_tls_and_alpn:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: false
+      tls_config:
+        insecure_skip_verify: true
+      valid_http_versions: ["HTTP/2.0"]
+      valid_status_codes: [200]
+      method: GET
+      enable_http2: true
+      http2_prior_knowledge: true
+      tls: true
+      tls_config:
+        insecure_skip_verify: true
+        server_name: "example.com"
+        min_version: "TLS12"
+        max_version: "TLS13"
+        next_protos: ["h2", "http/1.1"]
+        cipher_suites:
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"
+          - "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+          - "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_AES_128_GCM_SHA256"
+          - "TLS_RSA_WITH_AES_256_GCM_SHA384"
+          - "TLS_RSA_WITH_AES_128_CBC_SHA"
+          - "TLS_RSA_WITH_AES_256_CBC_SHA"
+          - "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+        curve_preferences:
+          - "CurveP521"
+          - "CurveP384"
+          - "CurveP256"
+        prefer_server_cipher_suites: false
+        session_tickets: true
+        session_ticket_key: ""
+        client_auth_type: ""
+        client_ca_file: ""
+        client_cert_file: ""
+        client_key_file: ""
+        insecure_skip_verify: true
+        server_name: "example.com"
+EOF
+
+    log "INFO" "Blackbox Exporter configuration created"
+}
+
 # Function to create Alertmanager configuration
 create_alertmanager_config() {
     log "INFO" "Creating Alertmanager configuration..."
@@ -548,9 +1042,10 @@ inhibit_rules:
     equal: ['alertname', 'dev', 'instance']
 EOF
 
-    # Create basic alert rules for Prometheus
+    # Create comprehensive alert rules for Prometheus
     cat > "$MONITORING_DIR/prometheus/config/alert.rules.yml" << 'EOF'
 groups:
+  # System and infrastructure alerts
   - name: system.rules
     rules:
       - alert: InstanceDown
@@ -563,13 +1058,22 @@ groups:
           description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
 
       - alert: HighCPUUsage
-        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "High CPU usage on {{ $labels.instance }}"
-          description: "CPU usage is above 80% for more than 5 minutes on {{ $labels.instance }}"
+          description: "CPU usage is above 90% for more than 5 minutes on {{ $labels.instance }}"
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is critically high (above 95%) on {{ $labels.instance }}"
 
       - alert: HighMemoryUsage
         expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
@@ -580,24 +1084,175 @@ groups:
           summary: "High memory usage on {{ $labels.instance }}"
           description: "Memory usage is above 90% for more than 5 minutes on {{ $labels.instance }}"
 
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage on {{ $labels.instance }}"
+          description: "Memory usage is critically high (above 95%) on {{ $labels.instance }}"
+
       - alert: DiskSpaceLow
-        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs"} / node_filesystem_size_bytes{fstype!="tmpfs"})) * 100 > 85
-        for: 5m
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"})) * 100 > 85
+        for: 15m
         labels:
           severity: warning
         annotations:
           summary: "Low disk space on {{ $labels.instance }}"
-          description: "Disk usage is above 85% on {{ $labels.instance }} for filesystem {{ $labels.mountpoint }}"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ $value | humanizePercentage }} free space"
 
-      - alert: PrometheusConfigurationReloadFailure
-        expr: prometheus_config_last_reload_successful != 1
-        for: 0m
+      - alert: DiskSpaceCritical
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"})) * 100 > 90
+        for: 5m
         labels:
           severity: critical
         annotations:
-          summary: "Prometheus configuration reload failure"
-          description: "Prometheus configuration reload error"
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} has only {{ $value | humanizePercentage }} free space"
 
+      - alert: DiskWillFillIn4Hours
+        expr: predict_linear(node_filesystem_avail_bytes[6h], 4 * 3600) <= 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk predicted to fill in 4 hours on {{ $labels.instance }}"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} will be full within 4 hours if current growth rate continues"
+
+      - alert: HighLoadAverage
+        expr: (sum by(instance) (rate(node_cpu_seconds_total{mode="system"}[5m])) / count by(instance) (count by(instance, cpu) (node_cpu_seconds_total{mode="system"}))) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High load average on {{ $labels.instance }}"
+          description: "Load average is high on {{ $labels.instance }}"
+
+      - alert: HighNetworkTraffic
+        expr: sum by(instance) (rate(node_network_receive_bytes_total[5m])) / 1024 / 1024 > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High network traffic on {{ $labels.instance }}"
+          description: "Network traffic is above 100MB/s on {{ $labels.instance }}"
+
+      - alert: HighNetworkErrorRate
+        expr: (sum(rate(node_network_receive_errs_total[5m])) by(instance) / sum(rate(node_network_receive_packets_total[5m])) by(instance)) * 100 > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High network error rate on {{ $labels.instance }}"
+          description: "Network error rate is above 5% on {{ $labels.instance }}"
+
+      - alert: HighTCPConnectionCount
+        expr: node_netstat_Tcp_CurrEstab > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of TCP connections on {{ $labels.instance }}"
+          description: "Number of TCP connections is high on {{ $labels.instance }}"
+
+  # Blackbox exporter alerts
+  - name: blackbox.rules
+    rules:
+      - alert: BlackboxProbeFailed
+        expr: probe_success == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Blackbox probe failed (instance {{ $labels.instance }})"
+          description: "Blackbox probe failed for {{ $labels.instance }} ({{ $labels.job }})"
+
+      - alert: BlackboxProbeHttpFailure
+        expr: probe_http_status_code <= 199 OR probe_http_status_code >= 400
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blackbox HTTP probe failed (instance {{ $labels.instance }})"
+          description: "HTTP status code is {{ $value }} for {{ $labels.instance }}"
+
+      - alert: BlackboxSlowResponse
+        expr: probe_duration_seconds > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blackbox slow response (instance {{ $labels.instance }})"
+          description: "Blackbox probe took {{ $value }} seconds for {{ $labels.instance }}"
+
+      - alert: BlackboxSSLCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30  # 30 days
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSL certificate expiring soon (instance {{ $labels.instance }})"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
+
+  # Kubernetes cluster alerts
+  - name: kubernetes.rules
+    rules:
+      - alert: KubeNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status!="true"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.node }} is not ready"
+          description: "Node {{ $labels.node }} has been in a non-ready state for more than 5 minutes"
+
+      - alert: KubeNodeUnreachable
+        expr: kube_node_spec_unschedulable == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node {{ $labels.node }} is unreachable"
+          description: "Node {{ $labels.node }} has been unreachable for more than 15 minutes"
+
+      - alert: KubeletDown
+        expr: absent(up{job="kubelet"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubelet is down on {{ $labels.instance }}"
+          description: "Kubelet has disappeared from Prometheus target discovery"
+
+      - alert: KubeAPIDown
+        expr: absent(up{job="apiserver"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes API server is down"
+          description: "Kubernetes API server has disappeared from Prometheus target discovery"
+
+      - alert: KubeSchedulerDown
+        expr: absent(up{job="kube-scheduler"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes scheduler is down"
+          description: "Kubernetes scheduler has disappeared from Prometheus target discovery"
+
+      - alert: KubeControllerManagerDown
+        expr: absent(up{job="kube-controller-manager"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes controller manager is down"
+          description: "Kubernetes controller manager has disappeared from Prometheus target discovery"
+
+  # Container alerts
   - name: container.rules
     rules:
       - alert: ContainerKilled
@@ -606,26 +1261,151 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Container killed"
-          description: "A container has disappeared"
+          summary: "Container killed (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.name }} has disappeared from cAdvisor"
 
       - alert: ContainerHighCpuUsage
         expr: (sum(rate(container_cpu_usage_seconds_total[3m])) BY (instance, name) * 100) > 80
-        for: 2m
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Container high CPU usage"
-          description: "Container CPU usage is above 80%"
+          summary: "Container high CPU usage (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.name }} CPU usage is {{ $value }}%"
 
       - alert: ContainerHighMemoryUsage
         expr: (sum(container_memory_working_set_bytes) BY (instance, name) / sum(container_spec_memory_limit_bytes > 0) BY (instance, name) * 100) > 80
-        for: 2m
+        for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Container high memory usage"
-          description: "Container memory usage is above 80%"
+          summary: "Container high memory usage (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.name }} memory usage is {{ $value }}%"
+
+      - alert: ContainerRestartingFrequently
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restarting frequently (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} is restarting frequently ({{ $value }} times in the last hour)"
+
+      - alert: ContainerOOMKilled
+        expr: increase(kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}[30m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container OOMKilled (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} was OOMKilled"
+
+  # Application performance alerts
+  - name: application.rules
+    rules:
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency (instance {{ $labels.instance }})"
+          description: "99th percentile request latency is {{ $value }}s"
+
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) by (job) / sum(rate(http_requests_total[5m])) by (job) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate (instance {{ $labels.instance }})"
+          description: "Error rate is {{ $value }}%"
+
+      - alert: HighRequestRate
+        expr: sum(rate(http_requests_total[5m])) by (job) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request rate (instance {{ $labels.instance }})"
+          description: "Request rate is {{ $value }} requests/second"
+
+  # Security alerts
+  - name: security.rules
+    rules:
+      - alert: UnauthorizedAccessAttempts
+        expr: increase(auth_failed_attempts_total[5m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple failed login attempts (instance {{ $labels.instance }})"
+          description: "There were {{ $value }} failed login attempts in the last 5 minutes"
+
+      - alert: HighPrivilegeContainer
+        expr: container_security_ctx_privileged == 1 or container_security_ctx_allow_privilege_escalation == 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High privilege container detected (instance {{ $labels.instance }})"
+          description: "Container {{ $labels.container }} is running with elevated privileges"
+
+  # Business metrics alerts
+  - name: business.rules
+    rules:
+      - alert: HighOrderFailureRate
+        expr: sum(rate(orders_failed_total[5m])) by (service) / sum(rate(orders_total[5m])) by (service) > 0.05
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High order failure rate (service {{ $labels.service }})"
+          description: "Order failure rate is {{ $value | humanizePercentage }}"
+
+      - alert: LowInventory
+        expr: inventory_items < 10
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low inventory level ({{ $labels.product }})"
+          description: "Inventory level for {{ $labels.product }} is critically low ({{ $value }} items)"
+
+      - alert: HighCheckoutAbandonment
+        expr: (1 - (checkout_completed_total / checkout_started_total)) > 0.7
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "High checkout abandonment rate"
+          description: "Checkout abandonment rate is {{ $value | humanizePercentage }}"
+
+  # Recording rules for frequently used queries
+  - name: recording.rules
+    rules:
+      - record: job:http_inprogress_requests:sum
+        expr: sum by(job) (http_requests_in_progress)
+      - record: job:http_request_duration_seconds:avg_rate5m
+        expr: avg by(job) (rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m]))
+      - record: instance:node_cpu_utilisation:rate5m
+        expr: 1 - avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))
+      - record: instance:node_memory_utilisation:ratio
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes
+      - record: instance:node_filesystem_usage:ratio
+        expr: 1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs"})
+      - record: instance:node_network_receive_bytes:rate5m
+        expr: rate(node_network_receive_bytes_total[5m])
+      - record: instance:node_network_transmit_bytes:rate5m
+        expr: rate(node_network_transmit_bytes_total[5m])
+      - record: instance:node_disk_reads_completed:rate5m
+        expr: rate(node_disk_reads_completed_total[5m])
+      - record: instance:node_disk_writes_completed:rate5m
+        expr: rate(node_disk_writes_completed_total[5m])
+      - record: container_memory_working_set_bytes:sum
+        expr: sum by(container, pod, namespace) (container_memory_working_set_bytes{container!="",pod!=""})
+      - record: container_cpu_usage_seconds_total:rate5m
+        expr: sum by(container, pod, namespace) (rate(container_cpu_usage_seconds_total[5m]))
 EOF
 
     # Set proper permissions

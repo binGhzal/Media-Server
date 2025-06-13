@@ -245,30 +245,716 @@ create_authentication() {
 create_registry_config() {
     log "INFO" "Creating registry configuration..."
 
-    cat > "$REGISTRY_DIR/config/config.yml" << EOF
+    cat > "$REGISTRY_DIR/config/config.yml" << 'EOF'
 version: 0.1
-log:
-  fields:
-    service: registry
+
+# Server settings
+server:
+  addr: :5000
+  debug:
+    addr: :5001  # Debug server on different port
+  headers:
+    X-Content-Type-Options: [nosniff]
+    X-Frame-Options: [DENY]
+    X-XSS-Protection: [1; mode=block]
+    Content-Security-Policy: ["default-src 'none'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "font-src 'self'"]
+
+# Authentication settings
+auth:
+  htpasswd:
+    realm: Registry Realm
+    path: /auth/htpasswd
+
+# Storage configuration
 storage:
   cache:
     blobdescriptor: inmemory
   filesystem:
     rootdirectory: /var/lib/registry
+    maxthreads: 100
+  maintenance:
+    uploadpurging:
+      enabled: true
+      age: 168h  # 1 week
+      interval: 24h
+      dryrun: false
   delete:
     enabled: true
+  redirect:
+    disable: false
+
+# HTTP settings
 http:
-  addr: :5000
+  debug:
+    addr: :5001
   headers:
     X-Content-Type-Options: [nosniff]
-    Access-Control-Allow-Origin: ['*']
-    Access-Control-Allow-Methods: ['HEAD', 'GET', 'OPTIONS', 'DELETE']
-    Access-Control-Allow-Headers: ['Authorization', 'Accept', 'Cache-Control']
+    X-Frame-Options: [DENY]
+    X-XSS-Protection: [1; mode=block]
+    Content-Security-Policy: ["default-src 'none'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:", "font-src 'self'"]
+  tls:
+    certificate: /certs/registry.crt
+    key: /certs/registry.key
+    minimumTLS: tls1.2
+    clientCAs:
+      - /certs/registry-ca.crt
+  http2:
+    disabled: false
+  debug:
+    addr: localhost:5001
+
+# Logging configuration
+log:
+  level: info
+  formatter: text
+  fields:
+    service: registry
+    environment: production
+  hooks:
+    - type: mail
+      levels: [error, panic]
+      mailoptions:
+        smtp:
+          addr: mail.example.com:25
+          username: your_username
+          password: your_password
+          insecure: false
+        from: registry@example.com
+        to: [admin@example.com]
+
+# Validation settings
+validation:
+  manifests:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Middleware configuration
+middleware:
+  registry:
+    - name: AUTH
+    - name: GZIP
+  repository:
+    - name: AUTH
+    - name: GZIP
+  storage:
+    - name: REDIRECT
+    - name: MAINTENANCE
+
+# Health check configuration
 health:
   storagedriver:
     enabled: true
     interval: 10s
     threshold: 3
+  file:
+    - file: /var/lib/registry/healthcheck
+      interval: 10s
+  tcp:
+    - addr: redis:6379
+      timeout: 3s
+      interval: 30s
+
+# Monitoring configuration
+profiling:
+  stackdriver:
+    enabled: false
+    service: registry
+    serviceversion: v1.0.0
+    projectid: your-project-id
+    keyfile: /path/to/keyfile.json
+
+# Redis configuration for cache and notifications
+redis:
+  addr: redis:6379
+  password: your_redis_password
+  db: 0
+  dialtimeout: 10s
+  readtimeout: 10s
+  writetimeout: 10s
+  pool:
+    maxidle: 16
+    maxactive: 64
+    idletimeout: 300s
+
+# Notifications configuration
+notifications:
+  endpoints:
+    - name: alistener
+      disabled: false
+      url: https://webhook.example.com/registry
+      headers:
+        Authorization: [Bearer <example token>]
+      timeout: 500ms
+      threshold: 5
+      backoff: 1s
+      ignoredmediatypes:
+        - application/octet-stream
+      ignore:
+        medietypes:
+          - application/octet-stream
+        actions:
+          - pull
+
+# Garbage collection settings
+gc:
+  disabled: false
+  maxbackoff: 24h
+  noidlebackoff: false
+  transactiontimeout: 10s
+  reviewafter: 24h
+  blobs:
+    disabled: false
+    interval: 24h
+    storagetimeout: 5s
+    policies:
+      - repositories: ['.*']
+        keepyoungerthan: 168h  # 1 week
+        keep: 10
+      - repositories: ['important/.*']
+        keepyoungerthan: 720h  # 30 days
+        keep: 50
+
+# Compatibility settings
+compatibility:
+  schema1:
+    enabled: false
+  manifest:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Reporting settings
+reporting:
+  bugsnag:
+    apikey: your-bugsnag-api-key
+    releasestage: production
+    endpoint: https://notify.bugsnag.com/
+  newrelic:
+    licensekey: your-newrelic-license-key
+    name: registry
+    verbose: false
+    enabled: false
+
+# HTTP API settings
+httpapi:
+  version: 2.0
+  realm: Registry Realm
+  service: Docker Registry
+  issuer: registry-token-issuer
+  rootcertbundle: /certs/registry.crt
+  autoredirect: false
+  ttl: 15m
+  maxscheduled: 100
+  maxincoming: 500
+  maxrequests: 1000
+  maxwait: 10s
+  maxheaderbytes: 32768
+  debug:
+    addr: localhost:5001
+    prometheus:
+      enabled: true
+      path: /metrics
+
+# Storage middleware configuration
+storage.middleware:
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+  - name: redirect
+    disable: false
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+
+# Proxy configuration
+proxy:
+  remoteurl: https://registry-1.docker.io
+  username: [username]
+  password: [password]
+  ttl: 168h
+  header:
+    X-Forwarded-Proto: [https]
+    X-Forwarded-For: [192.168.1.1]
+  remoteurls:
+    - https://registry-1.docker.io
+    - https://registry-2.docker.io
+  username: [username]
+  password: [password]
+  ttl: 168h
+
+# Redis cache configuration
+cache:
+  blobdescriptor: redis
+  blobdescriptorsize: 10000
+  blobdescriptorttl: 24h
+  blobdescriptorpurge: 1h
+  blobdescriptormaxsize: 1000000
+  blobdescriptormaxage: 168h
+  blobdescriptormaxitems: 1000000
+  blobdescriptormaxsize: 1000000
+  blobdescriptormaxage: 168h
+  blobdescriptormaxitems: 1000000
+
+# Rate limiting configuration
+ratelimit:
+  enabled: true
+  backend: redis
+  burst: 200
+  average: 100
+  period: 1s
+  sources:
+    - addr: 192.168.1.0/24
+      burst: 500
+      average: 200
+    - addr: 10.0.0.0/8
+      burst: 1000
+      average: 500
+
+# Authentication configuration
+authn:
+  token:
+    realm: https://auth.example.com/token
+    service: registry.example.com
+    issuer: registry-token-issuer
+    rootcertbundle: /certs/registry.crt
+    autoredirect: false
+    autoredirectscheme: https
+    autoredirecthost: registry.example.com
+    autoredirectstatus: 307
+    autoredirectrealm: https://registry.example.com/token
+    autoredirectservice: registry.example.com
+    autoredirectissuer: registry-token-issuer
+
+# Authorization configuration
+authz:
+  actions:
+    pull:
+      - match: {account: "/.+/"}
+    push:
+      - match: {account: "admin"}
+      - match: {account: "deploy"}
+    delete:
+      - match: {account: "admin"}
+    *:
+      - match: {account: "admin"}
+
+# Audit logging configuration
+audit:
+  enabled: true
+  loglevel: info
+  formatter: json
+  hooks:
+    - type: file
+      options:
+        filename: /var/log/registry/audit.log
+        maxsize: 100
+        maxbackups: 10
+        maxage: 30
+        compress: true
+
+# Metrics configuration
+metrics:
+  enabled: true
+  addr: :5001
+  path: /metrics
+  secret: your-secret-key
+  debug:
+    addr: :5002
+    prometheus:
+      enabled: true
+      path: /metrics
+
+# Tracing configuration
+tracing:
+  enabled: true
+  service: registry
+  tags:
+    environment: production
+  agent:
+    host: localhost
+    port: 6831
+    type: const
+    param: 1
+  sampler:
+    type: probabilistic
+    param: 0.1
+  reporter:
+    queueSize: 1000
+    bufferFlushInterval: 1s
+    logSpans: true
+  throttler:
+    hostPort: localhost:5778
+    refreshInterval: 10s
+    synchronousInitialization: false
+
+# Storage driver configuration
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+    maxthreads: 100
+  cache:
+    blobdescriptor: inmemory
+  maintenance:
+    uploadpurging:
+      enabled: true
+      age: 168h
+      interval: 24h
+      dryrun: false
+  delete:
+    enabled: true
+  redirect:
+    disable: false
+  middleware:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# HTTP API v2 configuration
+http:
+  v2:
+    enabled: true
+    strict: true
+    debug:
+      addr: localhost:5001
+    prometheus:
+      enabled: true
+      path: /metrics
+    debug:
+      addr: localhost:5001
+    prometheus:
+      enabled: true
+      path: /metrics
+
+# Repository middleware configuration
+repository:
+  middleware:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Storage driver middleware configuration
+storagedriver:
+  middleware:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Distribution configuration
+distribution:
+  storage:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Registry configuration
+registry:
+  storage:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Configuration for the registry service
+service:
+  registry:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Configuration for the registry API
+api:
+  version: 2.0
+  registry:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Configuration for the registry storage driver
+storagedriver:
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+
+# Configuration for the registry middleware
+middleware:
+  registry:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Configuration for the registry storage
+storage:
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+
+# Configuration for the registry cache
+cache:
+  blobdescriptor: redis
+  blobdescriptorsize: 10000
+  blobdescriptorttl: 24h
+  blobdescriptorpurge: 1h
+  blobdescriptormaxsize: 1000000
+  blobdescriptormaxage: 168h
+  blobdescriptormaxitems: 1000000
+
+# Configuration for the registry notifications
+notifications:
+  endpoints:
+    - name: alistener
+      disabled: false
+      url: https://webhook.example.com/registry
+      headers:
+        Authorization: [Bearer <example token>]
+      timeout: 500ms
+      threshold: 5
+      backoff: 1s
+      ignoredmediatypes:
+        - application/octet-stream
+      ignore:
+        medietypes:
+          - application/octet-stream
+        actions:
+          - pull
+
+# Configuration for the registry garbage collection
+gc:
+  disabled: false
+  maxbackoff: 24h
+  noidlebackoff: false
+  transactiontimeout: 10s
+  reviewafter: 24h
+  blobs:
+    disabled: false
+    interval: 24h
+    storagetimeout: 5s
+    policies:
+      - repositories: ['.*']
+        keepyoungerthan: 168h  # 1 week
+        keep: 10
+      - repositories: ['important/.*']
+        keepyoungerthan: 720h  # 30 days
+        keep: 50
+
+# Configuration for the registry validation
+validation:
+  manifests:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Configuration for the registry compatibility
+compatibility:
+  schema1:
+    enabled: false
+  manifest:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Configuration for the registry reporting
+reporting:
+  bugsnag:
+    apikey: your-bugsnag-api-key
+    releasestage: production
+    endpoint: https://notify.bugsnag.com/
+  newrelic:
+    licensekey: your-newrelic-license-key
+    name: registry
+    verbose: false
+    enabled: false
+
+# Configuration for the registry HTTP API
+httpapi:
+  version: 2.0
+  realm: Registry Realm
+  service: Docker Registry
+  issuer: registry-token-issuer
+  rootcertbundle: /certs/registry.crt
+  autoredirect: false
+  ttl: 15m
+  maxscheduled: 100
+  maxincoming: 500
+  maxrequests: 1000
+  maxwait: 10s
+  maxheaderbytes: 32768
+  debug:
+    addr: localhost:5001
+    prometheus:
+      enabled: true
+      path: /metrics
+
+# Configuration for the registry storage driver
+storagedriver:
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+
+# Configuration for the registry middleware
+middleware:
+  registry:
+    - name: cloudfront
+      options:
+        baseurl: https://my.cloudfronted.domain.com/
+        privatekey: /path/to/private/key.pem
+        keypairid: cloudfrontkeypairid
+        duration: 3000
+
+# Configuration for the registry storage
+storage:
+  - name: cloudfront
+    options:
+      baseurl: https://my.cloudfronted.domain.com/
+      privatekey: /path/to/private/key.pem
+      keypairid: cloudfrontkeypairid
+      duration: 3000
+
+# Configuration for the registry cache
+cache:
+  blobdescriptor: redis
+  blobdescriptorsize: 10000
+  blobdescriptorttl: 24h
+  blobdescriptorpurge: 1h
+  blobdescriptormaxsize: 1000000
+  blobdescriptormaxage: 168h
+  blobdescriptormaxitems: 1000000
+
+# Configuration for the registry notifications
+notifications:
+  endpoints:
+    - name: alistener
+      disabled: false
+      url: https://webhook.example.com/registry
+      headers:
+        Authorization: [Bearer <example token>]
+      timeout: 500ms
+      threshold: 5
+      backoff: 1s
+      ignoredmediatypes:
+        - application/octet-stream
+      ignore:
+        medietypes:
+          - application/octet-stream
+        actions:
+          - pull
+
+# Configuration for the registry garbage collection
+gc:
+  disabled: false
+  maxbackoff: 24h
+  noidlebackoff: false
+  transactiontimeout: 10s
+  reviewafter: 24h
+  blobs:
+    disabled: false
+    interval: 24h
+    storagetimeout: 5s
+    policies:
+      - repositories: ['.*']
+        keepyoungerthan: 168h  # 1 week
+        keep: 10
+      - repositories: ['important/.*']
+        keepyoungerthan: 720h  # 30 days
+        keep: 50
+
+# Configuration for the registry validation
+validation:
+  manifests:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Configuration for the registry compatibility
+compatibility:
+  schema1:
+    enabled: false
+  manifest:
+    urls:
+      allow:
+        - ^https?://([^/]+/)*[^:]+$
+      deny:
+        - ^https?://example\.com/.*$
+
+# Configuration for the registry reporting
+reporting:
+  bugsnag:
+    apikey: your-bugsnag-api-key
+    releasestage: production
+    endpoint: https://notify.bugsnag.com/
+  newrelic:
+    licensekey: your-newrelic-license-key
+    name: registry
+    verbose: false
+    enabled: false
+
+# Configuration for the registry HTTP API
+httpapi:
+  version: 2.0
+  realm: Registry Realm
+  service: Docker Registry
+  issuer: registry-token-issuer
+  rootcertbundle: /certs/registry.crt
+  autoredirect: false
+  ttl: 15m
+  maxscheduled: 100
+  maxincoming: 500
+  maxrequests: 1000
+  maxwait: 10s
+  maxheaderbytes: 32768
+  debug:
+    addr: localhost:5001
+    prometheus:
+      enabled: true
+      path: /metrics
 EOF
 
     log "INFO" "Registry configuration created"

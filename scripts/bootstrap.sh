@@ -40,8 +40,8 @@ trap 'handle_error $? $LINENO' ERR
 # Check root privileges
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
-        log_error "This script must be run as root or with sudo."
-        exit 1
+        log_error "This script must be run as root or with sudo. Exiting with code 3 (Permission Denied)."
+        exit 3 # Exit code 3 for Permission Denied, as per project standards
     fi
     log_info "Running as root: OK"
     return 0

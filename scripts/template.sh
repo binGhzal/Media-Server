@@ -11,8 +11,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 if [ -f "$SCRIPT_DIR/lib/logging.sh" ]; then
     source "$SCRIPT_DIR/lib/logging.sh"
     # Assuming init_logging is defined in logging.sh and handles its own LOG_FILE
-    # If init_logging "template" was meant to set a specific log file for template operations,
-    # that needs to be handled according to how logging.sh is designed.
     # For now, let's assume logging.sh's init_logging is sufficient or template.sh uses its own.
     # init_logging "template" # This might need adjustment based on logging.sh's final design
 else

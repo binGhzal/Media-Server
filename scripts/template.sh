@@ -1744,72 +1744,71 @@ create_template() {
     return 0
 }
 
-            if [ $? -ne 0 ] || [ "$ci_config_type" = "cancel" ]; then
-                log_info "User cancelled cloud-init configuration method selection."
-                use_cloudinit="no" # Effectively disable cloud-init if user cancels here
-            fi
+# Main menu function
+main_menu() {
+    while true; do
+        local choice
+        choice=$(whiptail --title "Proxmox Template Creator" --menu "Select an option:" 20 70 8 \
+            "1" "Create new template" \
+            "2" "List all templates" \
+            "3" "Manage existing templates" \
+            "4" "Validate template" \
+            "5" "Test template" \
+            "6" "Template configuration management" \
+            "7" "Help and documentation" \
+            "8" "Exit" 3>&1 1>&2 2>&3)
 
-            if [ "$use_cloudinit" = "yes" ]; then # Proceed if not cancelled
-                if [ "$ci_config_type" = "custom_file" ]; then
-                    # --- Custom User-Data File ---
-                    # Fetch storage list (filter for snippets if possible, else all and warn)
-                    storage_list_json=$(pvesh get /storage --output-format=json)
-                    snippet_storages=()
-                    all_storages=()
+        case $choice in
+            1)
+                create_template
+                ;;
+            2)
+                list_templates
+                ;;
+            3)
+                manage_templates
+                ;;
+            4)
+                validate_template
+                ;;
+            5)
+                test_template
+                ;;
+            6)
+                manage_template_config
+                ;;
+            7)
+                show_help
+                ;;
+            8|"")
+                log_info "Exiting template creator"
+                exit 0
+                ;;
+        esac
+    done
+}
 
-                    while IFS= read -r line; do snippet_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | select((.content | contains("snippets"))) | .storage')
-
-                    if [ ${#snippet_storages[@]} -eq 0 ]; then
-                        whiptail --title "Warning: No Snippet Storage" --msgbox "No storage explicitly supports 'snippets' content type. You can select any storage, but ensure it's configured to allow user data files (e.g., as snippets or text files)." 10 78
-                        while IFS= read -r line; do all_storages+=("$line" ""); done < <(echo "$storage_list_json" | jq -r '.[] | .storage')
-                        if [ ${#all_storages[@]} -eq 0 ]; then
-                            log_error "No Proxmox storages found."
-                            whiptail --title "Error" --msgbox "No Proxmox storages found. Cannot select custom user-data file." 8 78
-                            use_cloudinit="no" # Disable CI
-                        else
-                            ci_custom_storage=$(whiptail --title "Select Storage for User-Data File" --menu "Choose a storage:" 15 70 5 "${all_storages[@]}" 3>&1 1>&2 2>&3)
-                        fi
-                    else
-                        ci_custom_storage=$(whiptail --title "Select Storage for User-Data File" --menu "Choose a storage (supports snippets):" 15 70 5 "${snippet_storages[@]}" 3>&1 1>&2 2>&3)
-                    fi
-
-                    if [ $? -ne 0 ] || [ -z "$ci_custom_storage" ]; then
-                        log_info "User cancelled custom user-data storage selection."
-                        use_cloudinit="no"
-                    else
-                        ci_user_data_filename_on_storage=$(whiptail --title "User-Data File Path" --inputbox "Enter the filename of your user-data (e.g., my-user-data.yaml) on storage '$ci_custom_storage':" 10 78 3>&1 1>&2 2>&3)
-                        if [ $? -ne 0 ] || [ -z "$ci_user_data_filename_on_storage" ]; then
-                            log_info "User cancelled custom user-data filename input."
-                            use_cloudinit="no"
-                        else
-                            # Assuming files are in the 'snippets' directory on the storage.
-                            # Proxmox format: <storage_id>:snippets/<filename>
-                            custom_ci_user_data_path="${ci_custom_storage}:snippets/${ci_user_data_filename_on_storage}"
-                            log_info "Custom user-data file selected: $custom_ci_user_data_path"
-                        fi
-                    fi
-                elif [ "$ci_config_type" = "custom_paste" ]; then
-                    # --- Custom User-Data Paste ---
-                    whiptail --title "Information" --msgbox "You've chosen to paste custom user-data. The guided setup for user, SSH key, password, network, packages, and custom scripts will be skipped." 10 78
-
-                    # Use a temporary file to capture textbox content
-                    local tmp_paste_file
-    tmp_paste_file=$(mktemp) || {
-        log_error "Failed to create temporary file"
-        return 1
-    }
-                    if whiptail --title "Paste Custom User-Data" --textbox "$tmp_paste_file" 20 78 --scrolltext; then
-                        custom_ci_user_data_content=$(cat "$tmp_paste_file")
-                        if [ -z "$custom_ci_user_data_content" ]; then
-                            log_warn "Pasted custom user-data is empty. Cloud-init might not work as expected."
-                            # Optionally, ask user if they want to proceed or switch method
-                        else
-                            log_info "Custom user-data content provided by pasting."
-                        fi
-                    else
-                        log_info "User cancelled pasting custom user-data."
-                        use_cloudinit="no"
-                    fi
+# Check if running in direct create mode or as CLI arguments
+if [ "$1" = "--create" ] || [ -n "$CREATE_MODE" ]; then
+    # Run pre-checks and go directly to template creation
+    if [ -z "$TEST_MODE" ]; then
+        check_dependencies
+        check_proxmox
+    fi
+    create_template
+    exit $?
+elif [ $# -eq 0 ]; then
+    # No arguments provided, show main menu
+    if [ -z "$TEST_MODE" ]; then
+        check_dependencies
+        check_proxmox
+    fi
+    main_menu
+else
+    # Arguments were provided and handled at the beginning of the script
+    # This handles --list-distros, --list-versions, --test, etc.
+    log_info "CLI arguments were processed at script start"
+fi
                     rm -f "$tmp_paste_file"
                 fi
             fi # End of if [ "$use_cloudinit" = "yes" ] after config type choice
@@ -1848,10 +1847,10 @@ create_template() {
                     ci_password_enabled="yes"
 
                     # Get minimum password length from config (default 12)
-                    local min_length=12
+                    min_length=12
                     # Assuming config.sh is in the parent directory of SCRIPT_DIR (e.g. scripts/../config.sh)
                     # This path might need adjustment if config.sh is elsewhere.
-                    local config_sh_path="$SCRIPT_DIR/../config.sh"
+                    config_sh_path="$SCRIPT_DIR/../config.sh"
                     if [ -f "$config_sh_path" ] && command -v source >/dev/null 2>&1; then
                         min_length=$(grep "^MIN_PASSWORD_LENGTH=" "$config_sh_path" 2>/dev/null | cut -d'=' -f2 || echo "12")
                     fi
@@ -2020,11 +2019,8 @@ create_template() {
                         fi
                     fi
                 fi
-            fi # This 'fi' closes the "if [ "$ci_config_type" = "default" ]; then" block
-        fi # This 'fi' closes the "if [ "$use_cloudinit" = "yes" ]; then" (after config type choice)
-    else # This 'else' is for "if whiptail --title "Cloud-Init" --yesno"
-        whiptail --title "Notice" --msgbox "Cloud-init is not supported for $distro distribution." 10 60
-    fi # This 'fi' closes the "if supports_cloudinit "$distro"; then"
+        fi # This 'fi' closes the "if [ "$ci_config_type" = "default" ]; then" block
+    fi # This 'fi' closes the "if [ "$use_cloudinit" = "yes" ]; then" (after config type choice)
 
     # --- Step 7: Tagging/Categorization ---
     tags=$(whiptail --title "Tags" --inputbox "Enter tags (comma-separated):" 10 60 "" 3>&1 1>&2 2>&3)
